@@ -1,0 +1,2 @@
+alembic>=1.16
+psycopg[binary]>=3.2

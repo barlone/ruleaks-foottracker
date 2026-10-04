@@ -47,6 +47,7 @@ npm run dev
 ```bash
 npm run typecheck      # tsc по всем пакетам
 npm run build          # сборка фронтенда в apps/web/dist
+npm run db -- status   # миграции БД сайта (подробно — packages/db/README.md)
 ```
 
 ## Имитация шлюза (dev)

@@ -4,15 +4,19 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/schema.ts"
+    "./pg": "./src/pg.ts"
   },
   "scripts": {
+    "migrate": "tsx src/migrate.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.3"
+    "@ft/config": "*",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.31.11"
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15"
   }
 }

@@ -22,7 +22,12 @@ npm run dev            # server (tsx watch, :3001) + web (Vite, :5173, proxies /
 npm run typecheck      # tsc --noEmit in every workspace — the only automated check; there are no tests or linter yet
 npm run build          # web production build (apps/web/dist)
 npm run typecheck -w @ft/server   # one workspace
+npm run db -- status | up [N] | down [N] | create <name> | manual <file>   # DB migrations against [project-db]
 ```
+
+Migrations: never edit an applied file in `packages/db/migrations`; add a new one (`npm run db -- create …`). The user
+applies schema changes to the production DB themselves — generate SQL with `npm run db -- manual <file>` and do not run
+DDL through the `ruleaksfoottracker-prod` MCP server unless asked (read-only queries are fine).
 
 Vite uses `strictPort` and the server exits on `EADDRINUSE`: a second `npm run dev` fails instead of silently moving
 ports. `.claude/launch.json` defines the `foottracker` preview (runs `npm run dev`); stop it before the user runs their own.
@@ -59,9 +64,11 @@ npm workspaces, all TypeScript ESM consumed as source (no build step for package
 - `packages/shared` (`@ft/shared`) — Zod domain schemas (`domain.ts`) shared by server input validation and web types;
   the search catalogs (`search.ts`) mirroring the bot's endpoint paths and param names, plus gateway response shapes.
 - `packages/config` (`@ft/config`) — config loader described above.
-- `packages/db` (`@ft/db`) — draft Drizzle schema (not wired), `sql/` scripts that create the `ruleaksfoottracker`
-  database/role (pure SQL — they get pasted into a remote psql, so no psql meta-commands), and the tuned
-  `config/postgresql.conf` of the DB server (PostgreSQL 18, LXC 2 GB/2 vCPU; changed lines marked `# tuned:`).
+- `packages/db` (`@ft/db`) — site database (PostgreSQL 18 on a remote LXC host): SQL migrations in `migrations/`
+  (node-pg-migrate, the schema's source of truth — see `packages/db/README.md`), `src/pg.ts` connection helper shared
+  with the server (`@ft/db/pg`), `sql/` one-off scripts (role/database creation, generated manual-apply copy of the
+  first migration — pure SQL, they get pasted into a remote psql, so no psql meta-commands), and the tuned
+  `config/postgresql.conf` (changed lines marked `# tuned:`).
 - `apps/server` (`@ft/server`) — Fastify + tRPC 11 backend-for-frontend. The browser only ever talks to `/trpc`.
 - `apps/web` (`@ft/web`) — React 19 SPA: Vite 8, TanStack Router (code-based routes in `src/router.tsx`) + Query,
   tRPC react-query client, Tailwind 4, React Flow (graph), TipTap 3 (Markdown editor), dnd-kit. The web imports only

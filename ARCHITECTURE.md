@@ -216,22 +216,30 @@ HTTP-эндпоинты в боте не нужны: весь обмен идё�
 
 ## 10. Модель данных
 
-См. `packages/db/src/schema.ts`. Основное:
+Источник истины — SQL-миграции в `packages/db/migrations` (node-pg-migrate, аналог alembic; описание и
+команды — `packages/db/README.md`). Первая версия — `20261004120000_initial-schema.sql`:
 
 ```
-users(id, tg_id, display_name, username)      sessions(id_hash, user_id, expires_at)
-dossiers(id, owner_id, kind, title, summary_md, tags, visibility, version, search_tsv)
-dossier_members(group_id, member_id)                          dossier_items(id, dossier_id, type, data jsonb, source jsonb, position)
-media(id, owner_id, s3_key, thumb_key, sha256, exif)          search_snapshots(id, user_id, kind, query, deep, result jsonb, pinned)
-investigations(id, owner_id, title, description_md, visibility, public_slug, version)
-nodes(id, investigation_id, type, label, dossier_id, props, x, y)   edges(id, source_id, target_id, relation, credibility)
-facts(id, investigation_id, text_md, occurred_at, sources)    fact_links(fact_id, node_id | edge_id)
-hypotheses(id, investigation_id, title, status)               hypothesis_evidence(hypothesis_id, fact_id, stance)
-shares(object_type, object_id, user_id, role)                 revisions(object_type, object_id, version, diff)   audit_log(...)
+users(id, tg_id, display_name, username)                     sessions(id_hash sha256, user_id, expires_at)
+dossiers(id, owner_id, kind, title, summary_md, tags[], visibility, cover_media_id, version, deleted_at, search_tsv)
+dossier_members(group_id, member_id, role_label)             dossier_items(id, dossier_id, type, data jsonb, source jsonb, position, media_id)
+dossier_shares(dossier_id, user_id, role)                    media(id, owner_id, storage_key, sha256, exif)
+search_jobs(id, user_id, section, kind, query, params, state, result jsonb, pinned, hidden_at)
+investigations(id, owner_id, title, description_md, tags[], visibility, public_slug, version, deleted_at, search_tsv)
+investigation_shares(investigation_id, user_id, role)
+graph_nodes(id, investigation_id, type, label, dossier_id, props, x, y)
+graph_edges(id, investigation_id, source_node_id, target_node_id, relation, label, credibility)
+facts(id, investigation_id, text_md, occurred_at, sources jsonb)   fact_nodes(fact_id, node_id)   edge_facts(edge_id, fact_id)
+hypotheses(id, investigation_id, title, text_md, status)     hypothesis_evidence(hypothesis_id, fact_id, stance)
+revisions(object_type, object_id, version, diff)             audit_log(user_id, action, object_type, object_id, meta, ip)
 ```
 
-JSONB — для гибких частей (тело элемента досье, источники, props узла); то, по чему ищут
-и фильтруют, — в колонках. Поиск по своим досье: `tsvector('russian')` + `pg_trgm`.
+- Идентификаторы — `uuidv7()` (PostgreSQL 18): упорядочены по времени, индексы растут без фрагментации.
+- Доступы — две таблицы (`dossier_shares`, `investigation_shares`) с настоящими внешними ключами, а не одна полиморфная.
+- JSONB — для гибких частей (тело элемента досье, источники, props узла, ответ шлюза); то, по чему ищут
+  и фильтруют, — в колонках. GIN по `dossier_items.data` — поиск совпадений между досье («где ещё этот телефон»).
+- Поиск по своим объектам: сгенерированные `search_tsv` (`russian`), нечёткий по названию досье — `pg_trgm`.
+- Досье и расследования удаляются мягко (`deleted_at`); вложенное — `ON DELETE CASCADE`.
 
 ## 11. Безопасность
 
@@ -252,7 +260,7 @@ Postgres — существующий кластер, отдельная баз�
 1. ✅ Каркас, архитектура, интерфейс на in-memory данных.
 2. В боте: миграция (`site_login_requests`, `site_user_access()`, роль сайта) + обработчик `/start login_`.
 3. ✅ `adapters/botdb`, `adapters/http/gateway` — подписка из БД бота и реальный поиск (dev-вход по Telegram ID до шага 2).
-4. `adapters/postgres` + миграции drizzle-kit; снимки поиска в БД.
+4. Схема БД и миграции (✅ `packages/db/migrations`); `adapters/postgres` — хранилище в БД, снимки поиска в БД.
 5. S3 + pg-boss: загрузка медиа, превью, EXIF.
 6. SSE для статуса поиска и уведомлений, история правок (`revisions`), аудит.
 7. Совместное редактирование графа (Yjs), хронология событий (timeline), экспорт отчёта (PDF/HTML).

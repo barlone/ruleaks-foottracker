@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 import { runner } from 'node-pg-migrate';
 import { ConfigError, loadConfig } from '@ft/config';
 import { openClient } from './pg.ts';
+import { MIGRATIONS_DIR, MIGRATIONS_TABLE as TABLE, migrationStatus } from './status.ts';
 
 // Миграции БД сайта (аналог alembic) на node-pg-migrate.
 // Подключение — [project-db] из config.ini (флаг enabled не важен). Миграции — SQL-файлы
@@ -15,9 +15,6 @@ import { openClient } from './pg.ts';
 //   npm run db -- down [N]          откатить последнюю (или N)
 //   npm run db -- create <имя>      новый SQL-файл миграции с UTC-меткой времени
 //   npm run db -- manual <файл>     SQL для ручного применения (секция Up + отметка в pgmigrations)
-
-const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../migrations');
-const TABLE = 'pgmigrations';
 
 function migrationFiles(): string[] {
   return readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
@@ -72,17 +69,12 @@ async function status() {
   const { projectDb } = loadConfig();
   const { client } = await openClient(projectDb, 'ruleaks-foottracker-migrate');
   try {
-    const exists = (await client.query(`SELECT to_regclass('public.${TABLE}') IS NOT NULL AS ok`)).rows[0].ok as boolean;
-    const applied = new Map<string, string>(
-      exists ? (await client.query(`SELECT name, to_char(run_on, 'YYYY-MM-DD HH24:MI:SS') AS run_on FROM public.${TABLE} ORDER BY id`)).rows.map((r) => [r.name, r.run_on]) : [],
-    );
-    for (const f of migrationFiles()) {
-      const name = f.replace(/\.sql$/, '');
-      const at = applied.get(name);
+    const st = await migrationStatus(client);
+    for (const name of st.files) {
+      const at = st.applied.get(name);
       console.log(`${at ? '✓' : '·'} ${name}${at ? `  (${at})` : '  — ожидает'}`);
-      applied.delete(name);
     }
-    for (const name of applied.keys()) console.log(`? ${name}  — применена, но файла нет`);
+    for (const name of st.unknown) console.log(`? ${name}  — применена, но файла нет`);
   } finally {
     await client.end();
   }

@@ -1,6 +1,6 @@
-// Порты (интерфейсы) сервера. Роутеры зависят только от них; реализации
-// подставляются в src/app.ts. Сейчас есть только in-memory адаптеры
-// (src/adapters/memory) — следующий шаг: postgres/, bot-db/, gateway-http/ (выбор в deps.ts по [server] mode).
+// Порты (интерфейсы) сервера. Роутеры зависят только от них; реализации выбирает src/deps.ts
+// по флагам enabled в config.ini: adapters/memory (демо), adapters/postgres, adapters/botdb, adapters/http.
+// actorId — кто выполняет действие (created_by / granted_by в БД).
 
 import type {
   Access, Dossier, DossierItem, DossierSummary, Fact, GraphEdge, GraphNode, Hypothesis,
@@ -90,11 +90,11 @@ export interface DossierRepo {
   get(id: string): Promise<Dossier | null>;
   create(d: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd' | 'tags'>): Promise<Dossier>;
   update(id: string, version: number, patch: Partial<Pick<Dossier, 'title' | 'summaryMd' | 'tags' | 'visibility' | 'memberIds' | 'coverMediaUrl'>>): Promise<Dossier>;
-  addItem(id: string, item: DossierItem): Promise<Dossier>;
+  addItem(id: string, item: DossierItem, actorId: string): Promise<Dossier>;
   updateItem(id: string, item: DossierItem): Promise<Dossier>;
   removeItem(id: string, itemId: string): Promise<Dossier>;
   reorderItems(id: string, orderedIds: string[]): Promise<Dossier>;
-  setShares(id: string, shares: Share[]): Promise<Dossier>;
+  setShares(id: string, shares: Share[], actorId: string): Promise<Dossier>;
   remove(id: string): Promise<void>;
 }
 
@@ -105,11 +105,11 @@ export interface InvestigationRepo {
   update(id: string, version: number, patch: Partial<Pick<Investigation, 'title' | 'descriptionMd' | 'tags' | 'visibility'>>): Promise<Investigation>;
   /** Граф сохраняется целиком (редактор шлёт состояние после серии правок). */
   saveGraph(id: string, version: number, nodes: GraphNode[], edges: GraphEdge[]): Promise<Investigation>;
-  upsertFact(id: string, fact: Fact): Promise<Investigation>;
+  upsertFact(id: string, fact: Fact, actorId: string): Promise<Investigation>;
   removeFact(id: string, factId: string): Promise<Investigation>;
-  upsertHypothesis(id: string, h: Hypothesis): Promise<Investigation>;
+  upsertHypothesis(id: string, h: Hypothesis, actorId: string): Promise<Investigation>;
   removeHypothesis(id: string, hId: string): Promise<Investigation>;
-  setShares(id: string, shares: Share[]): Promise<Investigation>;
+  setShares(id: string, shares: Share[], actorId: string): Promise<Investigation>;
   remove(id: string): Promise<void>;
 }
 

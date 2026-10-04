@@ -1,6 +1,7 @@
-import { nanoid } from 'nanoid';
-import type {
-  Dossier, DossierItem, DossierSummary, Investigation, InvestigationSummary, SearchJob, SearchSection, Share, User,
+import { randomBytes } from 'node:crypto';
+import {
+  newId, type Dossier, type DossierItem, type DossierSummary, type Investigation, type InvestigationSummary, type SearchJob,
+  type SearchSection, type Share, type User,
 } from '@ft/shared';
 import { roleOf } from '../../authz.ts';
 import {
@@ -26,7 +27,7 @@ export class MemoryUsers implements UserRepo {
       Object.assign(existing, u);
       return { id: existing.id };
     }
-    const id = `u-${nanoid(8)}`;
+    const id = newId();
     this.byId.set(id, { id, ...u });
     return { id };
   }
@@ -42,7 +43,7 @@ export class MemoryUsers implements UserRepo {
 export class MemorySessions implements SessionRepo {
   private map = new Map<string, { userId: string; expiresAt: number }>();
   async create(userId: string, ttlMs: number) {
-    const sid = nanoid(32);
+    const sid = randomBytes(32).toString('base64url');
     this.map.set(sid, { userId, expiresAt: Date.now() + ttlMs });
     return sid;
   }
@@ -64,7 +65,7 @@ type StoredSearch = SearchJob & SearchJobInternals;
 export class MemorySearches implements SearchRepo {
   private map = new Map<string, StoredSearch>();
   async create(job: Omit<SearchJob, 'id'> & SearchJobInternals) {
-    const s: StoredSearch = { ...job, id: `s-${nanoid(10)}` };
+    const s: StoredSearch = { ...job, id: newId() };
     this.map.set(s.id, s);
     return strip(s);
   }
@@ -140,7 +141,7 @@ export class MemoryDossiers implements DossierRepo {
   }
   async create(input: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd' | 'tags'>) {
     const d: Dossier = {
-      ...input, id: `d-${nanoid(8)}`, visibility: 'private', shares: [], memberIds: [], coverMediaUrl: null,
+      ...input, id: newId(), visibility: 'private', shares: [], memberIds: [], coverMediaUrl: null,
       items: [], version: 1, updatedAt: now(),
     };
     this.map.set(d.id, d);
@@ -219,7 +220,7 @@ export class MemoryInvestigations implements InvestigationRepo {
   }
   async create(input: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd' | 'tags'>) {
     const i: Investigation = {
-      ...input, id: `i-${nanoid(8)}`, visibility: 'private', shares: [], nodes: [], edges: [], facts: [],
+      ...input, id: newId(), visibility: 'private', shares: [], nodes: [], edges: [], facts: [],
       hypotheses: [], version: 1, updatedAt: now(),
     };
     this.map.set(i.id, i);

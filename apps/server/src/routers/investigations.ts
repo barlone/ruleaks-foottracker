@@ -1,8 +1,7 @@
 import { TRPCError } from '@trpc/server';
-import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import {
-  Fact, GraphEdge, GraphNode, Hypothesis, InvestigationVisibility, ShareRole, type Investigation,
+  Fact, GraphEdge, GraphNode, Hypothesis, InvestigationVisibility, ShareRole, newId, type Investigation,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { activeProcedure, authedProcedure, publicProcedure, router, type Ctx } from '../trpc.ts';
@@ -69,8 +68,8 @@ export const investigationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const inv = await load(ctx, input.id, 'edit');
       const prev = inv.facts.find((f) => f.id === input.fact.id);
-      const fact = { ...input.fact, id: prev?.id ?? `f-${nanoid(8)}`, createdAt: prev?.createdAt ?? now() };
-      return present(ctx, await ctx.deps.investigations.upsertFact(input.id, fact));
+      const fact = { ...input.fact, id: prev?.id ?? newId(), createdAt: prev?.createdAt ?? now() };
+      return present(ctx, await ctx.deps.investigations.upsertFact(input.id, fact, ctx.user.id));
     }),
 
   removeFact: activeProcedure.input(z.object({ id: z.string(), factId: z.string() })).mutation(async ({ ctx, input }) => {
@@ -83,8 +82,8 @@ export const investigationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const inv = await load(ctx, input.id, 'edit');
       const prev = inv.hypotheses.find((h) => h.id === input.hypothesis.id);
-      const h = { ...input.hypothesis, id: prev?.id ?? `h-${nanoid(8)}`, createdAt: prev?.createdAt ?? now() };
-      return present(ctx, await ctx.deps.investigations.upsertHypothesis(input.id, h));
+      const h = { ...input.hypothesis, id: prev?.id ?? newId(), createdAt: prev?.createdAt ?? now() };
+      return present(ctx, await ctx.deps.investigations.upsertHypothesis(input.id, h, ctx.user.id));
     }),
 
   removeHypothesis: activeProcedure.input(z.object({ id: z.string(), hypothesisId: z.string() })).mutation(async ({ ctx, input }) => {
@@ -107,13 +106,13 @@ export const investigationsRouter = router({
       if (!u) throw new TRPCError({ code: 'NOT_FOUND', message: 'USER_NOT_FOUND' });
       if (u.id === inv.ownerId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'SELF_SHARE' });
       const shares = [...inv.shares.filter((s) => s.userId !== u.id), { userId: u.id, displayName: u.displayName, role: input.role }];
-      const next = await ctx.deps.investigations.setShares(input.id, shares);
+      const next = await ctx.deps.investigations.setShares(input.id, shares, ctx.user.id);
       return present(ctx, inv.visibility === 'private' ? await ctx.deps.investigations.update(input.id, next.version, { visibility: 'shared' }) : next);
     }),
 
   unshare: activeProcedure.input(z.object({ id: z.string(), userId: z.string() })).mutation(async ({ ctx, input }) => {
     const inv = await load(ctx, input.id, 'manage');
-    return present(ctx, await ctx.deps.investigations.setShares(input.id, inv.shares.filter((s) => s.userId !== input.userId)));
+    return present(ctx, await ctx.deps.investigations.setShares(input.id, inv.shares.filter((s) => s.userId !== input.userId), ctx.user.id));
   }),
 
   remove: activeProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {

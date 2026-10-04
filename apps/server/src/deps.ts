@@ -8,15 +8,19 @@ import {
 import { BotDbBridge } from './adapters/botdb/bot.ts';
 import { HttpGateway } from './adapters/http/gateway.ts';
 import { openPool } from './adapters/pg.ts';
+import { migrationStatus } from '@ft/db/status';
+import { PgUsers, PgSessions } from './adapters/postgres/users.ts';
+import { PgSearches } from './adapters/postgres/searches.ts';
+import { PgDossiers } from './adapters/postgres/dossiers.ts';
+import { PgInvestigations } from './adapters/postgres/investigations.ts';
 
 // Сборка зависимостей по флагам enabled в config.ini. Каждый источник включается отдельно:
 //   [bot-db]     enabled → BotDbBridge (подписка и токен из БД бота), иначе имитация бота с демо-учётками;
 //   [api]        enabled → HttpGateway (реальный поиск), иначе имитация шлюза с вымышленными данными;
-//   [project-db] enabled → PostgreSQL-хранилище досье и расследований (ещё не реализовано), иначе память.
+//   [project-db] enabled → PostgreSQL: пользователи, сессии, история поиска, досье, расследования;
+//                         иначе — память с демо-данными (сбрасывается при перезапуске).
 export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Promise<Deps> {
-  if (cfg.projectDb.enabled) {
-    throw new Error('[project-db] enabled = true: хранилище досье и расследований в PostgreSQL ещё не реализовано — пока enabled = false.');
-  }
+  const store = cfg.projectDb.enabled ? await openProjectStore(cfg, log) : memoryStore();
 
   let bot: Deps['bot'] = new MemoryBotBridge();
   if (cfg.botDb.enabled) {
@@ -32,10 +36,40 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
   return {
     bot,
     gateway: cfg.api.enabled ? new HttpGateway(cfg.api) : new MemoryGateway(),
+    ...store,
+  };
+}
+
+type Store = Pick<Deps, 'users' | 'sessions' | 'searches' | 'dossiers' | 'investigations'>;
+
+function memoryStore(): Store {
+  return {
     users: new MemoryUsers(),
     sessions: new MemorySessions(),
     searches: new MemorySearches(),
     dossiers: new MemoryDossiers(),
     investigations: new MemoryInvestigations(),
+  };
+}
+
+async function openProjectStore(cfg: AppConfig, log: (msg: string) => void): Promise<Store> {
+  const d = cfg.projectDb;
+  const { pool, tls } = await openPool(d, { readOnly: false }).catch((e: Error) => {
+    throw new Error(`[project-db] не удалось подключиться к ${d.user}@${d.host}:${d.port}/${d.database}: ${e.message}`);
+  });
+  pool.on('error', (e) => log(`[project-db] ошибка соединения: ${e.message}`));
+  // Схема должна соответствовать коду: все миграции из packages/db/migrations применены.
+  const st = await migrationStatus(pool);
+  if (st.pending.length) {
+    await pool.end();
+    throw new Error(`[project-db] не применены миграции: ${st.pending.join(', ')} — npm run db -- up (или вручную, см. packages/db/README.md)`);
+  }
+  log(`[project-db] подключено${tls ? ' (TLS)' : ' (без TLS)'}, миграций: ${st.applied.size}`);
+  return {
+    users: new PgUsers(pool),
+    sessions: new PgSessions(pool),
+    searches: new PgSearches(pool),
+    dossiers: new PgDossiers(pool),
+    investigations: new PgInvestigations(pool),
   };
 }

@@ -49,7 +49,7 @@ unknown keys are logged as warnings. Each data source is switched independently 
 
 | Section | `enabled = true` | `enabled = false` |
 |---|---|---|
-| `[project-db]` | PostgreSQL store — **not implemented yet** (server refuses to start) | in-memory store with demo seed data |
+| `[project-db]` | `adapters/postgres/*`: users, sessions, search history, dossiers, investigations in PostgreSQL; startup fails if any migration is unapplied | in-memory store with demo seed data |
 | `[bot-db]` | `BotDbBridge`: subscription + API token read from the bot's DB (read-only pool) | `MemoryBotBridge` with three demo profiles |
 | `[api]` | `HttpGateway`: real dsstalker-api-gate | `MemoryGateway`: fake deterministic results |
 
@@ -94,6 +94,24 @@ Adding PostgreSQL storage means new repo adapters + a branch in `deps.ts`; route
   dossiers the viewer cannot read.
 - **Optimistic locking**: dossiers/investigations carry `version`; repos throw `VersionConflict` → tRPC `CONFLICT`.
   The graph editor saves the whole graph (`saveGraph`) debounced, with the version.
+
+### PostgreSQL store
+
+`adapters/postgres/*` implement the repo ports against the schema in `packages/db/migrations`. Things that are not
+obvious from the schema:
+- All ids are UUID v7: `newId()` from `@ft/shared` is used by routers *and* by the browser (graph nodes/edges are
+  created client-side), so the DB never assigns ids the client already references. Non-uuid ids from requests are
+  treated as "not found" (`mustUuid`) or rejected as `BAD_ID` (`newObjectId` → tRPC `BAD_REQUEST`).
+- Every mutation of a dossier/investigation goes through `lockAndBump` (row lock + `version + 1`, optional expected
+  version → `VersionConflict`); child tables are rewritten inside the same transaction.
+- `saveGraph` upserts nodes/edges by id (ON CONFLICT … WHERE same investigation) and deletes the ones missing from the
+  payload; facts, edge↔fact and hypothesis evidence links are re-inserted only for objects of the same investigation.
+- jsonb params must be `JSON.stringify`-ed (`json()`), otherwise node-postgres turns JS arrays into PG arrays.
+- Media: there is no file storage yet; the image stays in the item's `data.url` and a `media` row with the sha256 of
+  that string satisfies the FK (`storage_key = inline/<owner>/<sha>`). Cover = `cover_media_id`.
+- Dossiers/investigations are soft-deleted (`deleted_at`); search history "clear" sets `hidden_at`, and a search that
+  was attached to a dossier as a snapshot is `pinned`.
+- Repos that write `created_by`/`granted_by` take an `actorId` argument (memory adapters ignore it).
 
 ### Search (bot parity)
 

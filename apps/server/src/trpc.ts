@@ -56,6 +56,9 @@ const mapErrors = t.middleware(async ({ next }) => {
     if (cause instanceof Error && cause.message === 'NOT_FOUND') {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'NOT_FOUND' });
     }
+    if (cause instanceof Error && cause.message === 'BAD_ID') {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_ID' });
+    }
   }
   return r;
 });

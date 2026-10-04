@@ -7,10 +7,9 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Link, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { nanoid } from 'nanoid';
 import { FolderOpen, LayoutGrid, Maximize, Plus, Trash2, X } from 'lucide-react';
 import {
-  CREDIBILITY_LABELS, NODE_TYPE_LABELS, type Fact, type GraphEdge, type GraphNode, type NodeType,
+  CREDIBILITY_LABELS, NODE_TYPE_LABELS, newId, type Fact, type GraphEdge, type GraphNode, type NodeType,
 } from '@ft/shared';
 import { Button, Field, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { MarkdownView } from '../../components/Markdown.tsx';
@@ -159,7 +158,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
 
   const onConnect = useCallback(
     (c: Connection) => {
-      const id = `e-${nanoid(8)}`;
+      const id = newId();
       setEdges((es) => addEdge({ ...c, id, label: 'связь', data: { relation: 'связь', credibility: '6', factIds: [] }, style: edgeStyle('6'), markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle('6').stroke } }, es));
       setSelected({ kind: 'edge', id });
       touch();
@@ -174,7 +173,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
 
   function addNode(type: NodeType) {
     const center = rf.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    const id = `n-${nanoid(8)}`;
+    const id = newId();
     setNodes((ns) => [
       ...ns.map((n) => ({ ...n, selected: false })),
       { id, type: 'entity', position: { x: center.x - 80 + Math.random() * 40, y: center.y - 30 + Math.random() * 40 }, selected: true, data: { label: NODE_TYPE_LABELS[type], type, dossierId: null, props: {}, factCount: 0 } },

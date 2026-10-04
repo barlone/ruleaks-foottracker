@@ -1,9 +1,8 @@
 import { TRPCError } from '@trpc/server';
-import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import {
   AttributeItem, DossierItem, DossierKind, DossierVisibility, LinkItem, MediaItem, NoteItem, ShareRole, SnapshotItem,
-  type Dossier,
+  newId, type Dossier,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
@@ -77,11 +76,11 @@ export const dossiersRouter = router({
     const d = await load(ctx, input.id, 'edit');
     const item = DossierItem.parse({
       ...input.item,
-      id: `it-${nanoid(8)}`,
+      id: newId(),
       position: Math.max(-1, ...d.items.map((i) => i.position)) + 1,
       createdAt: new Date().toISOString(),
     });
-    return withRole(ctx, await ctx.deps.dossiers.addItem(input.id, item));
+    return withRole(ctx, await ctx.deps.dossiers.addItem(input.id, item, ctx.user.id));
   }),
 
   updateItem: activeProcedure.input(z.object({ id: z.string(), item: DossierItem })).mutation(async ({ ctx, input }) => {
@@ -115,13 +114,13 @@ export const dossiersRouter = router({
       if (!u) throw new TRPCError({ code: 'NOT_FOUND', message: 'USER_NOT_FOUND' });
       if (u.id === d.ownerId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'SELF_SHARE' });
       const shares = [...d.shares.filter((s) => s.userId !== u.id), { userId: u.id, displayName: u.displayName, role: input.role }];
-      const next = await ctx.deps.dossiers.setShares(input.id, shares);
+      const next = await ctx.deps.dossiers.setShares(input.id, shares, ctx.user.id);
       return withRole(ctx, d.visibility === 'private' ? await ctx.deps.dossiers.update(input.id, next.version, { visibility: 'shared' }) : next);
     }),
 
   unshare: activeProcedure.input(z.object({ id: z.string(), userId: z.string() })).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'manage');
-    return withRole(ctx, await ctx.deps.dossiers.setShares(input.id, d.shares.filter((s) => s.userId !== input.userId)));
+    return withRole(ctx, await ctx.deps.dossiers.setShares(input.id, d.shares.filter((s) => s.userId !== input.userId), ctx.user.id));
   }),
 
   remove: activeProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {

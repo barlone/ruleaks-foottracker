@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./pg": "./src/pg.ts"
+    "./pg": "./src/pg.ts",
+    "./status": "./src/status.ts"
   },
   "scripts": {
     "migrate": "tsx src/migrate.ts",

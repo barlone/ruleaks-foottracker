@@ -3,7 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Share2, Trash2, User, Users,
 } from 'lucide-react';
-import { LEAK_FIELDS, FIELD_TO_KIND, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
+import { LEAK_FIELDS, FIELD_TO_KIND, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/common.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
@@ -409,7 +409,7 @@ function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | '
         const url = /^https?:\/\//.test(value) ? value : `https://${value}`;
         await onAdd({ type: 'link', url, title: title || undefined, platform: guessPlatform(url), source: src });
       } else if (kind === 'media') {
-        await onAdd({ type: 'media', mediaId: `m-${Date.now()}`, url: value, caption: title || undefined, album: album || undefined, source: src });
+        await onAdd({ type: 'media', mediaId: newId(), url: value, caption: title || undefined, album: album || undefined, source: src });
       } else {
         await onAdd({ type: 'note', markdown: value, source: src });
       }

@@ -1,4 +1,4 @@
-// Черновик схемы БД сайта (база `foottracker`, отдельно от ruleaks/tgcomments/tokens).
+// Черновик схемы БД сайта (база `ruleaksfoottracker`, создаётся скриптом sql/000_create_database.sql; отдельно от ruleaks/tgcomments/tokens).
 // На текущем шаге НЕ подключена: сервер работает на in-memory адаптерах
 // (apps/server/src/adapters/memory). Схема фиксирует решения из ARCHITECTURE.md
 // и станет источником миграций drizzle-kit, когда появится адаптер PostgreSQL.

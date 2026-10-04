@@ -28,8 +28,8 @@
      SQL, роль только чтения     │           │ Bearer   │ SQL
        ┌─────────────────────────▼──┐  ┌─────▼────────┐ ┌▼──────────────────┐
        │ БД pyruleaks-bot           │  │ dsstalker-   │ │ PostgreSQL        │
-       │ users · tokens · подписки  │  │ api-gate (Go)│ │ база `foottracker`│
-       │ site_login_requests (нов.) │  │ raw/deep/job │ │ (досье, графы…)   │
+       │ users · tokens · подписки  │  │ api-gate (Go)│ │ база ruleaks-     │
+       │ site_login_requests (нов.) │  │ raw/deep/job │ │ foottracker       │
        └────────────────────────────┘  └──────────────┘ └───────────────────┘
           [bot-db]                         [api]            [project-db]
 ```
@@ -245,7 +245,7 @@ JSONB — для гибких частей (тело элемента досье
 ## 12. Развёртывание (план)
 
 Docker Compose: `caddy` (TLS, статика `apps/web/dist`, прокси `/trpc` → server) + `server` + `minio`.
-Postgres — существующий кластер, отдельная база `foottracker` и отдельная роль.
+Postgres — существующий кластер, отдельная база и роль `ruleaksfoottracker` (скрипт `packages/db/sql/000_create_database.sql`).
 
 ## 13. Дорожная карта
 

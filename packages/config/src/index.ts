@@ -44,7 +44,7 @@ const SECTIONS = {
   telegram: z.object({
     'bot-username': str('ruleaks_bot'),
   }),
-  'project-db': DbSection.extend({ database: str('foottracker'), user: str('foottracker') }),
+  'project-db': DbSection.extend({ database: str('ruleaksfoottracker'), user: str('ruleaksfoottracker') }),
   'bot-db': DbSection.extend({ 'pool-max': int(5, 1, 50) }),
   api: z.object({
     /** false — имитация шлюза с вымышленными данными. */

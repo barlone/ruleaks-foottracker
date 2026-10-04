@@ -26,6 +26,6 @@ export const config = {
   /** Сколько кэшировать ответ о подписке. */
   accessCacheMs: 60 * 1000,
   botUsername: appConfig.telegram.botUsername,
-  /** demo: данные в памяти и auth.devConfirm — имитация подтверждения входа ботом. */
-  devMode: appConfig.server.mode === 'demo',
+  /** Cookie с флагом Secure, когда сервер доступен не только с localhost (значит, за HTTPS). */
+  secureCookie: !appConfig.server.loopback,
 };

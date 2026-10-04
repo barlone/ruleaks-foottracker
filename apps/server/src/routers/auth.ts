@@ -1,7 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { config } from '../config.ts';
-import { MemoryBotBridge } from '../adapters/memory/bot.ts';
 import { authedProcedure, loadAccess, publicProcedure, router } from '../trpc.ts';
 
 // Вход только через бота:
@@ -13,7 +12,7 @@ const cookieOpts = {
   path: '/',
   httpOnly: true,
   sameSite: 'lax' as const,
-  secure: !config.devMode,
+  secure: config.secureCookie,
   signed: true,
   maxAge: config.sessionTtlMs / 1000,
 };
@@ -51,13 +50,20 @@ export const authRouter = router({
     return true;
   }),
 
-  devMode: publicProcedure.query(() => config.devMode),
+  /** Какой вход без бота доступен: profiles — демо-учётки, tgid — по Telegram ID пользователя бота, null — никакого. */
+  devLogin: publicProcedure.query(({ ctx }) => ctx.deps.bot.devLogin),
 
-  /** dev: имитирует подтверждение входа ботом. */
+  /** dev: подтверждает вход вместо бота (демо-учётка или реальный пользователь бота по Telegram ID). */
   devConfirm: publicProcedure
-    .input(z.object({ nonce: z.string(), profile: z.enum(['active', 'expired', 'colleague']) }))
-    .mutation(({ ctx, input }) => {
-      if (!config.devMode || !(ctx.deps.bot instanceof MemoryBotBridge)) throw new TRPCError({ code: 'NOT_FOUND' });
-      return ctx.deps.bot.devConfirm(input.nonce, input.profile);
+    .input(z.union([
+      z.object({ nonce: z.string(), profile: z.enum(['active', 'expired', 'colleague']) }),
+      z.object({ nonce: z.string(), tgId: z.string().trim().regex(/^\d{1,20}$/, 'Telegram ID — только цифры') }),
+    ]))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.deps.bot.devLogin) throw new TRPCError({ code: 'NOT_FOUND' });
+      const { nonce, ...who } = input;
+      const r = await ctx.deps.bot.devConfirm(nonce, who);
+      if (!r.ok) throw new TRPCError({ code: 'BAD_REQUEST', message: r.error });
+      return true;
     }),
 });

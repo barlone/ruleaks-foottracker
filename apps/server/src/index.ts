@@ -19,7 +19,7 @@ for (const w of appConfig.warnings) app.log.warn(`config: ${w}`);
 
 let deps;
 try {
-  deps = createDeps(appConfig);
+  deps = await createDeps(appConfig, (m) => app.log.info(m));
 } catch (e) {
   app.log.fatal((e as Error).message);
   process.exit(2);

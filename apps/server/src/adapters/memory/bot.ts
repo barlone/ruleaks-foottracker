@@ -1,7 +1,6 @@
-import { nanoid } from 'nanoid';
 import type { Access } from '@ft/shared';
-import type { BotBridge, LoginRequestStatus } from '../../ports.ts';
-import { config } from '../../config.ts';
+import type { BotBridge, DevLoginTarget, LoginRequestStatus } from '../../ports.ts';
+import { LoginRequestStore } from '../login-requests.ts';
 
 // Имитация бота. Подтверждение входа делает auth.devConfirm (кнопка на странице входа в dev).
 
@@ -35,32 +34,21 @@ export const DEV_PROFILES: Record<'active' | 'expired' | 'colleague', FakeTgUser
   },
 };
 
-type Req = { status: 'pending' | 'confirmed' | 'consumed'; expiresAt: number; user?: FakeTgUser };
-
+/** Имитация бота: вход по одной из демо-учёток, подписка и токен — вымышленные. */
 export class MemoryBotBridge implements BotBridge {
-  private requests = new Map<string, Req>();
+  readonly devLogin = 'profiles' as const;
+  private logins = new LoginRequestStore();
 
   async createLoginRequest() {
-    const nonce = nanoid(24);
-    const expiresAt = Date.now() + config.loginTtlMs;
-    this.requests.set(nonce, { status: 'pending', expiresAt });
-    return {
-      nonce,
-      deepLink: `https://t.me/${config.botUsername}?start=login_${nonce}`,
-      expiresAt: new Date(expiresAt).toISOString(),
-    };
+    return this.logins.create();
   }
 
   async getLoginRequest(nonce: string): Promise<LoginRequestStatus> {
-    const r = this.requests.get(nonce);
-    if (!r || r.status === 'consumed' || r.expiresAt < Date.now()) return { status: 'expired' };
-    if (r.status === 'pending' || !r.user) return { status: 'pending' };
-    return { status: 'confirmed', tgId: r.user.tgId, displayName: r.user.displayName, username: r.user.username };
+    return this.logins.get(nonce);
   }
 
   async consumeLoginRequest(nonce: string) {
-    const r = this.requests.get(nonce);
-    if (r) r.status = 'consumed';
+    this.logins.consume(nonce);
   }
 
   async getAccess(tgId: string): Promise<Access> {
@@ -73,11 +61,9 @@ export class MemoryBotBridge implements BotBridge {
   }
 
   /** dev: то, что в проде сделает бот по /start login_<nonce>. */
-  devConfirm(nonce: string, profile: keyof typeof DEV_PROFILES): boolean {
-    const r = this.requests.get(nonce);
-    if (!r || r.status !== 'pending') return false;
-    r.status = 'confirmed';
-    r.user = DEV_PROFILES[profile];
-    return true;
+  async devConfirm(nonce: string, who: DevLoginTarget) {
+    if (!('profile' in who)) return { ok: false as const, error: 'В демо-режиме вход по демо-учётке' };
+    const { tgId, displayName, username } = DEV_PROFILES[who.profile];
+    return this.logins.confirm(nonce, { tgId, displayName, username }) ? { ok: true as const } : { ok: false as const, error: 'Ссылка входа устарела' };
   }
 }

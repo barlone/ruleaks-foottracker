@@ -121,7 +121,7 @@ function Sidebar() {
           </div>
           <div className="min-w-0 text-sm">
             <div className="truncate font-semibold">{user.displayName}</div>
-            <div className="truncate font-mono text-[11px] text-mute">@{user.username ?? user.tgId}</div>
+            <div className="truncate font-mono text-[11px] text-mute">{user.username ? `@${user.username}` : `ID ${user.tgId}`}</div>
           </div>
         </div>
         <div className={clsx('mb-2 rounded-md border px-2 py-1 font-mono text-[11px]', user.access.active ? 'border-line text-mint' : 'border-warn/30 text-warn')}>

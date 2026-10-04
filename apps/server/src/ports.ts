@@ -1,6 +1,6 @@
 // Порты (интерфейсы) сервера. Роутеры зависят только от них; реализации
 // подставляются в src/app.ts. Сейчас есть только in-memory адаптеры
-// (src/adapters/memory) — следующий шаг: postgres/, bot-http/, gateway-http/.
+// (src/adapters/memory) — следующий шаг: postgres/, bot-db/, gateway-http/ (выбор в deps.ts по [server] mode).
 
 import type {
   Access, Dossier, DossierItem, DossierSummary, Fact, GraphEdge, GraphNode, Hypothesis,
@@ -15,10 +15,17 @@ export type LoginRequestStatus =
   | { status: 'confirmed'; tgId: string; displayName: string; username: string | null };
 
 /**
- * Мост к боту pyruleaks-bot. В проде — HTTP к его FastAPI (`/api/site/*`, заголовок X-Site-Key):
+ * Мост к боту pyruleaks-bot. В проде — SQL к его базе ([bot-db]): site_login_requests, site_user_access(), users/tokens;
  * бот владеет таблицами users/tokens и сам решает, активна ли подписка (access_error).
  */
+/** Кого подтвердить при dev-входе: демо-учётку (имитация бота) или реального пользователя бота по Telegram ID. */
+export type DevLoginTarget = { profile: 'active' | 'expired' | 'colleague' } | { tgId: string };
+
 export interface BotBridge {
+  /** Какой dev-вход поддерживает реализация: profiles — демо-учётки, tgid — по Telegram ID, null — только через бота. */
+  readonly devLogin: 'profiles' | 'tgid' | null;
+  /** dev: подтвердить вход вместо бота. */
+  devConfirm(nonce: string, who: DevLoginTarget): Promise<{ ok: true } | { ok: false; error: string }>;
   /** Регистрирует одноразовый вход; ссылка ведёт в бота: t.me/<bot>?start=login_<nonce>. */
   createLoginRequest(meta: { userAgent?: string }): Promise<{ nonce: string; deepLink: string; expiresAt: string }>;
   getLoginRequest(nonce: string): Promise<LoginRequestStatus>;

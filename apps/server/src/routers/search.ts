@@ -6,6 +6,7 @@ import {
   type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import type { GatewayAnswer } from '../ports.ts';
+import { appConfig } from '../config.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 
 // Сайт — посредник между браузером и шлюзом: токен пользователя не покидает сервер,
@@ -51,11 +52,11 @@ async function token(ctx: Ctx): Promise<string> {
 }
 
 /** Дожидается ответа шлюза (для служебных запросов вроде телефон → tgid). */
-async function waitDone(ctx: Ctx, tok: string, service: 'ruleaks' | 'tgcmnts', first: GatewayAnswer, timeoutMs = 20_000): Promise<unknown> {
+async function waitDone(ctx: Ctx, tok: string, service: 'ruleaks' | 'tgcmnts', first: GatewayAnswer, timeoutMs = 60_000): Promise<unknown> {
   let ans = first;
   const until = Date.now() + timeoutMs;
   while (ans.state === 'running' && Date.now() < until) {
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, appConfig.api.pollIntervalMs));
     ans = await ctx.deps.gateway.poll(tok, service, ans.jobId);
   }
   if (ans.state === 'done') return ans.result;
@@ -109,6 +110,11 @@ async function advance(ctx: Ctx, id: string) {
   const job = await ctx.deps.searches.get(id, ctx.user!.id);
   if (!job) throw new TRPCError({ code: 'NOT_FOUND' });
   if (job.state !== 'running' || !job.gatewayJobId) return job;
+  if (Date.now() - new Date(job.startedAt).getTime() > appConfig.api.jobTimeoutMs) {
+    const error = `Поиск не завершился за ${Math.round(appConfig.api.jobTimeoutMs / 1000)} с — повторите запрос позже`;
+    await ctx.deps.searches.update(id, { state: 'failed', error });
+    return { ...job, state: 'failed' as const, error };
+  }
   const ans = await ctx.deps.gateway.poll(await token(ctx), job.gatewayService, job.gatewayJobId);
   if (ans.state === 'done') {
     await ctx.deps.searches.update(id, { state: 'done', result: ans.result });

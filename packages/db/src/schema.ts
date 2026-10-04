@@ -9,7 +9,6 @@ import {
 } from 'drizzle-orm/pg-core';
 
 const tsvector = customType<{ data: string }>({ dataType: () => 'tsvector' });
-const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp('updated_at', { withTimezone: true }).notNull().defaultNow();
@@ -26,14 +25,12 @@ export const loginStatus = pgEnum('login_status', ['pending', 'confirmed', 'cons
 
 // ---------- Пользователи и сессии ----------
 
-/** Пользователь сайта = пользователь бота. Подписку не дублируем: её владелец — БД бота. */
+/** Пользователь сайта = пользователь бота. Подписку и токен шлюза не дублируем: их читаем из БД бота. */
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   tgId: bigint('tg_id', { mode: 'bigint' }).notNull(),
   displayName: text('display_name').notNull(),
   username: text('username'),
-  /** Токен API-шлюза, зашифрованный AES-256-GCM (ключ в env). Обновляется при каждом входе. */
-  apiTokenEnc: bytea('api_token_enc'),
   createdAt: createdAt(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
 }, (t) => [uniqueIndex('users_tg_id_uq').on(t.tgId)]);
@@ -220,8 +217,8 @@ export const auditLog = pgTable('audit_log', {
 }, (t) => [index('audit_user_idx').on(t.userId, t.at)]);
 
 /**
- * Запрос входа через бота. Таблица живёт в БД БОТА (схема `site`), потому что пишет в неё бот:
- * сайт создаёт pending-запрос, бот по /start login_<nonce> подтверждает и проставляет tg_id.
+ * Запрос входа через бота. Таблица живёт в БД БОТА ([bot-db] в config.ini): сайт создаёт
+ * pending-запрос, бот по /start login_<nonce> подтверждает и проставляет tg_id.
  * Описана здесь для полноты; миграцию делает alembic бота.
  */
 export const loginRequests = pgTable('site_login_requests', {

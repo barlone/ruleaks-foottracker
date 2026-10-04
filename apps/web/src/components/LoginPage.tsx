@@ -2,15 +2,20 @@ import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Send } from 'lucide-react';
 import { trpc } from '../lib/trpc.ts';
-import { Button, Spinner } from './ui.tsx';
+import { errorText } from '../lib/errors.ts';
+import { Button, Input, Spinner } from './ui.tsx';
 
 // Вход: одноразовая deep-link ссылка в бота. Страница опрашивает статус,
 // после подтверждения в боте сервер ставит httpOnly-cookie сессии.
 
+/** Временный быстрый вход (dev, только с реальной БД бота на localhost). */
+const QUICK_LOGIN_TG_ID = '8787072107';
+
 export function LoginPage() {
   const utils = trpc.useUtils();
   const start = trpc.auth.start.useMutation();
-  const devMode = trpc.auth.devMode.useQuery();
+  const devLogin = trpc.auth.devLogin.useQuery();
+  const [tgId, setTgId] = useState('');
   const devConfirm = trpc.auth.devConfirm.useMutation();
   const [expired, setExpired] = useState(false);
   const nonce = start.data?.nonce;
@@ -85,7 +90,7 @@ export function LoginPage() {
             )}
           </div>
 
-          {devMode.data && nonce && !expired && (
+          {devLogin.data === 'profiles' && nonce && !expired && (
             <div className="mt-8 border-t border-dashed border-line pt-5">
               <div className="mb-3 font-mono text-[11px] uppercase tracking-widest text-warn">dev · имитация подтверждения ботом</div>
               <div className="flex flex-wrap gap-2">
@@ -94,6 +99,34 @@ export function LoginPage() {
                 <Button size="sm" variant="danger" onClick={() => devConfirm.mutate({ nonce, profile: 'expired' })}>Без подписки</Button>
               </div>
             </div>
+          )}
+
+          {/* Реальная БД бота, но бот ещё не подтверждает вход: входим как существующий пользователь бота. */}
+          {devLogin.data === 'tgid' && nonce && !expired && (
+            <form
+              className="mt-8 border-t border-dashed border-line pt-5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (tgId.trim()) devConfirm.mutate({ nonce, tgId: tgId.trim() });
+              }}
+            >
+              <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-warn">dev · вход по Telegram ID пользователя бота</div>
+              <p className="mb-3 text-xs text-mute">Подписка и токен API берутся из базы бота. Доступно только при запуске на localhost.</p>
+              <div className="flex gap-2">
+                <Input value={tgId} onChange={(e) => setTgId(e.target.value)} placeholder="Telegram ID (chat_id)" inputMode="numeric" className="max-w-xs font-mono" />
+                <Button type="submit" disabled={!tgId.trim() || devConfirm.isPending}>Войти</Button>
+                {/* TODO: временная кнопка быстрого входа — убрать, когда вход пойдёт через бота. */}
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={devConfirm.isPending}
+                  onClick={() => devConfirm.mutate({ nonce, tgId: QUICK_LOGIN_TG_ID })}
+                >
+                  Войти как {QUICK_LOGIN_TG_ID}
+                </Button>
+              </div>
+              {devConfirm.error && <div className="mt-2 font-mono text-xs text-danger">{errorText(devConfirm.error)}</div>}
+            </form>
           )}
         </div>
 

@@ -4,8 +4,13 @@
 **Расследования** с графом связей, фактами и гипотезами. Вход — только через Telegram-бот RuLeaks,
 доступ — по действующей подписке бота.
 
-Статус: **прототип архитектуры и интерфейса**. Сервер работает на in-memory адаптерах с демо-данными;
-ни БД, ни бот, ни API-шлюз пока не подключены. Все решения ниже отражены в коде каркаса.
+Статус: **прототип**. Каждый источник включается в `config.ini` флагом `enabled`:
+- `[bot-db]` — **подключено**: подписка и токен API берутся из реальной базы бота (только чтение);
+- `[api]` — **подключено**: поиск идёт в реальный dsstalker-api-gate;
+- `[project-db]` — ещё нет: досье и расследования хранятся в памяти сервера (демо-данные, сбрасываются при перезапуске).
+
+Вход: бот пока не умеет подтверждать вход на сайт, поэтому на localhost работает dev-вход по Telegram ID
+пользователя бота (`[server] dev-login`). Все решения ниже отражены в коде каркаса.
 
 ---
 
@@ -20,22 +25,46 @@
                               │  apps/server (Node, BFF)   │
                               │  Fastify + tRPC            │
                               └──┬───────────┬──────────┬──┘
-           X-Site-Key, HTTP      │           │ Bearer   │ SQL
+     SQL, роль только чтения     │           │ Bearer   │ SQL
        ┌─────────────────────────▼──┐  ┌─────▼────────┐ ┌▼──────────────────┐
-       │ pyruleaks-bot (FastAPI)    │  │ dsstalker-   │ │ PostgreSQL        │
+       │ БД pyruleaks-bot           │  │ dsstalker-   │ │ PostgreSQL        │
        │ users · tokens · подписки  │  │ api-gate (Go)│ │ база `foottracker`│
-       │ /api/site/* (новое)        │  │ raw/deep/job │ │ (досье, графы…)   │
+       │ site_login_requests (нов.) │  │ raw/deep/job │ │ (досье, графы…)   │
        └────────────────────────────┘  └──────────────┘ └───────────────────┘
+          [bot-db]                         [api]            [project-db]
 ```
 
-| Система | Владеет | Сайт обращается |
-|---|---|---|
-| **pyruleaks-bot** | пользователи (`users`), токены (`tokens`), подписка (`users.subscribed_to`, `access_error()`) | по HTTP к новым внутренним эндпоинтам `/api/site/*` |
-| **dsstalker-api-gate** | поиск по утечкам, асинхронные задачи, кэш, троттлинг | по HTTP с UUID-токеном пользователя в `Authorization` |
-| **foottracker DB** | всё, что создаёт сайт: досье, медиа, расследования, доступы, снимки поиска | напрямую (Drizzle) |
+| Система | Владеет | Сайт обращается | Секция config.ini |
+|---|---|---|---|
+| **БД бота** | пользователи (`users`), токены (`tokens`), подписка (`users.subscribed_to`) | SQL, отдельная роль: `SELECT` на `users`/`tokens`, запись только в `site_login_requests` | `[bot-db]` |
+| **dsstalker-api-gate** | поиск по утечкам, асинхронные задачи, кэш, троттлинг | HTTP с UUID-токеном пользователя в `Authorization` | `[api]` |
+| **foottracker DB** | всё, что создаёт сайт: досье, медиа, расследования, доступы, снимки поиска | SQL (Drizzle), роль-владелец | `[project-db]` |
 
-Правило: **сайт не читает и не пишет таблицы бота напрямую.** Подписку и токены решает бот — так логика
-`access_error()` остаётся в одном месте, а у сайта нет прав на БД бота.
+Правило: **таблицы бота сайт только читает.** Единственное исключение — `site_login_requests`, через которую
+идёт вход. Логика подписки остаётся у бота: его миграция создаёт SQL-функцию `site_user_access(chat_id)`
+с той же логикой, что `access_error()`, и сайт вызывает её, а не повторяет правила у себя.
+
+## 1.1. Конфигурация
+
+Один файл `config.ini` в корне репозитория (шаблон — `config.example.ini`, сам `config.ini` в `.gitignore`).
+Его читает пакет `@ft/config`: сервер при старте и Vite (адрес API для прокси `/trpc`).
+
+| Секция | Что задаёт |
+|---|---|
+| `[server]` | адрес и порт, секрет cookie, срок сессии, `dev-login` |
+| `[telegram]` | имя бота для ссылки входа |
+| `[project-db]` | подключение к БД сайта |
+| `[bot-db]` | подключение к БД бота (только чтение) |
+| `[api]` | адрес API-шлюза, таймауты, интервал опроса задач |
+
+- Любой ключ переопределяется переменной окружения `FT_<СЕКЦИЯ>_<КЛЮЧ>`
+  (`[project-db] password` → `FT_PROJECT_DB_PASSWORD`), путь к файлу — `FT_CONFIG`. Удобно для Docker и секретов.
+- Значения проверяются Zod-схемой при старте; неизвестные секции и ключи выводятся предупреждением
+  (опечатка не превращается молча в значение по умолчанию).
+- У `[project-db]`, `[bot-db]`, `[api]` свой флаг `enabled`; выключенный источник заменяется имитацией
+  (данные в памяти, демо-учётки, вымышленные результаты поиска). Включённый требует заполненных полей.
+- Если `[server] host` — не localhost, обязательны `cookie-secret` (≥ 32 символов) и `dev-login = false`.
+- В лог при старте выводится сводка подключений без паролей.
 
 ## 2. Стек
 
@@ -72,7 +101,7 @@ apps/web          React SPA
   src/features/       search · dossiers · investigations
 ```
 
-**Порты и адаптеры.** Следующий шаг — добавить `adapters/postgres`, `adapters/bot-http`,
+**Порты и адаптеры.** Следующий шаг — добавить `adapters/postgres`, `adapters/bot-db`,
 `adapters/gateway-http` и переключать их в `deps.ts`. Роутеры, фронтенд и схемы при этом не меняются.
 
 ## 4. Авторизация через бота
@@ -81,40 +110,39 @@ apps/web          React SPA
 у части пользователей из РФ работает нестабильно).
 
 ```
-браузер              сайт (BFF)                     бот
-  │ auth.start ───────▶ POST /api/site/login-requests ──▶ nonce, TTL 5 мин
+браузер              сайт (BFF)                         БД бота / бот
+  │ auth.start ───────▶ INSERT site_login_requests ──────▶ nonce, TTL 5 мин
   │ ◀── deepLink t.me/<bot>?start=login_<nonce> + QR
-  │ (пользователь в Telegram) ─────────────────────────▶ /start login_<nonce>
-  │                                                     кнопка «Войти на сайт» → confirmed, tg_id
-  │ auth.status (опрос 1.5 с) ─▶ GET /api/site/login-requests/<nonce>
-  │                            ◀── confirmed + профиль
+  │ (пользователь в Telegram) ──────────────────────────▶ бот: /start login_<nonce>
+  │                                                       кнопка «Войти на сайт» → confirmed, tg_id
+  │ auth.status (опрос 1.5 с) ─▶ SELECT site_login_requests
+  │                            ◀── confirmed + tg_id
   │                            consume; upsert user; сессия
   │ ◀── Set-Cookie ft_sid (httpOnly, Secure, SameSite=Lax, signed)
 ```
 
-- Сессия хранится на сервере (`sessions`, в БД — sha256 от значения cookie), срок 30 дней.
+- Сессия хранится на сервере (`sessions`, в БД — sha256 от значения cookie), срок — `[server] session-ttl-days`.
   JWT не используем: сессию нужно уметь отозвать сразу (команда бота «Завершить все сессии на сайте»).
-- **Контроль подписки** — `GET /api/site/users/<tg_id>/access` (ответ бота кэшируется на 60 с).
+- **Контроль подписки** — `SELECT * FROM site_user_access(<tg_id>)` в БД бота (ответ кэшируется на 60 с).
   Неактивная подписка переводит сайт в **режим чтения**: свои и расшаренные объекты видны,
   поиск и любые изменения запрещены (`activeProcedure` → `FORBIDDEN SUBSCRIPTION_INACTIVE`).
   Баннер в интерфейсе ведёт в бота для продления; есть кнопка «проверить снова».
-- **Токен шлюза** (`GET /api/site/users/<tg_id>/api-token`) читается только сервером и никогда не уходит
-  в браузер. В БД сайта он хранится зашифрованным (AES-256-GCM), ключ — в env.
+- **Токен шлюза** пользователя (`tokens.token` по `users.tokenid`) сервер читает из БД бота при каждом поиске
+  и никогда не отдаёт в браузер. Копию у себя не хранит.
 
 ### Что добавить в pyruleaks-bot
 
-| Метод | Путь | Назначение |
-|---|---|---|
-| `POST` | `/api/site/login-requests` | создать `nonce` (таблица `site_login_requests`, миграция alembic) |
-| `GET` | `/api/site/login-requests/{nonce}` | `pending` / `confirmed{tg_id, name, username}` / `expired` |
-| `POST` | `/api/site/login-requests/{nonce}/consume` | одноразовость |
-| `GET` | `/api/site/users/{tg_id}/access` | `{active, unlimited, until, reason}` — та же логика `access_error()` |
-| `GET` | `/api/site/users/{tg_id}/api-token` | UUID-токен шлюза |
+1. Миграция alembic:
+   - таблица `site_login_requests (nonce, status, tg_id, created_at, expires_at, confirmed_at)`;
+   - функция `site_user_access(chat_id) → (active, unlimited, until, reason)` — та же логика, что `access_error()`;
+   - роль сайта: `SELECT` на `users`, `tokens`, `EXECUTE` на функцию, `SELECT, INSERT, UPDATE` на `site_login_requests`.
+2. Обработчик `/start login_<nonce>`: подключается к существующему `start_payload()` в `app/bot/handlers/main.py`;
+   кнопка подтверждения — callback с префиксом `site_login:`, не пересекающимся с существующими
+   (`search_`, `deep_search_`, `payment:` …). По нажатию — `status = confirmed`, `tg_id = chat_id`.
+3. (Позже) команда «Завершить все сессии на сайте» — отметка в `site_login_requests` или отдельной таблице,
+   которую сайт проверяет при обращении к сессии.
 
-Все `/api/site/*` требуют заголовок `X-Site-Key` по аналогии с `require_admin_key`. Слушать их нужно
-на внутреннем интерфейсе. Обработчик `/start login_<nonce>` подключается к существующему `start_payload()`
-в `app/bot/handlers/main.py`; кнопка подтверждения — callback с префиксом `site_login:`, не пересекающимся
-с существующими (`search_`, `deep_search_`, `payment:` …).
+HTTP-эндпоинты в боте не нужны: весь обмен идёт через его базу.
 
 ## 5. Поиск
 
@@ -191,7 +219,7 @@ apps/web          React SPA
 См. `packages/db/src/schema.ts`. Основное:
 
 ```
-users(id, tg_id, display_name, username, api_token_enc)      sessions(id_hash, user_id, expires_at)
+users(id, tg_id, display_name, username)      sessions(id_hash, user_id, expires_at)
 dossiers(id, owner_id, kind, title, summary_md, tags, visibility, version, search_tsv)
 dossier_members(group_id, member_id)                          dossier_items(id, dossier_id, type, data jsonb, source jsonb, position)
 media(id, owner_id, s3_key, thumb_key, sha256, exif)          search_snapshots(id, user_id, kind, query, deep, result jsonb, pinned)
@@ -208,11 +236,11 @@ JSONB — для гибких частей (тело элемента досье
 ## 11. Безопасность
 
 - `noindex, nofollow` на всём сайте; публичные расследования открываются только по ссылке.
-- Cookie: httpOnly, Secure, SameSite=Lax, подписанная. tRPC-мутации идут POST с JSON, а CORS закрыт:
+- Cookie: httpOnly, Secure, SameSite=Lax, подписанная (`[server] cookie-secret`). tRPC-мутации идут POST с JSON, а CORS закрыт:
   фронт и API на одном origin.
 - Ограничения ввода — Zod-схемы (длины, количество узлов графа ≤ 2000, связей ≤ 5000).
 - (план) Rate-limit на `auth.start` и `search.start` (`@fastify/rate-limit`), поверх троттлинга шлюза.
-- Токен шлюза, ключ шифрования, `X-Site-Key`, секрет cookie — только из env.
+- Пароли БД и секрет cookie — только в `config.ini` (вне git) или в переменных окружения `FT_*`.
 
 ## 12. Развёртывание (план)
 
@@ -222,8 +250,8 @@ Postgres — существующий кластер, отдельная баз�
 ## 13. Дорожная карта
 
 1. ✅ Каркас, архитектура, интерфейс на in-memory данных.
-2. В боте: `/api/site/*` + `/start login_` + таблица `site_login_requests`.
-3. `adapters/bot-http`, `adapters/gateway-http` — реальный вход и поиск.
+2. В боте: миграция (`site_login_requests`, `site_user_access()`, роль сайта) + обработчик `/start login_`.
+3. ✅ `adapters/botdb`, `adapters/http/gateway` — подписка из БД бота и реальный поиск (dev-вход по Telegram ID до шага 2).
 4. `adapters/postgres` + миграции drizzle-kit; снимки поиска в БД.
 5. S3 + pg-boss: загрузка медиа, превью, EXIF.
 6. SSE для статуса поиска и уведомлений, история правок (`revisions`), аудит.

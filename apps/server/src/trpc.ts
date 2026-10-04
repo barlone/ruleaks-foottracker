@@ -1,0 +1,77 @@
+import type {} from '@fastify/cookie'; // аугментация типов req.cookies / res.setCookie
+import { initTRPC, TRPCError } from '@trpc/server';
+import type { CreateFastifyContextOptions } from '@trpc/server/adapters/fastify';
+import type { Access, User } from '@ft/shared';
+import { config } from './config.ts';
+import type { Deps } from './ports.ts';
+import { VersionConflict } from './ports.ts';
+
+export interface Ctx {
+  deps: Deps;
+  req: CreateFastifyContextOptions['req'];
+  res: CreateFastifyContextOptions['res'];
+  sid: string | null;
+  user: User | null;
+}
+
+// Ответ бота о подписке кэшируется: каждый запрос сайта не должен ходить в бота.
+const accessCache = new Map<string, { access: Access; at: number }>();
+
+export async function loadAccess(deps: Deps, tgId: string, fresh = false): Promise<Access> {
+  const hit = accessCache.get(tgId);
+  if (!fresh && hit && Date.now() - hit.at < config.accessCacheMs) return hit.access;
+  const access = await deps.bot.getAccess(tgId);
+  accessCache.set(tgId, { access, at: Date.now() });
+  return access;
+}
+
+export function makeCreateContext(deps: Deps) {
+  return async ({ req, res }: CreateFastifyContextOptions): Promise<Ctx> => {
+    const raw = req.cookies[config.sessionCookie];
+    const unsigned = raw ? req.unsignCookie(raw) : null;
+    const sid = unsigned?.valid ? unsigned.value : null;
+    let user: User | null = null;
+    if (sid) {
+      const session = await deps.sessions.get(sid);
+      const u = session ? await deps.users.get(session.userId) : null;
+      if (u) user = { ...u, access: await loadAccess(deps, u.tgId) };
+    }
+    return { deps, req, res, sid, user };
+  };
+}
+
+// Машиночитаемый код ошибки — в message (NO_SESSION, SUBSCRIPTION_INACTIVE, VERSION_CONFLICT…).
+const t = initTRPC.context<Ctx>().create();
+
+export const router = t.router;
+
+/** Переводит доменные ошибки репозиториев в коды tRPC. */
+const mapErrors = t.middleware(async ({ next }) => {
+  const r = await next();
+  if (!r.ok) {
+    const cause = r.error.cause;
+    if (cause instanceof VersionConflict) {
+      throw new TRPCError({ code: 'CONFLICT', message: 'VERSION_CONFLICT', cause });
+    }
+    if (cause instanceof Error && cause.message === 'NOT_FOUND') {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'NOT_FOUND' });
+    }
+  }
+  return r;
+});
+
+export const publicProcedure = t.procedure.use(mapErrors);
+
+/** Нужна сессия. Чтение своих и расшаренных объектов доступно и без подписки. */
+export const authedProcedure = publicProcedure.use(({ ctx, next }) => {
+  if (!ctx.user) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'NO_SESSION' });
+  return next({ ctx: { ...ctx, user: ctx.user } });
+});
+
+/** Нужна активная подписка: поиск и любые изменения. */
+export const activeProcedure = authedProcedure.use(({ ctx, next }) => {
+  if (!ctx.user.access.active) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'SUBSCRIPTION_INACTIVE' });
+  }
+  return next();
+});

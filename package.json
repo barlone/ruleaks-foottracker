@@ -1,0 +1,19 @@
+{
+  "name": "ruleaks-foottracker",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c green,cyan \"npm run dev -w @ft/server\" \"npm run dev -w @ft/web\"",
+    "build": "npm run build -w @ft/web",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "concurrently": "^10.0.5",
+    "typescript": "^7.0.2"
+  }
+}

@@ -3,5 +3,6 @@ dist/
 .env
 *.log
 config.ini
-gittoken# строки подключения MCP с паролями
+gittoken
+# строки подключения MCP с паролями
 .mcp.json

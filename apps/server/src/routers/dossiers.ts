@@ -6,6 +6,7 @@ import {
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
+import { TagIds, checkTagIds } from './tags.ts';
 
 const omitBase = { id: true, position: true, createdAt: true } as const;
 const NewItem = z.discriminatedUnion('type', [
@@ -28,8 +29,12 @@ const withRole = (ctx: Ctx, d: Dossier) => ({ ...d, role: roleOf(ctx.user!.id, d
 
 export const dossiersRouter = router({
   list: authedProcedure
-    .input(z.object({ scope: z.enum(['all', 'mine', 'shared']), q: z.string().max(100).optional() }))
-    .query(({ ctx, input }) => ctx.deps.dossiers.list(ctx.user.id, input.scope, input.q)),
+    .input(z.object({
+      scope: z.enum(['all', 'mine', 'shared']),
+      title: z.string().max(256).optional(),
+      tagIds: z.array(z.string()).max(50).optional(),
+    }))
+    .query(({ ctx, input: { scope, ...filter } }) => ctx.deps.dossiers.list(ctx.user.id, scope, filter)),
 
   /** Короткий список для выбора досье (добавить в досье, привязать узел графа). */
   options: authedProcedure.query(async ({ ctx }) => {
@@ -52,7 +57,7 @@ export const dossiersRouter = router({
   }),
 
   create: activeProcedure
-    .input(z.object({ kind: DossierKind, title: z.string().trim().min(1).max(256), summaryMd: z.string().max(100_000).default(''), tags: z.array(z.string()).default([]) }))
+    .input(z.object({ kind: DossierKind, title: z.string().trim().min(1).max(256), summaryMd: z.string().max(100_000).default('') }))
     .mutation(({ ctx, input }) => ctx.deps.dossiers.create({ ...input, ownerId: ctx.user.id })),
 
   update: activeProcedure
@@ -62,14 +67,16 @@ export const dossiersRouter = router({
       patch: z.object({
         title: z.string().trim().min(1).max(256),
         summaryMd: z.string().max(100_000),
-        tags: z.array(z.string().max(64)).max(50),
+        tagIds: TagIds,
         memberIds: z.array(z.string()),
         coverMediaUrl: z.string().nullable(),
       }).partial(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await load(ctx, input.id, 'edit');
-      return withRole(ctx, await ctx.deps.dossiers.update(input.id, input.version, input.patch));
+      const d = await load(ctx, input.id, 'edit');
+      const patch = { ...input.patch };
+      if (patch.tagIds) patch.tagIds = await checkTagIds(ctx, d.tags, patch.tagIds);
+      return withRole(ctx, await ctx.deps.dossiers.update(input.id, input.version, patch));
     }),
 
   addItem: activeProcedure.input(z.object({ id: z.string(), item: NewItem })).mutation(async ({ ctx, input }) => {

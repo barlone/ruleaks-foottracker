@@ -1,0 +1,1 @@
+npm run db -- up && npm run db -- status

@@ -218,23 +218,29 @@ HTTP-эндпоинты в боте не нужны: весь обмен идё�
 ## 10. Модель данных
 
 Источник истины — SQL-миграции в `packages/db/migrations` (node-pg-migrate, аналог alembic; описание и
-команды — `packages/db/README.md`). Первая версия — `20261004120000_initial-schema.sql`:
+команды — `packages/db/README.md`). Первая версия — `20261004120000_initial-schema.sql`, теги —
+`20261005120000_tags-dictionary.sql`:
 
 ```
 users(id, tg_id, display_name, username)                     sessions(id_hash sha256, user_id, expires_at)
-dossiers(id, owner_id, kind, title, summary_md, tags[], visibility, cover_media_id, version, deleted_at, search_tsv)
+dossiers(id, owner_id, kind, title, summary_md, visibility, cover_media_id, version, deleted_at, search_tsv)
 dossier_members(group_id, member_id, role_label)             dossier_items(id, dossier_id, type, data jsonb, source jsonb, position, media_id)
 dossier_shares(dossier_id, user_id, role)                    media(id, owner_id, storage_key, sha256, exif)
 search_jobs(id, user_id, section, kind, query, params, state, result jsonb, pinned, hidden_at)
-investigations(id, owner_id, title, description_md, tags[], visibility, public_slug, version, deleted_at, search_tsv)
+investigations(id, owner_id, title, description_md, visibility, public_slug, version, deleted_at, search_tsv)
 investigation_shares(investigation_id, user_id, role)
 graph_nodes(id, investigation_id, type, label, dossier_id, props, x, y)
 graph_edges(id, investigation_id, source_node_id, target_node_id, relation, label, credibility)
 facts(id, investigation_id, text_md, occurred_at, sources jsonb)   fact_nodes(fact_id, node_id)   edge_facts(edge_id, fact_id)
 hypotheses(id, investigation_id, title, text_md, status)     hypothesis_evidence(hypothesis_id, fact_id, stance)
 revisions(object_type, object_id, version, diff)             audit_log(user_id, action, object_type, object_id, meta, ip)
+tag_texts(id, text)  tags(id, owner_id, text_id, color)  dossier_tags(dossier_id, tag_id, position)  investigation_tags(…)
 ```
 
+- Теги — словарь: тексты (`tag_texts`, всегда заглавными) общие для всех, а словарь у каждого свой (`tags`: текст +
+  цвет фона), и видит человек только свои теги. На объект ставится тег из словаря того, кто его поставил, — у
+  соавторов он показывается с цветом автора; править тег может только владелец словаря, снять с объекта — любой
+  редактор. Удаление тега из словаря снимает его со всех объектов.
 - Идентификаторы — `uuidv7()` (PostgreSQL 18): упорядочены по времени, индексы растут без фрагментации.
 - Доступы — две таблицы (`dossier_shares`, `investigation_shares`) с настоящими внешними ключами, а не одна полиморфная.
 - JSONB — для гибких частей (тело элемента досье, источники, props узла, ответ шлюза); то, по чему ищут

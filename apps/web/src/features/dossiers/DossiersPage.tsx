@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Plus, User, Users } from 'lucide-react';
 import { VisibilityTag } from '../../components/Sharing.tsx';
+import { TagFilter, TagList } from '../../components/Tags.tsx';
 import { Button, Dialog, Empty, Field, Input, Segmented, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { ago } from '../../lib/format.ts';
@@ -11,8 +12,12 @@ import { dossiersRoute } from '../../router.tsx';
 export function DossiersPage() {
   const { scope = 'mine' } = dossiersRoute.useSearch();
   const navigate = useNavigate({ from: '/dossiers' });
-  const [q, setQ] = useState('');
-  const list = trpc.dossiers.list.useQuery({ scope, q: q || undefined }, { placeholderData: (p) => p });
+  const [title, setTitle] = useState('');
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const list = trpc.dossiers.list.useQuery(
+    { scope, title: title.trim() || undefined, tagIds: tagIds.length ? tagIds : undefined },
+    { placeholderData: (p) => p },
+  );
   const [creating, setCreating] = useState(false);
 
   return (
@@ -31,7 +36,11 @@ export function DossiersPage() {
           onChange={(s) => void navigate({ search: { scope: s } })}
           options={[{ value: 'all', label: 'Все' }, { value: 'mine', label: 'Мои' }, { value: 'shared', label: 'Доступные мне' }]}
         />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Фильтр по названию, тегам, тексту…" className="max-w-sm" />
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название содержит…" className="max-w-sm" />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-dim">Теги содержат:</span>
+          <TagFilter value={tagIds} onChange={setTagIds} />
+        </div>
         {list.isFetching && <Spinner />}
       </div>
 
@@ -61,9 +70,7 @@ export function DossiersPage() {
             </div>
             <div className="space-y-2 p-4">
               <div className="font-bold leading-snug group-hover:text-mint">{d.title}</div>
-              <div className="flex flex-wrap gap-1">
-                {d.tags.map((t) => <Tag key={t} tone="dim">#{t}</Tag>)}
-              </div>
+              <TagList tags={d.tags} />
               <div className="flex items-center justify-between font-mono text-[11px] text-mute">
                 <span>{d.itemCount} элем. · {ago(d.updatedAt)}</span>
                 <VisibilityTag v={d.visibility} />
@@ -94,7 +101,7 @@ function CreateDossierDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          create.mutate({ kind, title, summaryMd: '', tags: [] });
+          create.mutate({ kind, title, summaryMd: '' });
         }}
       >
         <Segmented value={kind} onChange={setKind} options={[{ value: 'person', label: 'Персона' }, { value: 'group', label: 'Группа лиц' }]} />

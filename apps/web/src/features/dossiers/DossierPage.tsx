@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import clsx from 'clsx';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Share2, Trash2, User, Users,
@@ -10,7 +11,8 @@ import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields, emptySource, finishSource, type SourceDraft } from '../../components/SourceFields.tsx';
-import { Button, Card, CopyButton, Dialog, Empty, Field, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
+import { TagsBar } from '../../components/Tags.tsx';
+import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
@@ -35,6 +37,21 @@ function guessPlatform(url: string): Of<'link'>['platform'] {
   if (/youtu/.test(url)) return 'youtube';
   return 'web';
 }
+
+/** Порядок атрибутов по важности; остальные поля — после ссылок в порядке LEAK_FIELDS, свои — перед «Прочим». */
+const ATTR_ORDER: string[] = ['names', 'bdays', 'inns', 'pasps', 'snilss', 'phones', 'emails', 'addrs', 'weblinks'];
+const attrRank = (key: string) => {
+  if (key === 'infos') return 1000;
+  const i = ATTR_ORDER.indexOf(key);
+  if (i >= 0) return i;
+  const j = Object.keys(LEAK_FIELDS).indexOf(key);
+  return j >= 0 ? 100 + j : 900;
+};
+/** Стабильная сортировка: внутри одного типа атрибуты остаются в порядке добавления. */
+const sortAttributes = (list: Of<'attribute'>[]) => list.map((a, i) => ({ a, i })).sort((x, y) => attrRank(x.a.key) - attrRank(y.a.key) || x.i - y.i).map((x) => x.a);
+
+/** Телефон показывается с «+», как в отчётах бота; копируется значение как есть. */
+const attrDisplay = (key: string, value: string) => (key === 'phones' && /^\d/.test(value.trim()) ? `+${value.trim()}` : value);
 
 export function DossierPage() {
   const { id } = dossierRoute.useParams();
@@ -70,74 +87,79 @@ export function DossierPage() {
   const editable = d.role !== 'viewer' && !!me.data?.access.active;
   const items = <T extends DossierItem['type']>(t: T) => d.items.filter((i): i is Of<T> => i.type === t);
   const add = (item: NewItem) => addItem.mutateAsync({ id, item }).then(() => setAdding(null));
+  const ownerActions = d.role === 'owner' && (
+    <>
+      <Button onClick={() => setSharing(true)}><Share2 size={15} /> Доступ</Button>
+      <Button
+        variant="danger"
+        onClick={() => confirm(`Удалить досье «${d.title}»?`) && remove.mutate({ id })}
+        title="Удалить"
+      >
+        <Trash2 size={15} />
+      </Button>
+    </>
+  );
 
   return (
-    <div className="space-y-6 py-6 pl-6 pr-[30px]">
-      <Link to="/dossiers" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
-        <ArrowLeft size={13} /> все досье
-      </Link>
+    <div className="text-plus-1 space-y-[1.2rem] py-[1.2rem] pl-6 pr-[30px]">
+      {/* «Все досье» и кнопки владельца — одной строкой над колонками. */}
+      <div className="flex min-h-9 items-center justify-between gap-4">
+        <Link to="/dossiers" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
+          <ArrowLeft size={13} /> все досье
+        </Link>
+        {ownerActions && <div className="flex gap-2">{ownerActions}</div>}
+      </div>
 
-      {/* Шапка */}
-      <header className="flex flex-wrap items-start gap-6">
-        <div className="size-32 shrink-0 overflow-hidden rounded-2xl border border-line bg-bg-soft shadow-glow-sm">
-          {d.coverMediaUrl ? (
-            <img src={d.coverMediaUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <div className="grid size-full place-items-center text-mint/30">{d.kind === 'group' ? <Users size={48} /> : <User size={48} />}</div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Tag tone="dim">{d.kind === 'group' ? 'группа лиц' : 'персона'}</Tag>
-            <VisibilityTag v={d.visibility} />
-            {d.role !== 'owner' && <Tag>{d.role === 'editor' ? 'вы можете править' : 'только чтение'}</Tag>}
-            <span className="font-mono text-[11px] text-mute">v{d.version} · изменено {fmtDate(d.updatedAt, true)}</span>
-          </div>
-          {editTitle !== null ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                update.mutate({ id, version: d.version, patch: { title: editTitle } });
-                setEditTitle(null);
-              }}
-            >
-              <Input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onBlur={() => setEditTitle(null)} className="h-12 text-2xl font-extrabold" />
-            </form>
-          ) : (
-            <h1 className="group flex items-center gap-2 text-3xl font-extrabold tracking-tight">
-              {d.title}
-              {editable && (
-                <button onClick={() => setEditTitle(d.title)} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
-                  <Pencil size={16} />
-                </button>
+      {/* Две колонки на всю высоту: шапка — над основными боксами (поле названия не шире «Сводки»),
+          правая колонка («Атрибуты» и ниже) начинается вровень с шапкой. */}
+      <div className="grid gap-[1.2rem] lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="min-w-0 space-y-[1.2rem]">
+          {/* Шапка */}
+          <header className="flex flex-wrap items-start gap-[1.2rem]">
+            <div className="size-32 shrink-0 overflow-hidden rounded-2xl border border-line bg-bg-soft shadow-glow-sm">
+              {d.coverMediaUrl ? (
+                <img src={d.coverMediaUrl} alt="" className="size-full object-cover" />
+              ) : (
+                <div className="grid size-full place-items-center text-mint/30">{d.kind === 'group' ? <Users size={48} /> : <User size={48} />}</div>
               )}
-            </h1>
-          )}
-          <TagsEditor
-            tags={d.tags}
-            editable={editable}
-            onChange={(tags) => update.mutate({ id, version: d.version, patch: { tags } })}
-          />
-        </div>
-        <div className="flex gap-2">
-          {d.role === 'owner' && (
-            <>
-              <Button onClick={() => setSharing(true)}><Share2 size={15} /> Доступ</Button>
-              <Button
-                variant="danger"
-                onClick={() => confirm(`Удалить досье «${d.title}»?`) && remove.mutate({ id })}
-                title="Удалить"
-              >
-                <Trash2 size={15} />
-              </Button>
-            </>
-          )}
-        </div>
-      </header>
+            </div>
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Tag tone="dim">{d.kind === 'group' ? 'группа лиц' : 'персона'}</Tag>
+                <VisibilityTag v={d.visibility} />
+                {d.role !== 'owner' && <Tag>{d.role === 'editor' ? 'вы можете править' : 'только чтение'}</Tag>}
+                <span className="font-mono text-[11px] text-mute">v{d.version} · изменено {fmtDate(d.updatedAt, true)}</span>
+              </div>
+              {editTitle !== null ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    update.mutate({ id, version: d.version, patch: { title: editTitle } });
+                    setEditTitle(null);
+                  }}
+                >
+                  <Input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onBlur={() => setEditTitle(null)} className="h-12 text-2xl font-extrabold" />
+                </form>
+              ) : (
+                <h1 className="group flex items-center gap-2 text-3xl font-extrabold tracking-tight">
+                  {d.title}
+                  {editable && (
+                    <button onClick={() => setEditTitle(d.title)} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+                      <Pencil size={16} />
+                    </button>
+                  )}
+                </h1>
+              )}
+              <TagsBar
+                tags={d.tags}
+                editable={editable}
+                busy={update.isPending}
+                onChange={(tagIds) => update.mutate({ id, version: d.version, patch: { tagIds } })}
+              />
+            </div>
+          </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="min-w-0 space-y-6">
-          <Card
+          <Card compact
             title="Сводка"
             actions={editable && editSummary === null && (
               <Button size="sm" variant="ghost" onClick={() => setEditSummary(d.summaryMd)}><Pencil size={13} /> Править</Button>
@@ -166,7 +188,7 @@ export function DossierPage() {
           </Card>
 
           {d.kind === 'group' && (
-            <Card title="Участники группы">
+            <Card compact title="Участники группы">
               <MembersEditor
                 memberIds={d.memberIds}
                 members={d.members}
@@ -177,7 +199,7 @@ export function DossierPage() {
             </Card>
           )}
 
-          <Card
+          <Card compact
             title={<><Camera size={13} /> Медиа</>}
             actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('media')}><Plus size={13} /> Добавить</Button>}
           >
@@ -195,14 +217,14 @@ export function DossierPage() {
             )}
           </Card>
 
-          <Card
+          <Card compact
             title={<><NotebookPen size={13} /> Заметки</>}
             actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('note')}><Plus size={13} /> Заметка</Button>}
           >
-            <div className="space-y-4">
+            <div className="space-y-[0.8rem]">
               {items('note').length === 0 && <Empty>Заметок нет</Empty>}
               {items('note').map((n) => (
-                <article key={n.id} className="rounded-xl border border-line-soft p-4">
+                <article key={n.id} className="rounded-xl border border-line-soft p-[0.8rem]">
                   <div className="mb-2 flex items-center justify-between gap-2 font-mono text-[11px] text-mute">
                     <span>{fmtDate(n.createdAt, true)}</span>
                     <span className="flex items-center gap-2">
@@ -217,34 +239,31 @@ export function DossierPage() {
           </Card>
         </div>
 
-        <div className="space-y-6">
-          <Card
+        <div className="space-y-[1.2rem]">
+          <Card compact
             title="Атрибуты"
             actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('attribute')}><Plus size={13} /> Добавить</Button>}
           >
             {items('attribute').length === 0 && <Empty>Пусто</Empty>}
             <div className="divide-y divide-line-soft">
-              {items('attribute').map((a) => {
+              {sortAttributes(items('attribute')).map((a) => {
                 const kind = FIELD_TO_KIND[a.key as LeakField];
                 return (
-                  <div key={a.id} className="group flex items-start gap-3 py-2">
-                    <span className="w-28 shrink-0 pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
-                    {/* Значение занимает всю ширину до правого края; оценка источника и кнопки — строкой под ним. */}
-                    <div className="min-w-0 flex-1">
-                      <div className="break-words font-mono text-sm">{a.value}</div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <SourceBadge source={a.source} />
-                        <ValueActions field={a.key} value={a.value} />
-                        <CopyButton value={a.value} title={`Скопировать: ${a.label}`} />
-                        <span className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
-                          {kind && (
-                            <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute hover:text-mint">
-                              <FileSearch size={14} />
-                            </Link>
-                          )}
-                          {editable && <DeleteBtn onClick={() => removeItem.mutate({ id, itemId: a.id })} />}
-                        </span>
-                      </div>
+                  // Сетка 2×2: подпись | значение, под ними оценка источника | кнопки действий.
+                  <div key={a.id} className="group grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 py-2">
+                    <span className="pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
+                    <div className="break-words font-mono text-sm">{attrDisplay(a.key, a.value)}</div>
+                    <div className="flex items-center"><SourceBadge source={a.source} /></div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ValueActions field={a.key} value={a.value} />
+                      <CopyButton value={a.value} title={`Скопировать: ${a.label}`} />
+                      {kind && (
+                        <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+                          <FileSearch size={14} />
+                        </Link>
+                      )}
+                      {/* Отступ в ширину кнопки — чтобы не попасть в «удалить» вместо соседней. */}
+                      {editable && <ConfirmDeleteBtn className="ml-3.5" onConfirm={() => removeItem.mutate({ id, itemId: a.id })} />}
                     </div>
                   </div>
                 );
@@ -252,7 +271,7 @@ export function DossierPage() {
             </div>
           </Card>
 
-          <Card
+          <Card compact
             title={<><Link2 size={13} /> Соцсети и ссылки</>}
             actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('link')}><Plus size={13} /> Добавить</Button>}
           >
@@ -271,7 +290,7 @@ export function DossierPage() {
             </div>
           </Card>
 
-          <Card title={<><FileSearch size={13} /> Снимки поиска</>}>
+          <Card compact title={<><FileSearch size={13} /> Снимки поиска</>}>
             {items('snapshot').length === 0 && <Empty>Добавляются со страницы «Поиск»</Empty>}
             <div className="space-y-1.5">
               {items('snapshot').map((s) => (
@@ -283,7 +302,7 @@ export function DossierPage() {
                     </div>
                   </div>
                   <RepeatSearchLink section={s.section} kind={s.kind} query={s.query} deep={s.deep} />
-                  {editable && <span className="opacity-0 group-hover:opacity-100"><DeleteBtn onClick={() => removeItem.mutate({ id, itemId: s.id })} /></span>}
+                  {editable && <ConfirmDeleteBtn onConfirm={() => removeItem.mutate({ id, itemId: s.id })} />}
                 </div>
               ))}
             </div>
@@ -322,37 +341,6 @@ function DeleteBtn({ onClick }: { onClick: () => void }) {
     <button onClick={onClick} title="Удалить" className="cursor-pointer text-mute hover:text-danger">
       <Trash2 size={13} />
     </button>
-  );
-}
-
-function TagsEditor({ tags, editable, onChange }: { tags: string[]; editable: boolean; onChange: (t: string[]) => void }) {
-  const [draft, setDraft] = useState('');
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {tags.map((t) => (
-        <Tag key={t} tone="dim">
-          #{t}
-          {editable && <button onClick={() => onChange(tags.filter((x) => x !== t))} className="ml-0.5 cursor-pointer hover:text-danger">×</button>}
-        </Tag>
-      ))}
-      {editable && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const v = draft.trim().replace(/^#/, '');
-            if (v && !tags.includes(v)) onChange([...tags, v]);
-            setDraft('');
-          }}
-        >
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="+ тег"
-            className="w-20 bg-transparent font-mono text-[11px] text-dim outline-none placeholder:text-mute focus:w-32"
-          />
-        </form>
-      )}
-    </div>
   );
 }
 

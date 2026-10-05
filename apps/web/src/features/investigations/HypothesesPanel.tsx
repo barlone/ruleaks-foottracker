@@ -40,21 +40,21 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
 
   return (
     <div className="h-full overflow-auto">
-      <div className="space-y-5 py-6 pl-6 pr-[30px]">
+      <div className="space-y-[1rem] py-[1.2rem] pl-6 pr-[30px]">
         <div className="flex items-center justify-between">
           <p className="text-sm text-dim">Отметьте для каждого факта, подкрепляет он гипотезу или противоречит ей.</p>
           {editable && <Button variant="primary" size="sm" onClick={() => setEditing('new')}><Plus size={14} /> Гипотеза</Button>}
         </div>
         {inv.hypotheses.length === 0 && <Empty>Гипотез нет</Empty>}
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-[1rem] lg:grid-cols-2">
           {inv.hypotheses.map((h) => {
             const pro = h.evidence.filter((e) => e.stance === 'supports').length;
             const con = h.evidence.filter((e) => e.stance === 'contradicts').length;
             const total = Math.max(1, pro + con);
             return (
-              <article key={h.id} className="group animate-fade-up rounded-2xl border border-line bg-panel p-5">
-                <header className="mb-3 flex items-start gap-3">
+              <article key={h.id} className="group animate-fade-up rounded-2xl border border-line bg-panel p-4">
+                <header className="mb-[0.6rem] flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <Tag tone={STATUS[h.status].tone}>{STATUS[h.status].label}</Tag>
                     <h3 className="mt-2 text-lg font-bold leading-snug">{h.title}</h3>

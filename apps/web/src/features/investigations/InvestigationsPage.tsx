@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Network, Plus } from 'lucide-react';
 import { VisibilityTag } from '../../components/Sharing.tsx';
+import { TagFilter, TagList } from '../../components/Tags.tsx';
 import { Button, Dialog, Empty, Field, Input, Segmented, Spinner, Tag } from '../../components/ui.tsx';
 import { MarkdownEditor } from '../../components/Markdown.tsx';
 import { trpc } from '../../lib/trpc.ts';
@@ -12,8 +13,12 @@ import { investigationsRoute } from '../../router.tsx';
 export function InvestigationsPage() {
   const { scope = 'mine' } = investigationsRoute.useSearch();
   const navigate = useNavigate({ from: '/investigations' });
-  const [q, setQ] = useState('');
-  const list = trpc.investigations.list.useQuery({ scope, q: q || undefined }, { placeholderData: (p) => p });
+  const [title, setTitle] = useState('');
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const list = trpc.investigations.list.useQuery(
+    { scope, title: title.trim() || undefined, tagIds: tagIds.length ? tagIds : undefined },
+    { placeholderData: (p) => p },
+  );
   const [creating, setCreating] = useState(false);
 
   return (
@@ -32,7 +37,11 @@ export function InvestigationsPage() {
           onChange={(s) => void navigate({ search: { scope: s } })}
           options={[{ value: 'all', label: 'Все' }, { value: 'mine', label: 'Мои' }, { value: 'shared', label: 'Доступные мне' }, { value: 'public', label: 'Публичные' }]}
         />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Фильтр…" className="max-w-sm" />
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название содержит…" className="max-w-sm" />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-dim">Теги содержат:</span>
+          <TagFilter value={tagIds} onChange={setTagIds} />
+        </div>
         {list.isFetching && <Spinner />}
       </div>
 
@@ -55,7 +64,7 @@ export function InvestigationsPage() {
               </span>
             </div>
             <div className="text-lg font-bold leading-snug group-hover:text-mint">{inv.title}</div>
-            <div className="mt-2 flex flex-wrap gap-1">{inv.tags.map((t) => <Tag key={t} tone="dim">#{t}</Tag>)}</div>
+            <TagList tags={inv.tags} className="mt-2" />
             <div className="mt-4 flex gap-4 font-mono text-[11px] text-mute">
               <span><b className="text-dim">{inv.nodeCount}</b> объектов</span>
               <span><b className="text-dim">{inv.factCount}</b> фактов</span>
@@ -82,7 +91,7 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Новое расследование" wide>
-      <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); create.mutate({ title, descriptionMd: desc, tags: [] }); }}>
+      <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); create.mutate({ title, descriptionMd: desc }); }}>
         <Field label="Название"><Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label="Описание"><MarkdownEditor value={desc} onChange={setDesc} placeholder="Цель, гипотеза, рамки…" /></Field>
         {create.error && <div className="font-mono text-xs text-danger">{errorText(create.error)}</div>}

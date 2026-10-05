@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import * as RDialog from '@radix-ui/react-dialog';
-import { Check, Copy, X } from 'lucide-react';
+import { Check, Copy, Trash2, X } from 'lucide-react';
 import { copyText } from '../lib/clipboard.ts';
 import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 
@@ -66,11 +66,14 @@ export function Select({ className, ...rest }: SelectHTMLAttributes<HTMLSelectEl
   );
 }
 
-export function Card({ className, children, title, actions }: { className?: string; children: ReactNode; title?: ReactNode; actions?: ReactNode }) {
+/** compact — отступы на 20% меньше (p-4 вместо p-5, под заголовком 0.8rem вместо 1rem). */
+export function Card({
+  className, children, title, actions, compact,
+}: { className?: string; children: ReactNode; title?: ReactNode; actions?: ReactNode; compact?: boolean }) {
   return (
-    <section className={clsx('rounded-2xl border border-line bg-gradient-to-b from-mint/[0.04] to-mint/[0.01] p-5', className)}>
+    <section className={clsx('rounded-2xl border border-line bg-gradient-to-b from-mint/[0.04] to-mint/[0.01]', compact ? 'p-4' : 'p-5', className)}>
       {(title || actions) && (
-        <header className="mb-4 flex items-center justify-between gap-3">
+        <header className={clsx('flex items-center justify-between gap-3', compact ? 'mb-[0.8rem]' : 'mb-4')}>
           {title && (
             <h3 className="label-mono flex items-center gap-2.5">
               <span className="size-1.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />
@@ -188,6 +191,35 @@ export function CopyButton({ value, title = 'Скопировать', className 
       className={clsx('shrink-0 cursor-pointer transition', state === 'ok' ? 'text-mint' : state === 'fail' ? 'text-danger' : 'text-mute hover:text-mint', className)}
     >
       {state === 'ok' ? <Check size={14} /> : <Copy size={14} />}
+    </button>
+  );
+}
+
+/**
+ * Удаление в два нажатия: первое превращает корзину в красный квадрат с «?», второе в течение 3 с удаляет,
+ * иначе кнопка возвращается к обычному виду. Пока ждёт подтверждения, видна и без наведения на строку.
+ */
+export function ConfirmDeleteBtn({ onConfirm, className, title = 'Удалить' }: { onConfirm: () => void; className?: string; title?: string }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!armed) return setArmed(true);
+        setArmed(false);
+        onConfirm();
+      }}
+      title={armed ? 'Нажмите ещё раз, чтобы удалить' : title}
+      aria-label={armed ? 'Подтвердить удаление' : title}
+      data-armed={armed || undefined}
+      className={clsx('grid size-3.5 shrink-0 cursor-pointer place-items-center transition', armed ? 'opacity-100' : 'text-mute opacity-0 hover:text-danger group-hover:opacity-100', className)}
+    >
+      {armed ? <span className="grid size-3.5 place-items-center rounded-sm bg-danger font-mono text-[10px] font-bold leading-none text-black">?</span> : <Trash2 size={13} />}
     </button>
   );
 }

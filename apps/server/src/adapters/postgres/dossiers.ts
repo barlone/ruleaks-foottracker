@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { Dossier, DossierItem, DossierSummary, Share } from '@ft/shared';
+import type { Dossier, DossierItem, DossierSummary, Share, Tag } from '@ft/shared';
 import { isUuid } from '@ft/shared';
-import type { DossierRepo, Scope } from '../../ports.ts';
-import { json, likePattern, lockAndBump, mustUuid, newObjectId, notFound, tx, type Db, type Tx } from './db.ts';
+import type { DossierPatch, DossierRepo, ListFilter, Scope } from '../../ports.ts';
+import { json, likePattern, lockAndBump, replaceTags, tagsJsonSql, tagsFilterSql, mustUuid, newObjectId, notFound, tx, type Db, type Tx } from './db.ts';
 
 // Досье в PostgreSQL: dossiers + dossier_items (тело элемента — jsonb data по типу), dossier_members,
 // dossier_shares, media. Удаление мягкое (deleted_at).
@@ -61,12 +61,12 @@ async function upsertMedia(c: Tx, ownerId: string, url: string, name?: string): 
 export class PgDossiers implements DossierRepo {
   constructor(private db: Db) {}
 
-  async list(userId: string, scope: Exclude<Scope, 'public'>, q?: string): Promise<DossierSummary[]> {
+  async list(userId: string, scope: Exclude<Scope, 'public'>, filter: ListFilter = {}): Promise<DossierSummary[]> {
     const r = await this.db.query<{
-      id: string; owner_id: string; kind: Dossier['kind']; title: string; tags: string[]; visibility: Dossier['visibility'];
+      id: string; owner_id: string; kind: Dossier['kind']; title: string; tags: Tag[]; visibility: Dossier['visibility'];
       updated_at: Date; item_count: number; cover_url: string | null; role: DossierSummary['role'];
     }>(
-      `SELECT d.id, d.owner_id, d.kind, d.title, d.tags, d.visibility, d.updated_at,
+      `SELECT d.id, d.owner_id, d.kind, d.title, ${tagsJsonSql('dossier', 'd.id')} AS tags, d.visibility, d.updated_at,
               (SELECT count(*)::int FROM dossier_items i WHERE i.dossier_id = d.id) AS item_count,
               (SELECT i.data->>'url' FROM dossier_items i WHERE i.dossier_id = d.id AND i.media_id = d.cover_media_id LIMIT 1) AS cover_url,
               CASE WHEN d.owner_id = $1 THEN 'owner' ELSE s.role::text END AS role
@@ -78,10 +78,11 @@ export class PgDossiers implements DossierRepo {
                WHEN 'shared' THEN d.owner_id <> $1 AND s.user_id IS NOT NULL
                ELSE               d.owner_id = $1 OR s.user_id IS NOT NULL
              END
-         AND ($3::text IS NULL OR d.title ILIKE $3 OR d.summary_md ILIKE $3 OR array_to_string(d.tags, ' ') ILIKE $3)
+         AND ($3::text IS NULL OR d.title ILIKE $3)
+         AND ${tagsFilterSql('dossier', 'd.id', '$4', '$1')}
        ORDER BY d.updated_at DESC
        LIMIT 500`,
-      [userId, scope, likePattern(q)],
+      [userId, scope, likePattern(filter.title), (filter.tagIds ?? []).filter(isUuid)],
     );
     return r.rows.map((x) => ({
       id: x.id, ownerId: x.owner_id, kind: x.kind, title: x.title, tags: x.tags, visibility: x.visibility,
@@ -93,10 +94,10 @@ export class PgDossiers implements DossierRepo {
     if (!isUuid(id)) return null;
     const d = (
       await this.db.query<{
-        id: string; owner_id: string; kind: Dossier['kind']; title: string; summary_md: string; tags: string[];
+        id: string; owner_id: string; kind: Dossier['kind']; title: string; summary_md: string; tags: Tag[];
         visibility: Dossier['visibility']; cover_media_id: string | null; version: number; updated_at: Date;
       }>(
-        `SELECT id, owner_id, kind, title, summary_md, tags, visibility, cover_media_id, version, updated_at
+        `SELECT id, owner_id, kind, title, summary_md, ${tagsJsonSql('dossier', 'dossiers.id')} AS tags, visibility, cover_media_id, version, updated_at
          FROM dossiers WHERE id = $1 AND deleted_at IS NULL`,
         [id],
       )
@@ -141,10 +142,10 @@ export class PgDossiers implements DossierRepo {
     return (await this.get(id)) ?? notFound();
   }
 
-  async create(input: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd' | 'tags'>) {
+  async create(input: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'>) {
     const r = await this.db.query<{ id: string }>(
-      `INSERT INTO dossiers (owner_id, kind, title, summary_md, tags) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [input.ownerId, input.kind, input.title, input.summaryMd, input.tags],
+      `INSERT INTO dossiers (owner_id, kind, title, summary_md) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [input.ownerId, input.kind, input.title, input.summaryMd],
     );
     return this.reload(r.rows[0]!.id);
   }
@@ -152,7 +153,7 @@ export class PgDossiers implements DossierRepo {
   async update(
     id: string,
     version: number,
-    patch: Partial<Pick<Dossier, 'title' | 'summaryMd' | 'tags' | 'visibility' | 'memberIds' | 'coverMediaUrl'>>,
+    patch: DossierPatch,
   ) {
     await tx(this.db, async (c) => {
       await lockAndBump(c, 'dossiers', id, version);
@@ -164,7 +165,6 @@ export class PgDossiers implements DossierRepo {
       };
       if (patch.title !== undefined) set('title', patch.title);
       if (patch.summaryMd !== undefined) set('summary_md', patch.summaryMd);
-      if (patch.tags !== undefined) set('tags', patch.tags);
       if (patch.visibility !== undefined) set('visibility', patch.visibility);
       if (patch.coverMediaUrl !== undefined) {
         // Обложка — одно из изображений этого досье.
@@ -177,6 +177,7 @@ export class PgDossiers implements DossierRepo {
         set('cover_media_id', m);
       }
       if (sets.length) await c.query(`UPDATE dossiers SET ${sets.join(', ')} WHERE id = $1`, vals);
+      if (patch.tagIds !== undefined) await replaceTags(c, 'dossier', id, patch.tagIds);
       if (patch.memberIds !== undefined) {
         await c.query(`DELETE FROM dossier_members WHERE group_id = $1`, [id]);
         // Только существующие досье и не само себя; порядок — как пришёл.

@@ -37,7 +37,7 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="space-y-5 py-6 pl-6 pr-[30px]">
+      <div className="space-y-[1rem] py-[1.2rem] pl-6 pr-[30px]">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs text-mute">Объект:</span>
           <button onClick={() => setFilter(null)} className={`cursor-pointer rounded-md px-2 py-1 font-mono text-xs ${!filter ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint'}`}>все</button>
@@ -51,11 +51,11 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
 
         {facts.length === 0 && <Empty>Фактов нет</Empty>}
 
-        <ol className="relative space-y-4 border-l border-line pl-6">
+        <ol className="relative space-y-[0.8rem] border-l border-line pl-6">
           {facts.map((f) => (
             <li key={f.id} className="relative animate-fade-up">
-              <span className="absolute -left-[29px] top-4 size-2.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />
-              <article className="group rounded-xl border border-line-soft bg-panel p-4 transition hover:border-line">
+              <span className="absolute -left-[29px] top-[0.8rem] size-2.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />
+              <article className="group rounded-xl border border-line-soft bg-panel p-[0.8rem] transition hover:border-line">
                 <div className="mb-2 flex items-center gap-2 font-mono text-[11px] text-mute">
                   <CalendarDays size={12} /> {f.occurredAt ? fmtDate(f.occurredAt) : 'дата неизвестна'}
                   <span className="ml-auto flex gap-1.5">{f.sources.map((s, i) => <SourceBadge key={i} source={s} />)}</span>

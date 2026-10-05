@@ -23,6 +23,7 @@ npm run typecheck      # tsc --noEmit in every workspace — the only automated 
 npm run build          # web production build (apps/web/dist)
 npm run typecheck -w @ft/server   # one workspace
 npm run db -- status | up [N] | down [N] | create <name> | manual <file>   # DB migrations against [project-db]
+                       # db-upgrade.cmd = `up` + `status` (like `alembic upgrade head`)
 ```
 
 Migrations: never edit an applied file in `packages/db/migrations`; add a new one (`npm run db -- create …`). The user
@@ -112,6 +113,9 @@ obvious from the schema:
 - Dossiers/investigations are soft-deleted (`deleted_at`); search history "clear" sets `hidden_at`, and a search that
   was attached to a dossier as a snapshot is `pinned`.
 - Repos that write `created_by`/`granted_by` take an `actorId` argument (memory adapters ignore it).
+- Tags: `tag_texts` (shared, uppercase) → `tags` (per-user dictionary entry: text + color) → `dossier_tags` /
+  `investigation_tags`. Objects carry `Tag[]` on read and take `patch.tagIds` on update; `checkTagIds`
+  (`routers/tags.ts`) lets an editor add only tags from their own dictionary. UI: `components/Tags.tsx`.
 
 ### Search (bot parity)
 

@@ -27,7 +27,16 @@ const src = (kind: 'search' | 'url' | 'manual' | 'humint', ref: string | undefin
   kind, ref, reliability: r as 'A', credibility: c as '1', capturedAt: t(at),
 });
 
-export const seedDossiers: Dossier[] = [
+/** Теги в демо-данных — тексты; хранилище заводит их в словарь владельца объекта. */
+export type SeedDossier = Omit<Dossier, 'tags'> & { tags: string[] };
+export type SeedInvestigation = Omit<Investigation, 'tags'> & { tags: string[] };
+
+/** Цвета демо-тегов (остальные — по умолчанию). */
+export const seedTagColors: Record<string, string> = {
+  'ЗАКУПКИ': '#ffc85c', 'ЭНСК': '#6cb8ff', 'КЛЮЧЕВАЯ ФИГУРА': '#ff5c7a', 'ПОДРЯДЧИК': '#a78bfa',
+};
+
+export const seedDossiers: SeedDossier[] = [
   {
     id: 'd-petrov',
     ownerId: U_ME,
@@ -108,7 +117,7 @@ export const seedDossiers: Dossier[] = [
   },
 ];
 
-export const seedInvestigations: Investigation[] = [
+export const seedInvestigations: SeedInvestigation[] = [
   {
     id: 'i-zakupki',
     ownerId: U_ME,

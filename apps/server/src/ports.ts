@@ -4,7 +4,7 @@
 
 import type {
   Access, Dossier, DossierItem, DossierSummary, Fact, GraphEdge, GraphNode, Hypothesis,
-  Investigation, InvestigationSummary, SearchJob, SearchSection, Share, User,
+  Investigation, InvestigationSummary, SearchJob, SearchSection, Share, Tag, User,
 } from '@ft/shared';
 
 // ---------- Бот (владелец пользователей и подписок) ----------
@@ -85,11 +85,34 @@ export interface SearchRepo {
 /** all — всё, что пользователь может открыть: свои, расшаренные ему и (для расследований) публичные. */
 export type Scope = 'all' | 'mine' | 'shared' | 'public';
 
+/**
+ * Фильтр списков: title — подстрока названия без учёта регистра; tagIds — теги словаря пользователя,
+ * объект должен иметь все (сравниваются тексты: подходит и такой же тег из словаря соавтора).
+ */
+export interface ListFilter {
+  title?: string;
+  tagIds?: string[];
+}
+
+/** Словарь тегов пользователя. Тег чужого словаря не виден и не правится (NOT_FOUND). */
+export interface TagRepo {
+  list(userId: string): Promise<Tag[]>;
+  /** Тег с таким текстом уже есть в словаре — TagExists. */
+  create(userId: string, text: string, color: string): Promise<Tag>;
+  update(userId: string, id: string, patch: { text?: string; color?: string }): Promise<Tag>;
+  /** Удаление из словаря снимает тег со всех досье и расследований. */
+  remove(userId: string, id: string): Promise<void>;
+}
+
+/** Теги объекта задаются списком id тегов из словарей (порядок — как в списке). */
+export type DossierPatch = Partial<Pick<Dossier, 'title' | 'summaryMd' | 'visibility' | 'memberIds' | 'coverMediaUrl'> & { tagIds: string[] }>;
+export type InvestigationPatch = Partial<Pick<Investigation, 'title' | 'descriptionMd' | 'visibility'> & { tagIds: string[] }>;
+
 export interface DossierRepo {
-  list(userId: string, scope: Exclude<Scope, 'public'>, q?: string): Promise<DossierSummary[]>;
+  list(userId: string, scope: Exclude<Scope, 'public'>, filter?: ListFilter): Promise<DossierSummary[]>;
   get(id: string): Promise<Dossier | null>;
-  create(d: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd' | 'tags'>): Promise<Dossier>;
-  update(id: string, version: number, patch: Partial<Pick<Dossier, 'title' | 'summaryMd' | 'tags' | 'visibility' | 'memberIds' | 'coverMediaUrl'>>): Promise<Dossier>;
+  create(d: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'>): Promise<Dossier>;
+  update(id: string, version: number, patch: DossierPatch): Promise<Dossier>;
   addItem(id: string, item: DossierItem, actorId: string): Promise<Dossier>;
   updateItem(id: string, item: DossierItem): Promise<Dossier>;
   removeItem(id: string, itemId: string): Promise<Dossier>;
@@ -99,10 +122,10 @@ export interface DossierRepo {
 }
 
 export interface InvestigationRepo {
-  list(userId: string, scope: Scope, q?: string): Promise<InvestigationSummary[]>;
+  list(userId: string, scope: Scope, filter?: ListFilter): Promise<InvestigationSummary[]>;
   get(id: string): Promise<Investigation | null>;
-  create(i: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd' | 'tags'>): Promise<Investigation>;
-  update(id: string, version: number, patch: Partial<Pick<Investigation, 'title' | 'descriptionMd' | 'tags' | 'visibility'>>): Promise<Investigation>;
+  create(i: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd'>): Promise<Investigation>;
+  update(id: string, version: number, patch: InvestigationPatch): Promise<Investigation>;
   /** Граф сохраняется целиком (редактор шлёт состояние после серии правок). */
   saveGraph(id: string, version: number, nodes: GraphNode[], edges: GraphEdge[]): Promise<Investigation>;
   upsertFact(id: string, fact: Fact, actorId: string): Promise<Investigation>;
@@ -121,11 +144,19 @@ export interface Deps {
   searches: SearchRepo;
   dossiers: DossierRepo;
   investigations: InvestigationRepo;
+  tags: TagRepo;
 }
 
 /** Конфликт версий (оптимистичная блокировка) — роутер превращает в CONFLICT. */
 export class VersionConflict extends Error {
   constructor(public readonly current: number) {
     super('VERSION_CONFLICT');
+  }
+}
+
+/** Тег с таким текстом уже есть в словаре пользователя — роутер превращает в CONFLICT TAG_EXISTS. */
+export class TagExists extends Error {
+  constructor() {
+    super('TAG_EXISTS');
   }
 }

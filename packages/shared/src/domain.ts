@@ -70,6 +70,31 @@ export const User = z.object({
   access: Access,
 });
 
+// ---------- Теги ----------
+// Тексты тегов общие для всех (таблица tag_texts), словарь у каждого свой: тег = текст + цвет фона.
+// Объект ссылается на тег из словаря того, кто его поставил.
+
+/** Фон тегов на выбор; можно указать и любой свой цвет. */
+export const TAG_COLORS = [
+  '#2ee0ac', '#1fb98c', '#6cb8ff', '#3b82f6', '#a78bfa', '#e879f9',
+  '#ff5c7a', '#ff8a4c', '#ffc85c', '#a3e635', '#94a3b8', '#3f4a47',
+] as const;
+export const DEFAULT_TAG_COLOR = TAG_COLORS[0];
+
+/** Текст тега: без ведущих «#», пробелы схлопнуты, всегда заглавными. */
+export const normalizeTagText = (s: string) => s.replace(/^[#\s]+/, '').replace(/\s+/g, ' ').trim().toUpperCase();
+
+export const TagText = z.string().transform(normalizeTagText).pipe(z.string().min(1).max(64));
+export const TagColor = z.string().regex(/^#[0-9a-f]{6}$/i).transform((s) => s.toLowerCase());
+
+export const Tag = z.object({
+  id: Id,
+  /** Владелец словаря, из которого тег; править тег может только он. */
+  ownerId: Id,
+  text: z.string(),
+  color: z.string(),
+});
+
 // ---------- Досье ----------
 
 export const DossierKind = z.enum(['person', 'group']);
@@ -134,7 +159,7 @@ export const Dossier = z.object({
   kind: DossierKind,
   title: z.string().min(1).max(256),
   summaryMd: z.string().max(100_000),
-  tags: z.array(z.string().max(64)).max(50),
+  tags: z.array(Tag).max(50),
   visibility: DossierVisibility,
   shares: z.array(Share),
   /** Для группы — досье участников. */
@@ -209,7 +234,7 @@ export const Investigation = z.object({
   ownerId: Id,
   title: z.string().min(1).max(256),
   descriptionMd: z.string().max(100_000),
-  tags: z.array(z.string().max(64)).max(50),
+  tags: z.array(Tag).max(50),
   visibility: InvestigationVisibility,
   shares: z.array(Share),
   nodes: z.array(GraphNode),
@@ -257,6 +282,7 @@ export type DossierVisibility = z.infer<typeof DossierVisibility>;
 export type InvestigationVisibility = z.infer<typeof InvestigationVisibility>;
 export type ShareRole = z.infer<typeof ShareRole>;
 export type Share = z.infer<typeof Share>;
+export type Tag = z.infer<typeof Tag>;
 export type Source = z.infer<typeof Source>;
 export type Access = z.infer<typeof Access>;
 export type User = z.infer<typeof User>;

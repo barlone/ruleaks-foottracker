@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { ArrowLeft, Lightbulb, ListChecks, Network, Pencil, Share2, Trash2 } from 'lucide-react';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
+import { TagsBar } from '../../components/Tags.tsx';
 import { Button, Empty, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
@@ -50,12 +51,23 @@ export function InvestigationPage() {
   const editable = inv.role !== 'viewer' && !!me.data?.access.active;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="text-plus-1 flex h-full flex-col">
       <header className="border-b border-line bg-panel/60 pb-0 pl-6 pr-[30px] pt-4 backdrop-blur">
-        {me.data && (
-          <Link to="/investigations" className="mb-2 inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
-            <ArrowLeft size={13} /> все расследования
-          </Link>
+        {/* «Все расследования» и кнопки владельца — одной строкой над заголовком. */}
+        {(me.data || inv.role === 'owner') && (
+          <div className="mb-2 flex items-center justify-between gap-4">
+            {me.data ? (
+              <Link to="/investigations" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
+                <ArrowLeft size={13} /> все расследования
+              </Link>
+            ) : <span />}
+            {inv.role === 'owner' && (
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => setSharing(true)}><Share2 size={14} /> Доступ</Button>
+                <Button size="sm" variant="danger" onClick={() => confirm(`Удалить «${inv.title}»?`) && remove.mutate({ id })}><Trash2 size={14} /></Button>
+              </div>
+            )}
+          </div>
         )}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -67,18 +79,19 @@ export function InvestigationPage() {
                 {showDesc ? 'скрыть описание' : 'описание'}
               </button>
             </div>
-            <div className="mt-1 flex gap-1">{inv.tags.map((t) => <Tag key={t} tone="dim">#{t}</Tag>)}</div>
-          </div>
-          {inv.role === 'owner' && (
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => setSharing(true)}><Share2 size={14} /> Доступ</Button>
-              <Button size="sm" variant="danger" onClick={() => confirm(`Удалить «${inv.title}»?`) && remove.mutate({ id })}><Trash2 size={14} /></Button>
+            <div className="mt-2">
+              <TagsBar
+                tags={inv.tags}
+                editable={editable}
+                busy={update.isPending}
+                onChange={(tagIds) => update.mutate({ id, version: inv.version, patch: { tagIds } })}
+              />
             </div>
-          )}
+          </div>
         </div>
 
         {showDesc && (
-          <div className="mt-3 rounded-xl border border-line-soft p-4">
+          <div className="mt-[0.6rem] rounded-xl border border-line-soft p-[0.8rem]">
             {editDesc !== null ? (
               <div className="space-y-2">
                 <MarkdownEditor value={editDesc} onChange={setEditDesc} autoFocus />

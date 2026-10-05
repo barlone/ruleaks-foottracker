@@ -53,6 +53,7 @@ psql -h <host> -p <port> -U ruleaksfoottracker -d ruleaksfoottracker -f 002_init
 - `search_jobs` — история поиска и снимки ответов шлюза (`pinned` — прикреплён к досье, `hidden_at` — очищен из истории).
 - `investigations` (+ `investigation_shares`), `graph_nodes`, `graph_edges`, `facts` (+ `fact_nodes`, `edge_facts`),
   `hypotheses` (+ `hypothesis_evidence`).
+- `tag_texts` (общие тексты тегов), `tags` (словарь пользователя: текст + цвет), `dossier_tags`, `investigation_tags`.
 - `revisions` (история правок), `audit_log` (поиски и доступ к чужим объектам).
 
 Идентификаторы — `uuidv7()`; `updated_at` ставит триггер; досье и расследования удаляются мягко (`deleted_at`).

@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import type { Fact, GraphEdge, GraphNode, Hypothesis, Investigation, InvestigationSummary, Share } from '@ft/shared';
+import type { Fact, GraphEdge, GraphNode, Hypothesis, Investigation, InvestigationSummary, Share, Tag } from '@ft/shared';
 import { isUuid } from '@ft/shared';
-import type { InvestigationRepo, Scope } from '../../ports.ts';
-import { iso, json, likePattern, lockAndBump, newObjectId, notFound, tx, type Db, type Tx } from './db.ts';
+import type { InvestigationPatch, InvestigationRepo, ListFilter, Scope } from '../../ports.ts';
+import { iso, json, likePattern, lockAndBump, replaceTags, tagsJsonSql, tagsFilterSql, newObjectId, notFound, tx, type Db, type Tx } from './db.ts';
 
 // Расследования в PostgreSQL: investigations, investigation_shares, graph_nodes, graph_edges (+ edge_facts),
 // facts (+ fact_nodes), hypotheses (+ hypothesis_evidence). Любая правка повышает investigations.version —
@@ -14,12 +14,12 @@ const ROLE_SQL = `CASE WHEN i.owner_id = $1 THEN 'owner' WHEN s.role IS NOT NULL
 export class PgInvestigations implements InvestigationRepo {
   constructor(private db: Db) {}
 
-  async list(userId: string, scope: Scope, q?: string): Promise<InvestigationSummary[]> {
+  async list(userId: string, scope: Scope, filter: ListFilter = {}): Promise<InvestigationSummary[]> {
     const r = await this.db.query<{
-      id: string; owner_id: string; title: string; tags: string[]; visibility: Investigation['visibility'];
+      id: string; owner_id: string; title: string; tags: Tag[]; visibility: Investigation['visibility'];
       updated_at: Date; node_count: number; fact_count: number; role: InvestigationSummary['role'];
     }>(
-      `SELECT i.id, i.owner_id, i.title, i.tags, i.visibility, i.updated_at,
+      `SELECT i.id, i.owner_id, i.title, ${tagsJsonSql('investigation', 'i.id')} AS tags, i.visibility, i.updated_at,
               (SELECT count(*)::int FROM graph_nodes n WHERE n.investigation_id = i.id) AS node_count,
               (SELECT count(*)::int FROM facts f WHERE f.investigation_id = i.id) AS fact_count,
               ${ROLE_SQL} AS role
@@ -32,10 +32,11 @@ export class PgInvestigations implements InvestigationRepo {
                WHEN 'shared' THEN i.owner_id <> $1 AND i.visibility = 'shared' AND s.user_id IS NOT NULL
                ELSE               i.owner_id = $1 OR s.user_id IS NOT NULL OR i.visibility = 'public'
              END
-         AND ($3::text IS NULL OR i.title ILIKE $3 OR i.description_md ILIKE $3 OR array_to_string(i.tags, ' ') ILIKE $3)
+         AND ($3::text IS NULL OR i.title ILIKE $3)
+         AND ${tagsFilterSql('investigation', 'i.id', '$4', '$1')}
        ORDER BY i.updated_at DESC
        LIMIT 500`,
-      [userId, scope, likePattern(q)],
+      [userId, scope, likePattern(filter.title), (filter.tagIds ?? []).filter(isUuid)],
     );
     return r.rows.map((x) => ({
       id: x.id, ownerId: x.owner_id, title: x.title, tags: x.tags, visibility: x.visibility,
@@ -47,10 +48,10 @@ export class PgInvestigations implements InvestigationRepo {
     if (!isUuid(id)) return null;
     const inv = (
       await this.db.query<{
-        id: string; owner_id: string; title: string; description_md: string; tags: string[];
+        id: string; owner_id: string; title: string; description_md: string; tags: Tag[];
         visibility: Investigation['visibility']; version: number; updated_at: Date;
       }>(
-        `SELECT id, owner_id, title, description_md, tags, visibility, version, updated_at
+        `SELECT id, owner_id, title, description_md, ${tagsJsonSql('investigation', 'investigations.id')} AS tags, visibility, version, updated_at
          FROM investigations WHERE id = $1 AND deleted_at IS NULL`,
         [id],
       )
@@ -124,15 +125,15 @@ export class PgInvestigations implements InvestigationRepo {
     return (await this.get(id)) ?? notFound();
   }
 
-  async create(input: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd' | 'tags'>) {
+  async create(input: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd'>) {
     const r = await this.db.query<{ id: string }>(
-      `INSERT INTO investigations (owner_id, title, description_md, tags) VALUES ($1, $2, $3, $4) RETURNING id`,
-      [input.ownerId, input.title, input.descriptionMd, input.tags],
+      `INSERT INTO investigations (owner_id, title, description_md) VALUES ($1, $2, $3) RETURNING id`,
+      [input.ownerId, input.title, input.descriptionMd],
     );
     return this.reload(r.rows[0]!.id);
   }
 
-  async update(id: string, version: number, patch: Partial<Pick<Investigation, 'title' | 'descriptionMd' | 'tags' | 'visibility'>>) {
+  async update(id: string, version: number, patch: InvestigationPatch) {
     await tx(this.db, async (c) => {
       await lockAndBump(c, 'investigations', id, version);
       const sets: string[] = [];
@@ -143,7 +144,6 @@ export class PgInvestigations implements InvestigationRepo {
       };
       if (patch.title !== undefined) set('title', patch.title);
       if (patch.descriptionMd !== undefined) set('description_md', patch.descriptionMd);
-      if (patch.tags !== undefined) set('tags', patch.tags);
       if (patch.visibility !== undefined) {
         set('visibility', patch.visibility);
         // Публичному расследованию нужна неугадываемая ссылка; при повторной публикации — прежняя.
@@ -153,6 +153,7 @@ export class PgInvestigations implements InvestigationRepo {
         }
       }
       if (sets.length) await c.query(`UPDATE investigations SET ${sets.join(', ')} WHERE id = $1`, vals);
+      if (patch.tagIds !== undefined) await replaceTags(c, 'investigation', id, patch.tagIds);
     });
     return this.reload(id);
   }

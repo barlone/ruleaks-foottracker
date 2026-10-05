@@ -49,7 +49,7 @@ export function AddToDossierDialog({
     try {
       let id = dossierId;
       if (mode === 'new') {
-        const d = await create.mutateAsync({ kind: 'person', title: title || nameGuess || search.query, summaryMd: '', tags: [] });
+        const d = await create.mutateAsync({ kind: 'person', title: title || nameGuess || search.query, summaryMd: '' });
         id = d.id;
       }
       if (!id) return;

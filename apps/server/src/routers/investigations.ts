@@ -5,6 +5,7 @@ import {
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { activeProcedure, authedProcedure, publicProcedure, router, type Ctx } from '../trpc.ts';
+import { TagIds, checkTagIds } from './tags.ts';
 
 async function load(ctx: Ctx, id: string, action: Action): Promise<Investigation> {
   const inv = await ctx.deps.investigations.get(id);
@@ -33,25 +34,31 @@ const now = () => new Date().toISOString();
 
 export const investigationsRouter = router({
   list: authedProcedure
-    .input(z.object({ scope: z.enum(['all', 'mine', 'shared', 'public']), q: z.string().max(100).optional() }))
-    .query(({ ctx, input }) => ctx.deps.investigations.list(ctx.user.id, input.scope, input.q)),
+    .input(z.object({
+      scope: z.enum(['all', 'mine', 'shared', 'public']),
+      title: z.string().max(256).optional(),
+      tagIds: z.array(z.string()).max(50).optional(),
+    }))
+    .query(({ ctx, input: { scope, ...filter } }) => ctx.deps.investigations.list(ctx.user.id, scope, filter)),
 
   /** Публичные расследования открываются и без входа. */
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => present(ctx, await load(ctx, input.id, 'read'))),
 
   create: activeProcedure
-    .input(z.object({ title: z.string().trim().min(1).max(256), descriptionMd: z.string().max(100_000).default(''), tags: z.array(z.string()).default([]) }))
+    .input(z.object({ title: z.string().trim().min(1).max(256), descriptionMd: z.string().max(100_000).default('') }))
     .mutation(({ ctx, input }) => ctx.deps.investigations.create({ ...input, ownerId: ctx.user.id })),
 
   update: activeProcedure
     .input(z.object({
       id: z.string(),
       version: z.number().int(),
-      patch: z.object({ title: z.string().trim().min(1).max(256), descriptionMd: z.string().max(100_000), tags: z.array(z.string().max(64)).max(50) }).partial(),
+      patch: z.object({ title: z.string().trim().min(1).max(256), descriptionMd: z.string().max(100_000), tagIds: TagIds }).partial(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await load(ctx, input.id, 'edit');
-      return present(ctx, await ctx.deps.investigations.update(input.id, input.version, input.patch));
+      const inv = await load(ctx, input.id, 'edit');
+      const patch = { ...input.patch };
+      if (patch.tagIds) patch.tagIds = await checkTagIds(ctx, inv.tags, patch.tagIds);
+      return present(ctx, await ctx.deps.investigations.update(input.id, input.version, patch));
     }),
 
   saveGraph: activeProcedure

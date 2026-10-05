@@ -111,14 +111,18 @@ export const RelationType = z.object({
   text: z.string(),
 });
 
-/** Связь «досье → досье» одного типа; показывается в обоих досье. */
+/**
+ * Связь «досье → досье» одного типа; показывается в обоих досье. Тип общий, пояснение — своё у каждой стороны:
+ * fromNote видно в досье fromId («сын»), toNote — в досье toId («отец»).
+ */
 export const DossierRelation = z.object({
   id: Id,
   fromId: Id,
   toId: Id,
   typeId: Id,
   typeText: z.string(),
-  note: z.string().nullable(),
+  fromNote: z.string().nullable(),
+  toNote: z.string().nullable(),
   createdAt: z.string(),
 });
 

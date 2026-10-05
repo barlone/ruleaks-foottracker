@@ -119,7 +119,7 @@ export const seedDossiers: SeedDossier[] = [
 
 /** Связи между досье персон: тип — текст предопределённого типа. */
 export const seedRelations = [
-  { fromId: 'd-petrov', toId: 'd-sokolova', type: 'совместная учеба', note: 'ЭГУ, выпуск 2001', createdBy: U_ME },
+  { fromId: 'd-petrov', toId: 'd-sokolova', type: 'совместная учеба', fromNote: 'однокурсница, ЭГУ 2001', toNote: 'однокурсник', createdBy: U_ME },
 ];
 
 export const seedInvestigations: SeedInvestigation[] = [

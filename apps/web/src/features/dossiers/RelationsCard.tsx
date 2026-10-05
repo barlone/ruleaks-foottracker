@@ -9,7 +9,8 @@ import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
 
 // «Связи» досье персоны: связи с другими персонами из словаря типов (предопределённые + свои),
-// между двумя персонами — несколько связей, у каждой необязательное пояснение («возможно сын»).
+// между двумя персонами — несколько связей. Тип общий для обеих сторон, пояснение у каждой своё:
+// в одном досье «родственник · сын», в другом «родственник · отец» (или без пояснения).
 
 type Rel = RouterOutputs['relations']['list'][number];
 
@@ -58,8 +59,10 @@ export function RelationsCard({ dossierId, editable }: { dossierId: string; edit
                     <RelationChip
                       key={r.id}
                       rel={r}
-                      editable={editable && r.canEdit}
-                      onNote={(note) => setNote.mutate({ id: r.id, note })}
+                      canNote={editable && r.canEditNote}
+                      canRemove={editable && r.canRemove}
+                      otherTitle={other.title}
+                      onNote={(note) => setNote.mutate({ id: r.id, dossierId, note })}
                       onRemove={() => remove.mutate({ id: r.id })}
                     />
                   ))}
@@ -74,8 +77,20 @@ export function RelationsCard({ dossierId, editable }: { dossierId: string; edit
   );
 }
 
-/** Тип связи и пояснение; при наведении — правка пояснения и удаление (как у атрибутов). */
-function RelationChip({ rel, editable, onNote, onRemove }: { rel: Rel; editable: boolean; onNote: (note: string) => void; onRemove: () => void }) {
+/**
+ * Тип связи и пояснение этого досье; при наведении — правка пояснения и удаление (как у атрибутов).
+ * Пояснение другой стороны — во всплывающей подсказке.
+ */
+function RelationChip({
+  rel, canNote, canRemove, otherTitle, onNote, onRemove,
+}: {
+  rel: Rel;
+  canNote: boolean;
+  canRemove: boolean;
+  otherTitle: string;
+  onNote: (note: string) => void;
+  onRemove: () => void;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
   if (draft !== null) {
     return (
@@ -102,18 +117,23 @@ function RelationChip({ rel, editable, onNote, onRemove }: { rel: Rel; editable:
     );
   }
   return (
-    <span className="group inline-flex items-center gap-1.5 rounded-md border border-line bg-mint/5 px-2 py-0.5 font-mono text-[11px] leading-5">
+    <span
+      title={`В досье «${otherTitle}»: ${rel.typeText}${rel.otherNote ? ` · ${rel.otherNote}` : ''}`}
+      className="group inline-flex items-center gap-1.5 rounded-md border border-line bg-mint/5 px-2 py-0.5 font-mono text-[11px] leading-5"
+    >
       {rel.direction === 'in' && (
         <span title="Связь указана в досье другой персоны"><ArrowLeftRight size={10} className="text-mute" /></span>
       )}
       <span className="text-mint">{rel.typeText}</span>
       {rel.note && <span className="text-dim">· {rel.note}</span>}
-      {editable && (
+      {(canNote || canRemove) && (
         <span className="hidden items-center gap-1.5 group-hover:inline-flex has-[[data-armed]]:inline-flex">
-          <button type="button" onClick={() => setDraft(rel.note ?? '')} title="Изменить пояснение" className="cursor-pointer text-mute hover:text-mint">
-            <Pencil size={11} />
-          </button>
-          <ConfirmDeleteBtn onConfirm={onRemove} title="Удалить связь" />
+          {canNote && (
+            <button type="button" onClick={() => setDraft(rel.note ?? '')} title="Изменить пояснение в этом досье" className="cursor-pointer text-mute hover:text-mint">
+              <Pencil size={11} />
+            </button>
+          )}
+          {canRemove && <ConfirmDeleteBtn onConfirm={onRemove} title="Удалить связь (из обоих досье)" />}
         </span>
       )}
     </span>
@@ -129,7 +149,8 @@ function AddRelationDialog({ open, onOpenChange, dossierId, onDone }: { open: bo
   const options = trpc.dossiers.options.useQuery(undefined, { enabled: open });
   const types = trpc.relations.types.useQuery(undefined, { enabled: open });
   const [otherId, setOtherId] = useState('');
-  const [picked, setPicked] = useState<Map<string, string>>(new Map()); // typeId → пояснение
+  // typeId → пояснения: здесь (кем приходится другая персона) и в досье другой персоны.
+  const [picked, setPicked] = useState<Map<string, { note: string; otherNote: string }>>(new Map());
   const [newType, setNewType] = useState('');
   const onError = (e: unknown) => toast(errorText(e), 'error');
 
@@ -142,7 +163,7 @@ function AddRelationDialog({ open, onOpenChange, dossierId, onDone }: { open: bo
     setPicked((prev) => {
       const next = new Map(prev);
       if (next.has(id)) next.delete(id);
-      else next.set(id, '');
+      else next.set(id, { note: '', otherNote: '' });
       return next;
     });
 
@@ -171,6 +192,9 @@ function AddRelationDialog({ open, onOpenChange, dossierId, onDone }: { open: bo
   });
 
   const persons = (options.data ?? []).filter((d) => d.kind === 'person' && d.id !== dossierId);
+  const other = persons.find((d) => d.id === otherId);
+  // Пояснение в чужом досье можно задать, только если его можно править.
+  const otherEditable = !!other && other.role !== 'viewer';
   const list = types.data ?? [];
   const norm = normalizeRelationText(newType);
   const exists = list.some((t) => t.text === norm);
@@ -219,17 +243,31 @@ function AddRelationDialog({ open, onOpenChange, dossierId, onDone }: { open: bo
 
         {picked.size > 0 && (
           <div className="space-y-2 rounded-xl border border-line-soft p-3">
-            {[...picked].map(([id, note]) => (
-              <label key={id} className="flex items-center gap-2">
-                <span className="w-40 shrink-0 truncate font-mono text-[11px] text-mint">{list.find((t) => t.id === id)?.text}</span>
+            <div className="grid grid-cols-[8rem_1fr_1fr] gap-2 font-mono text-[10px] uppercase tracking-wider text-mute">
+              <span />
+              <span>пояснение здесь</span>
+              <span className="truncate">{other ? `в досье «${other.title}»` : 'в досье другой персоны'}</span>
+            </div>
+            {[...picked].map(([id, n]) => (
+              <div key={id} className="grid grid-cols-[8rem_1fr_1fr] items-center gap-2">
+                <span className="truncate font-mono text-[11px] text-mint">{list.find((t) => t.id === id)?.text}</span>
                 <Input
-                  value={note}
+                  value={n.note}
                   maxLength={500}
-                  onChange={(e) => setPicked((prev) => new Map(prev).set(id, e.target.value))}
-                  placeholder="пояснение, например «возможно сын»"
+                  onChange={(e) => setPicked((prev) => new Map(prev).set(id, { ...n, note: e.target.value }))}
+                  placeholder="например «сын»"
                   className="h-8 text-xs"
                 />
-              </label>
+                <Input
+                  value={n.otherNote}
+                  maxLength={500}
+                  disabled={!!other && !otherEditable}
+                  title={other && !otherEditable ? 'Досье только для чтения — пояснение допишет его владелец' : undefined}
+                  onChange={(e) => setPicked((prev) => new Map(prev).set(id, { ...n, otherNote: e.target.value }))}
+                  placeholder="например «отец»"
+                  className="h-8 text-xs"
+                />
+              </div>
             ))}
           </div>
         )}
@@ -239,7 +277,17 @@ function AddRelationDialog({ open, onOpenChange, dossierId, onDone }: { open: bo
           <Button
             variant="primary"
             disabled={!otherId || picked.size === 0 || add.isPending}
-            onClick={() => add.mutate({ dossierId, otherId, links: [...picked].map(([typeId, note]) => ({ typeId, note: note.trim() || undefined })) })}
+            onClick={() =>
+              add.mutate({
+                dossierId,
+                otherId,
+                links: [...picked].map(([typeId, n]) => ({
+                  typeId,
+                  note: n.note.trim() || undefined,
+                  otherNote: otherEditable ? n.otherNote.trim() || undefined : undefined,
+                })),
+              })
+            }
           >
             Добавить
           </Button>

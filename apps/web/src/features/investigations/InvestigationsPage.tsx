@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Network, Plus } from 'lucide-react';
 import { VisibilityTag } from '../../components/Sharing.tsx';
+import { ViewToggle, tableCls, useListView } from '../../components/ListView.tsx';
 import { TagFilter, TagList } from '../../components/Tags.tsx';
 import { Button, Dialog, Empty, Field, Input, Segmented, Spinner, Tag } from '../../components/ui.tsx';
 import { MarkdownEditor } from '../../components/Markdown.tsx';
 import { trpc } from '../../lib/trpc.ts';
-import { ago } from '../../lib/format.ts';
+import { ago, fmtDate } from '../../lib/format.ts';
 import { errorText } from '../../lib/errors.ts';
 import { investigationsRoute } from '../../router.tsx';
 
@@ -20,6 +21,8 @@ export function InvestigationsPage() {
     { placeholderData: (p) => p },
   );
   const [creating, setCreating] = useState(false);
+  const [view, setView] = useListView('investigations');
+  // Сервер отдаёт список по названию — в обоих видах порядок один.
 
   return (
     <div className="space-y-6 py-6 pl-6 pr-[30px]">
@@ -43,10 +46,51 @@ export function InvestigationsPage() {
           <TagFilter value={tagIds} onChange={setTagIds} />
         </div>
         {list.isFetching && <Spinner />}
+        <div className="ml-auto"><ViewToggle value={view} onChange={setView} /></div>
       </div>
 
       {list.data?.length === 0 && <Empty>Нет расследований</Empty>}
 
+      {view === 'table' && !!list.data?.length && (
+        <div className={tableCls.wrap}>
+          <table className={tableCls.table}>
+            <thead>
+              <tr>
+                <th className={tableCls.th}>Название</th>
+                <th className={tableCls.th}>Теги</th>
+                <th className={`${tableCls.th} text-right`}>Объектов</th>
+                <th className={`${tableCls.th} text-right`}>Фактов</th>
+                <th className={tableCls.th}>Доступ</th>
+                <th className={tableCls.th}>Изменено</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.data.map((inv) => (
+                <tr key={inv.id} className={tableCls.tr} onClick={() => void navigate({ to: '/investigations/$id', params: { id: inv.id } })}>
+                  <td className={tableCls.td}>
+                    <div className="flex items-center gap-2.5">
+                      <Network size={16} className="shrink-0 text-mint" />
+                      <Link to="/investigations/$id" params={{ id: inv.id }} onClick={(e) => e.stopPropagation()} className="font-semibold hover:text-mint">{inv.title}</Link>
+                    </div>
+                  </td>
+                  <td className={tableCls.td}><TagList tags={inv.tags} /></td>
+                  <td className={`${tableCls.td} text-right font-mono text-xs text-dim`}>{inv.nodeCount}</td>
+                  <td className={`${tableCls.td} text-right font-mono text-xs text-dim`}>{inv.factCount}</td>
+                  <td className={tableCls.td}>
+                    <span className="flex items-center gap-1.5">
+                      <VisibilityTag v={inv.visibility} />
+                      {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? 'правка' : 'чтение'}</Tag>}
+                    </span>
+                  </td>
+                  <td className={`${tableCls.td} whitespace-nowrap font-mono text-xs text-mute`} title={fmtDate(inv.updatedAt, true)}>{ago(inv.updatedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {view === 'grid' && (
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {list.data?.map((inv, i) => (
           <Link
@@ -73,6 +117,7 @@ export function InvestigationsPage() {
           </Link>
         ))}
       </div>
+      )}
 
       <CreateDialog open={creating} onOpenChange={setCreating} />
     </div>

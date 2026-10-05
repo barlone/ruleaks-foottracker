@@ -115,9 +115,17 @@ export interface RelationRepo {
   /** Связи, где досье — любая из сторон. */
   list(dossierId: string): Promise<DossierRelation[]>;
   get(id: string): Promise<DossierRelation | null>;
-  /** Связь того же типа между теми же досье (в любом направлении) уже есть — обновляется её пояснение. */
-  add(r: { fromId: string; toId: string; typeId: string; note: string | null }, actorId: string): Promise<DossierRelation>;
-  setNote(id: string, note: string | null): Promise<DossierRelation>;
+  /**
+   * Связь типа typeId между досье dossierId и otherId. Пояснения — с точки зрения каждой стороны:
+   * note — в досье dossierId, otherNote — в досье otherId (undefined — не менять). Если связь того же типа
+   * между этими досье уже есть (в любом направлении), обновляются её пояснения, а не заводится вторая.
+   */
+  add(
+    r: { dossierId: string; otherId: string; typeId: string; note?: string | null; otherNote?: string | null },
+    actorId: string,
+  ): Promise<DossierRelation>;
+  /** Пояснение связи в досье dossierId (той стороны, которой это досье является). */
+  setNote(id: string, dossierId: string, note: string | null): Promise<DossierRelation>;
   remove(id: string): Promise<void>;
 }
 

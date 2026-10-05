@@ -80,7 +80,7 @@ export class PgDossiers implements DossierRepo {
              END
          AND ($3::text IS NULL OR d.title ILIKE $3)
          AND ${tagsFilterSql('dossier', 'd.id', '$4', '$1')}
-       ORDER BY d.updated_at DESC
+       ORDER BY d.title, d.id
        LIMIT 500`,
       [userId, scope, likePattern(filter.title), (filter.tagIds ?? []).filter(isUuid)],
     );

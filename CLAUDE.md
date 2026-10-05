@@ -117,7 +117,8 @@ obvious from the schema:
   `investigation_tags`. Objects carry `Tag[]` on read and take `patch.tagIds` on update; `checkTagIds`
   (`routers/tags.ts`) lets an editor add only tags from their own dictionary. UI: `components/Tags.tsx`.
 - Person relations: `relation_texts` (shared, lowercase) → `relation_types` (`owner_id NULL` = predefined) →
-  `dossier_relations` (from → to, type, note; shown on both dossiers). Own router `routers/relations.ts`, not part of
+  `dossier_relations` (from → to, type, per-side `from_note`/`to_note`; shown on both dossiers, each side sees and
+  edits its own note). Own router `routers/relations.ts`, not part of
   `Dossier`; `Conflict(code)` from `ports.ts` maps to tRPC `CONFLICT` with that code.
 
 ### Search (bot parity)

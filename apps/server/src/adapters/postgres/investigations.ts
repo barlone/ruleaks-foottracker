@@ -34,7 +34,7 @@ export class PgInvestigations implements InvestigationRepo {
              END
          AND ($3::text IS NULL OR i.title ILIKE $3)
          AND ${tagsFilterSql('investigation', 'i.id', '$4', '$1')}
-       ORDER BY i.updated_at DESC
+       ORDER BY i.title, i.id
        LIMIT 500`,
       [userId, scope, likePattern(filter.title), (filter.tagIds ?? []).filter(isUuid)],
     );

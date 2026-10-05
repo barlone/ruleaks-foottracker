@@ -193,7 +193,7 @@ export class MemoryDossiers implements DossierRepo {
       })
       .map((d) => this.out(d))
       .filter((d) => matches(filter, d.title, d.tags, ft))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .sort((a, b) => a.title.localeCompare(b.title, 'ru'))
       .map((d) => ({
         id: d.id, ownerId: d.ownerId, kind: d.kind, title: d.title, tags: d.tags, visibility: d.visibility,
         coverMediaUrl: d.coverMediaUrl, updatedAt: d.updatedAt, itemCount: d.items.length, role: roleOf(userId, d)!,
@@ -282,7 +282,7 @@ export class MemoryInvestigations implements InvestigationRepo {
       })
       .map((i) => this.out(i))
       .filter((i) => matches(filter, i.title, i.tags, ft))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .sort((a, b) => a.title.localeCompare(b.title, 'ru'))
       .map((i) => ({
         id: i.id, ownerId: i.ownerId, title: i.title, tags: i.tags, visibility: i.visibility, updatedAt: i.updatedAt,
         nodeCount: i.nodes.length, factCount: i.facts.length, role: roleOf(userId, i) ?? 'viewer',
@@ -371,7 +371,9 @@ export class MemoryRelations implements RelationRepo {
     for (const r of seedRelations) {
       const type = [...this.types.values()].find((t) => t.text === r.type)!;
       const id = newId();
-      this.rels.set(id, { id, fromId: r.fromId, toId: r.toId, typeId: type.id, note: r.note, createdAt: new Date().toISOString(), createdBy: r.createdBy });
+      this.rels.set(id, {
+        id, fromId: r.fromId, toId: r.toId, typeId: type.id, fromNote: r.fromNote, toNote: r.toNote, createdAt: new Date().toISOString(), createdBy: r.createdBy,
+      });
     }
   }
 
@@ -404,22 +406,31 @@ export class MemoryRelations implements RelationRepo {
     const r = this.rels.get(id);
     return r ? this.out(r) : null;
   }
-  async add(rel: { fromId: string; toId: string; typeId: string; note: string | null }, actorId: string) {
+  async add(
+    rel: { dossierId: string; otherId: string; typeId: string; note?: string | null; otherNote?: string | null },
+    actorId: string,
+  ) {
     const same = [...this.rels.values()].find(
-      (r) => r.typeId === rel.typeId && ((r.fromId === rel.fromId && r.toId === rel.toId) || (r.fromId === rel.toId && r.toId === rel.fromId)),
+      (r) => r.typeId === rel.typeId && ((r.fromId === rel.dossierId && r.toId === rel.otherId) || (r.fromId === rel.otherId && r.toId === rel.dossierId)),
     );
     if (same) {
-      same.note = rel.note;
+      const forward = same.fromId === rel.dossierId;
+      if (rel.note !== undefined) same[forward ? 'fromNote' : 'toNote'] = rel.note;
+      if (rel.otherNote !== undefined) same[forward ? 'toNote' : 'fromNote'] = rel.otherNote;
       return this.out(same);
     }
-    const r = { ...rel, id: newId(), createdAt: new Date().toISOString(), createdBy: actorId };
+    const r = {
+      id: newId(), fromId: rel.dossierId, toId: rel.otherId, typeId: rel.typeId, fromNote: rel.note ?? null, toNote: rel.otherNote ?? null,
+      createdAt: new Date().toISOString(), createdBy: actorId,
+    };
     this.rels.set(r.id, r);
     return this.out(r);
   }
-  async setNote(id: string, note: string | null) {
+  async setNote(id: string, dossierId: string, note: string | null) {
     const r = this.rels.get(id);
-    if (!r) throw new Error('NOT_FOUND');
-    r.note = note;
+    if (!r || (r.fromId !== dossierId && r.toId !== dossierId)) throw new Error('NOT_FOUND');
+    if (r.fromId === dossierId) r.fromNote = note;
+    else r.toNote = note;
     return this.out(r);
   }
   async remove(id: string) {

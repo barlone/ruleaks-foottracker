@@ -4,7 +4,7 @@ import { Button, Dialog, Field, Input, Select, Segmented } from '../../component
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
-import type { SearchSection } from '@ft/shared';
+import { POST_KIND_LABELS, type DossierItem, type SearchSection } from '@ft/shared';
 
 export interface PendingValue {
   key: string;
@@ -12,23 +12,20 @@ export interface PendingValue {
   value: string;
 }
 
-/** Цитата (комментарий Telegram и т.п.) — станет заметкой досье с источником-ссылкой. */
-export interface PendingNote {
-  markdown: string;
-  url?: string;
-}
+/** Пост/комментарий/реакция (из поиска в Telegram) — станет элементом «Посты и реакции» с источником-ссылкой. */
+export type PendingPost = Omit<Extract<DossierItem, { type: 'post' }>, 'id' | 'type' | 'position' | 'createdAt' | 'source'>;
 
 /**
- * Перенос найденного в досье: выбранные значения становятся атрибутами,
+ * Перенос найденного в досье: выбранные значения становятся атрибутами, сообщения — постами,
  * а сам поиск — снимком (источник для всех атрибутов).
  */
 export function AddToDossierDialog({
-  open, onOpenChange, values, notes = [], search,
+  open, onOpenChange, values, posts = [], search,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   values: PendingValue[];
-  notes?: PendingNote[];
+  posts?: PendingPost[];
   search: { id: string; section: SearchSection; kind: string; query: string; deep: boolean; summary: string };
 }) {
   const options = trpc.dossiers.options.useQuery(undefined, { enabled: open });
@@ -59,12 +56,13 @@ export function AddToDossierDialog({
       for (const v of values) {
         await addItem.mutateAsync({ id, item: { type: 'attribute', key: v.key, label: v.label, value: v.value, source } });
       }
-      for (const n of notes) {
-        const src = n.url ? { ...source, kind: 'url' as const, ref: n.url } : source;
-        await addItem.mutateAsync({ id, item: { type: 'note', markdown: n.markdown, source: src } });
+      // Посты — в хронологическом порядке; уже перенесённые (тот же extId) сервер пропускает.
+      for (const p of [...posts].sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''))) {
+        const src = p.url ? { ...source, kind: 'url' as const, ref: p.url } : source;
+        await addItem.mutateAsync({ id, item: { type: 'post', ...p, source: src } });
       }
       await utils.dossiers.invalidate();
-      toast(`Добавлено в досье: ${values.length} знач.${notes.length ? `, ${notes.length} цит.` : ''} + снимок поиска`);
+      toast(`Добавлено в досье: ${values.length} знач.${posts.length ? `, ${posts.length} пост.` : ''} + снимок поиска`);
       onOpenChange(false);
       void navigate({ to: '/dossiers/$id', params: { id } });
     } catch (e) {
@@ -78,9 +76,11 @@ export function AddToDossierDialog({
     <Dialog open={open} onOpenChange={onOpenChange} title="Добавить в досье">
       <div className="space-y-5">
         <div className="max-h-40 space-y-1 overflow-auto rounded-lg border border-line-soft bg-bg-soft p-3 font-mono text-xs">
-          {values.length === 0 && notes.length === 0 && <div className="text-mute">Только снимок поиска</div>}
-          {notes.map((n, i) => (
-            <div key={`n${i}`} className="line-clamp-2 border-l-2 border-mint/40 pl-2 text-dim">{n.markdown}</div>
+          {values.length === 0 && posts.length === 0 && <div className="text-mute">Только снимок поиска</div>}
+          {posts.map((p, i) => (
+            <div key={`p${i}`} className="line-clamp-2 border-l-2 border-mint/40 pl-2 text-dim">
+              <span className="text-mint">{POST_KIND_LABELS[p.kind]}{p.emoji ? ` ${p.emoji}` : ''}</span> · {p.text}
+            </div>
           ))}
           {values.map((v, i) => (
             <div key={i} className="flex gap-2">

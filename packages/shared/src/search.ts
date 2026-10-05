@@ -415,6 +415,20 @@ export interface TgComment {
   likes?: { emoji: string; at: string }[];
 }
 export interface TgUser { id: number; names?: string[]; niks?: string[] }
+
+/**
+ * Время сервиса Telegram-комментариев (UTC) — в ISO 8601: «ДД.ММ.ГГГГ ЧЧ:ММ:СС» (время сообщения)
+ * или ISO без пояса (время реакции). Нераспознанное — null.
+ */
+export function tgTimeToIso(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const ru = /^(\d{2})\.(\d{2})\.(\d{4})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(s);
+  if (ru) return `${ru[3]}-${ru[2]}-${ru[1]}T${ru[4]}:${ru[5]}:${ru[6] ?? '00'}.000Z`;
+  const isoNoTz = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s);
+  const d = new Date(isoNoTz ? `${s}Z` : s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export interface TgUserMsgs { user?: TgUser; groups?: TgGroup[]; comments?: TgComment[] }
 /** month_activity: {год: {месяц 1–12: число}} */
 export type TgMonthActivity = Record<string, Record<string, number>>;

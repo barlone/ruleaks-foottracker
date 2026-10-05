@@ -4,7 +4,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2, User, Users,
 } from 'lucide-react';
-import { LEAK_FIELDS, FIELD_TO_KIND, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
+import { LEAK_FIELDS, FIELD_TO_KIND, POST_KIND_LABELS, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/common.tsx';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
@@ -13,20 +13,17 @@ import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields, emptySource, finishSource, type SourceDraft } from '../../components/SourceFields.tsx';
 import { TagsBar } from '../../components/Tags.tsx';
-import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
+import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
 import { dossierRoute } from '../../router.tsx';
 import { MediaGallery } from './MediaGallery.tsx';
+import { PLATFORM_LABELS, PostsCard } from './PostsCard.tsx';
 
 type Of<T extends DossierItem['type']> = Extract<DossierItem, { type: T }>;
 type NewItem = RouterInputs['dossiers']['addItem']['item'];
-
-const PLATFORM_LABELS: Record<string, string> = {
-  vk: 'VK', telegram: 'Telegram', ok: 'OK', instagram: 'Instagram', facebook: 'Facebook', x: 'X', youtube: 'YouTube', web: 'Веб', other: 'Другое',
-};
 
 function guessPlatform(url: string): Of<'link'>['platform'] {
   if (/vk\.com/.test(url)) return 'vk';
@@ -79,7 +76,7 @@ export function DossierPage() {
 
   const [editSummary, setEditSummary] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string | null>(null);
-  const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'media' | 'note'>(null);
+  const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'media' | 'note' | 'post'>(null);
   const [sharing, setSharing] = useState(false);
 
   if (q.isLoading) return <div className="grid h-64 place-items-center"><Spinner /></div>;
@@ -211,6 +208,15 @@ export function DossierPage() {
               <Empty>Фотографий нет</Empty>
             )}
           </Card>
+
+          {d.kind === 'person' && (
+            <PostsCard
+              posts={items('post')}
+              editable={editable}
+              onAdd={() => setAdding('post')}
+              onRemove={(itemId) => removeItem.mutate({ id, itemId })}
+            />
+          )}
 
           <Card compact
             title={<><NotebookPen size={13} /> Заметки</>}
@@ -372,8 +378,8 @@ function MembersEditor({
   );
 }
 
-function AddItemDialog({ kind, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'media' | 'note'; onClose: () => void; onAdd: (i: NewItem) => Promise<void> }) {
-  const titles = { attribute: 'Новый атрибут', link: 'Ссылка на профиль', media: 'Медиафайл', note: 'Заметка' };
+function AddItemDialog({ kind, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'media' | 'note' | 'post'; onClose: () => void; onAdd: (i: NewItem) => Promise<void> }) {
+  const titles = { attribute: 'Новый атрибут', link: 'Ссылка на профиль', media: 'Медиафайл', note: 'Заметка', post: 'Пост или реакция' };
   return (
     <Dialog open={!!kind} onOpenChange={(v) => !v && onClose()} title={kind ? titles[kind] : ''} wide={kind === 'note'}>
       {kind && <AddItemForm key={kind} kind={kind} onAdd={onAdd} />}
@@ -381,12 +387,19 @@ function AddItemDialog({ kind, onClose, onAdd }: { kind: null | 'attribute' | 'l
   );
 }
 
-function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | 'note'; onAdd: (i: NewItem) => Promise<void> }) {
+function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | 'note' | 'post'; onAdd: (i: NewItem) => Promise<void> }) {
   const [key, setKey] = useState<string>('phones');
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
   const [title, setTitle] = useState('');
   const [album, setAlbum] = useState('');
+  // Пост: вид, площадка, где опубликовано, ссылка, время (UTC), эмодзи реакции, на что ответ.
+  const [postKind, setPostKind] = useState<Of<'post'>['kind']>('comment');
+  const [platform, setPlatform] = useState<Of<'post'>['platform']>('telegram');
+  const [place, setPlace] = useState('');
+  const [at, setAt] = useState('');
+  const [emoji, setEmoji] = useState('');
+  const [replyTo, setReplyTo] = useState('');
   const [source, setSource] = useState<SourceDraft>(emptySource());
   const [error, setError] = useState<string | null>(null);
 
@@ -401,6 +414,15 @@ function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | '
         await onAdd({ type: 'link', url, title: title || undefined, platform: guessPlatform(url), source: src });
       } else if (kind === 'media') {
         await onAdd({ type: 'media', mediaId: newId(), url: value, caption: title || undefined, album: album || undefined, source: src });
+      } else if (kind === 'post') {
+        await onAdd({
+          type: 'post', kind: postKind, platform, text: value, place: place.trim() || undefined, url: title.trim() || undefined,
+          // Время вводится и показывается в UTC — как во всех сообщениях из поиска.
+          at: at ? `${at}:00.000Z` : null,
+          emoji: postKind === 'reaction' ? emoji.trim() || undefined : undefined,
+          replyTo: postKind === 'reply' ? replyTo.trim() || undefined : undefined,
+          source: src,
+        });
       } else {
         await onAdd({ type: 'note', markdown: value, source: src });
       }
@@ -455,6 +477,31 @@ function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | '
           <Field label="Подпись"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
           <Field label="Альбом"><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder="Соцсети, Наблюдение…" /></Field>
         </div>
+      </>
+    );
+  } else if (kind === 'post') {
+    body = (
+      <>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Вид">
+            <Select value={postKind} onChange={(e) => setPostKind(e.target.value as typeof postKind)} className="w-full">
+              {Object.entries(POST_KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </Select>
+          </Field>
+          <Field label="Площадка">
+            <Select value={platform} onChange={(e) => setPlatform(e.target.value as typeof platform)} className="w-full">
+              {Object.entries(PLATFORM_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </Select>
+          </Field>
+          <Field label="Где (группа, канал, страница)"><Input value={place} onChange={(e) => setPlace(e.target.value)} /></Field>
+          <Field label="Время (UTC)"><Input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></Field>
+        </div>
+        <Field label="Ссылка на сообщение"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="https://t.me/…" /></Field>
+        {postKind === 'reaction' && <Field label="Реакция (эмодзи)"><Input value={emoji} onChange={(e) => setEmoji(e.target.value)} className="w-32" /></Field>}
+        {postKind === 'reply' && <Field label="В ответ на"><Textarea rows={2} value={replyTo} onChange={(e) => setReplyTo(e.target.value)} /></Field>}
+        <Field label={postKind === 'reaction' ? 'Текст сообщения, на которое реагировали' : 'Текст'}>
+          <Textarea autoFocus rows={5} value={value} onChange={(e) => setValue(e.target.value)} />
+        </Field>
       </>
     );
   } else {

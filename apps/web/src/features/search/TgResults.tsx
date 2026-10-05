@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { Check, CornerDownRight, ExternalLink, MessagesSquare, Search as SearchIcon, User } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
-import { WEEK_DAYS, type TgComment, type TgGroup, type TgMonthActivity, type TgUserMsgs, type TgWeekActivity } from '@ft/shared';
+import { WEEK_DAYS, tgTimeToIso, type TgComment, type TgGroup, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity } from '@ft/shared';
+import type { PendingPost } from './AddToDossierDialog.tsx';
 import { Card, Empty, Segmented, Tag } from '../../components/ui.tsx';
 import { fmtUtc } from '../../lib/format.ts';
 
@@ -11,10 +12,26 @@ import { fmtUtc } from '../../lib/format.ts';
 /** Ключ комментария: msg_id уникален только внутри группы. */
 export const ckey = (c: TgComment) => `${c.grp_id}:${c.msg_id}`;
 
-/** Комментарий как Markdown-цитата для заметки досье. */
-export function commentToMarkdown(c: TgComment, group: TgGroup | undefined): string {
-  const head = c.r2text ? `> ↪ *${c.r2text}*\n>\n` : '';
-  return `${head}> ${c.text}\n\n— [${group?.name ?? 'Telegram'}](${c.url}), ${fmtUtc(c.dt)} (UTC)`;
+/**
+ * Сообщение из поиска → пост досье. reaction — режим «Реакции» (сообщения, на которые персона реагировала);
+ * author — для чужих сообщений (ответы персоне, полнотекстовый поиск).
+ */
+export function commentToPost(c: TgComment, group: TgGroup | undefined, opts: { reaction?: boolean; author?: TgUser } = {}): PendingPost {
+  const kind = opts.reaction ? 'reaction' : c.r2msg_id || c.r2text ? 'reply' : 'comment';
+  const a = opts.author;
+  const author = a ? [a.names?.[0], a.niks?.[0] && `@${a.niks[0]}`, `ID ${a.id}`].filter(Boolean).join(' · ') : undefined;
+  return {
+    kind,
+    platform: 'telegram',
+    place: group?.name ?? `группа ${c.grp_id}`,
+    url: c.url || undefined,
+    at: tgTimeToIso(opts.reaction ? c.likes?.[0]?.at ?? c.dt : c.dt),
+    text: c.text,
+    replyTo: c.r2text || undefined,
+    emoji: opts.reaction ? c.likes?.map((l) => l.emoji).join(' ') || undefined : undefined,
+    author,
+    extId: `tg:${c.grp_id}:${c.msg_id}:${kind}${a ? `:${a.id}` : ''}`,
+  };
 }
 
 export function CommentList({
@@ -89,7 +106,7 @@ export function MultiUserList({
 }: {
   users: TgUserMsgs[];
   selected: Set<string>;
-  onToggle: (c: TgComment, groups: TgGroup[]) => void;
+  onToggle: (c: TgComment, groups: TgGroup[], user: TgUser | undefined) => void;
   onUserComments: (tgid: string) => void;
   picked: Set<string>;
   onPickUser: (tgid: string, label: string) => void;
@@ -125,7 +142,7 @@ export function MultiUserList({
               </>
             }
           >
-            <CommentList comments={u.comments ?? []} groups={u.groups ?? []} selected={selected} onToggle={(c) => onToggle(c, u.groups ?? [])} />
+            <CommentList comments={u.comments ?? []} groups={u.groups ?? []} selected={selected} onToggle={(c) => onToggle(c, u.groups ?? [], u.user)} />
           </Card>
         );
       })}

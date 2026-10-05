@@ -4,15 +4,15 @@ import clsx from 'clsx';
 import { AtSign, Send, UserRound } from 'lucide-react';
 import {
   TG_MODES, findTgMode, parseTgUser,
-  type TgComment, type TgGroup, type TgModeId, type TgMonthActivity, type TgUserMsgs, type TgWeekActivity,
+  type TgComment, type TgGroup, type TgModeId, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity,
 } from '@ft/shared';
 import { Button, Card, Empty, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { tgSearchRoute } from '../../router.tsx';
-import { AddToDossierDialog, type PendingNote, type PendingValue } from './AddToDossierDialog.tsx';
+import { AddToDossierDialog, type PendingPost, type PendingValue } from './AddToDossierDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
-import { CommentList, MonthActivity, MultiUserList, WeekActivity, ckey, commentToMarkdown } from './TgResults.tsx';
+import { CommentList, MonthActivity, MultiUserList, WeekActivity, ckey, commentToPost } from './TgResults.tsx';
 
 type Job = RouterOutputs['search']['job'];
 
@@ -126,11 +126,11 @@ export function TgSearchPage() {
 }
 
 function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boolean; onRun: (m: TgModeId, v: string) => void }) {
-  const [notes, setNotes] = useState<Map<string, PendingNote>>(new Map());
+  const [posts, setPosts] = useState<Map<string, PendingPost>>(new Map());
   const [users, setUsers] = useState<Map<string, string>>(new Map());
   const [dialog, setDialog] = useState(false);
   useEffect(() => {
-    setNotes(new Map());
+    setPosts(new Map());
     setUsers(new Map());
   }, [job?.id]);
 
@@ -152,11 +152,17 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
   const mode = findTgMode(job.kind)!;
   const res = (job.result as { job?: Record<string, unknown> } | null)?.job ?? {};
 
-  const toggleComment = (c: TgComment, groups: TgGroup[]) => {
-    const next = new Map(notes);
-    if (next.has(ckey(c))) next.delete(ckey(c));
-    else next.set(ckey(c), { markdown: commentToMarkdown(c, groups.find((g) => g.grp_id === c.grp_id)), url: c.url });
-    setNotes(next);
+  // Отмеченные сообщения переносятся в досье как посты: в «Реакциях» — реакции персоны,
+  // в «Ответах пользователю» и полнотекстовом поиске — чужие сообщения с указанием автора.
+  const toggleComment = (c: TgComment, groups: TgGroup[], author?: TgUser) => {
+    const k = ckey(c);
+    const post = commentToPost(c, groups.find((g) => g.grp_id === c.grp_id), { reaction: job.kind === 'likes', author });
+    setPosts((prev) => {
+      const next = new Map(prev);
+      if (next.has(k)) next.delete(k);
+      else next.set(k, post);
+      return next;
+    });
   };
   const pickUser = (id: string, label: string) => {
     const next = new Map(users);
@@ -165,7 +171,7 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
     setUsers(next);
   };
 
-  // В досье: найденный Telegram ID пользователя (если запрос был по нему) + отмеченные ID + цитаты.
+  // В досье: найденный Telegram ID пользователя (если запрос был по нему) + отмеченные ID + посты.
   const values: PendingValue[] = [
     ...(job.params.tgid ? [{ key: 'tgids', label: 'Telegram ID', value: job.params.tgid }] : []),
     ...[...users.keys()].map((id) => ({ key: 'tgids', label: 'Telegram ID', value: id })),
@@ -176,14 +182,14 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
   if (mode.result === 'comments') {
     const comments = (res.comments as TgComment[] | undefined) ?? [];
     summary = `${comments.length} сообщ.${res.truncated ? ' (не все)' : ''}`;
-    body = <CommentList comments={comments} groups={(res.groups as TgGroup[] | undefined) ?? []} selected={new Set(notes.keys())} onToggle={(c) => toggleComment(c, (res.groups as TgGroup[]) ?? [])} />;
+    body = <CommentList comments={comments} groups={(res.groups as TgGroup[] | undefined) ?? []} selected={new Set(posts.keys())} onToggle={(c) => toggleComment(c, (res.groups as TgGroup[]) ?? [])} />;
   } else if (mode.result === 'multi') {
     const list = (res.users as TgUserMsgs[] | undefined) ?? [];
     summary = `${list.length} польз., ${list.reduce((s, u) => s + (u.comments?.length ?? 0), 0)} сообщ.`;
     body = (
       <MultiUserList
         users={list}
-        selected={new Set(notes.keys())}
+        selected={new Set(posts.keys())}
         onToggle={toggleComment}
         onUserComments={(id) => onRun('comments', id)}
         picked={new Set(users.keys())}
@@ -206,13 +212,13 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
           {job.params.via && job.params.via !== 'id' && <> · найден по {job.params.via}</>}
         </div>
       )}
-      <ResultBar summary={summary} selected={notes.size + users.size} onAdd={() => setDialog(true)} />
+      <ResultBar summary={summary} selected={posts.size + users.size} onAdd={() => setDialog(true)} />
       {body}
       <AddToDossierDialog
         open={dialog}
         onOpenChange={setDialog}
         values={values}
-        notes={[...notes.values()]}
+        posts={[...posts.values()]}
         search={{ id: job.id, section: 'tg', kind: job.kind, query: job.query, deep: false, summary }}
       />
     </>

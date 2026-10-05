@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  AttributeItem, DossierItem, DossierKind, DossierVisibility, LinkItem, MediaItem, NoteItem, ShareRole, SnapshotItem,
+  AttributeItem, DossierItem, DossierKind, DossierVisibility, LinkItem, MediaItem, NoteItem, PostItem, ShareRole, SnapshotItem,
   newId, type Dossier,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
@@ -15,6 +15,7 @@ const NewItem = z.discriminatedUnion('type', [
   MediaItem.omit(omitBase),
   NoteItem.omit(omitBase),
   SnapshotItem.omit(omitBase),
+  PostItem.omit(omitBase),
 ]);
 
 async function load(ctx: Ctx, id: string, action: Action): Promise<Dossier> {
@@ -81,6 +82,9 @@ export const dossiersRouter = router({
 
   addItem: activeProcedure.input(z.object({ id: z.string(), item: NewItem })).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'edit');
+    // Тот же пост/реакция (по внешнему id) уже в досье — повторно не добавляем.
+    const ext = input.item.type === 'post' ? input.item.extId : undefined;
+    if (ext && d.items.some((i) => i.type === 'post' && i.extId === ext)) return withRole(ctx, d);
     const item = DossierItem.parse({
       ...input.item,
       id: newId(),

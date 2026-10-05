@@ -115,12 +115,14 @@ export const AttributeItem = z.object({
   value: z.string().max(4000),
 });
 
+export const Platform = z.enum(['vk', 'telegram', 'ok', 'instagram', 'facebook', 'x', 'youtube', 'web', 'other']);
+
 export const LinkItem = z.object({
   ...itemBase,
   type: z.literal('link'),
   url: z.string().url(),
   title: z.string().max(256).optional(),
-  platform: z.enum(['vk', 'telegram', 'ok', 'instagram', 'facebook', 'x', 'youtube', 'web', 'other']).default('web'),
+  platform: Platform.default('web'),
 });
 
 export const MediaItem = z.object({
@@ -151,7 +153,40 @@ export const SnapshotItem = z.object({
   summary: z.string(),
 });
 
-export const DossierItem = z.discriminatedUnion('type', [AttributeItem, LinkItem, MediaItem, NoteItem, SnapshotItem]);
+/** Активность в соцсетях: свой пост, комментарий, ответ на чужое сообщение, реакция. */
+export const PostKind = z.enum(['post', 'comment', 'reply', 'reaction']);
+
+export const POST_KIND_LABELS: Record<z.infer<typeof PostKind>, string> = {
+  post: 'Пост',
+  comment: 'Комментарий',
+  reply: 'Ответ',
+  reaction: 'Реакция',
+};
+
+export const PostItem = z.object({
+  ...itemBase,
+  type: z.literal('post'),
+  kind: PostKind,
+  platform: Platform.default('telegram'),
+  /** Где опубликовано: группа, канал, страница. */
+  place: z.string().max(256).optional(),
+  /** Ссылка на само сообщение. */
+  url: z.string().max(2048).optional(),
+  /** Время публикации (для реакции — время реакции), ISO в UTC; null — неизвестно. */
+  at: z.string().nullable(),
+  /** Текст поста/комментария; для реакции — текст сообщения, на которое реагировали. */
+  text: z.string().max(20_000),
+  /** Текст сообщения, на которое отвечали. */
+  replyTo: z.string().max(20_000).optional(),
+  /** Эмодзи реакции. */
+  emoji: z.string().max(64).optional(),
+  /** Автор, если это не сама персона (например, ответы персоне). */
+  author: z.string().max(256).optional(),
+  /** Внешний идентификатор — повторный перенос того же сообщения не дублирует его: tg:<группа>:<сообщение>:<вид>. */
+  extId: z.string().max(128).optional(),
+});
+
+export const DossierItem = z.discriminatedUnion('type', [AttributeItem, LinkItem, MediaItem, NoteItem, SnapshotItem, PostItem]);
 
 export const Dossier = z.object({
   id: Id,

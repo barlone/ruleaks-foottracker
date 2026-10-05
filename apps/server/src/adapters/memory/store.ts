@@ -1,15 +1,15 @@
 import { randomBytes } from 'node:crypto';
 import {
-  DEFAULT_TAG_COLOR, newId, normalizeTagText, type Dossier, type DossierItem, type DossierSummary, type Investigation,
-  type InvestigationSummary, type SearchJob, type SearchSection, type Share, type Tag, type User,
+  DEFAULT_TAG_COLOR, newId, normalizeTagText, type Dossier, type DossierItem, type DossierRelation, type DossierSummary, type Investigation,
+  type InvestigationSummary, type RelationType, type SearchJob, type SearchSection, type Share, type Tag, type User,
 } from '@ft/shared';
 import { roleOf } from '../../authz.ts';
 import {
-  TagExists, VersionConflict,
+  Conflict, TagExists, VersionConflict,
   type DossierPatch, type DossierRepo, type InvestigationPatch, type InvestigationRepo, type ListFilter, type Scope, type SearchJobInternals,
-  type SearchRepo, type SessionRepo, type TagRepo, type UserRepo,
+  type RelationRepo, type SearchRepo, type SessionRepo, type TagRepo, type UserRepo,
 } from '../../ports.ts';
-import { seedDossiers, seedInvestigations, seedTagColors, seedUsers } from './seed.ts';
+import { seedDossiers, seedInvestigations, seedRelations, seedTagColors, seedUsers } from './seed.ts';
 
 // In-memory реализации репозиториев. Повторяют контракт будущего PostgreSQL-адаптера:
 // оптимистичная блокировка по version, owner/share-фильтры в list(). Данные живут до рестарта.
@@ -353,5 +353,76 @@ export class MemoryInvestigations implements InvestigationRepo {
   }
   async remove(id: string) {
     this.map.delete(id);
+  }
+}
+
+/** Предопределённые типы связей — как в миграции 20261005200000_dossier-relations. */
+const PREDEFINED_RELATIONS = ['родственник', 'совместная работа', 'совместная учеба', 'совместная служба'];
+
+/** Связи между досье персон и словарь их типов в памяти. */
+export class MemoryRelations implements RelationRepo {
+  private types = new Map<string, RelationType>(PREDEFINED_RELATIONS.map((text) => {
+    const id = newId();
+    return [id, { id, ownerId: null, text }];
+  }));
+  private rels = new Map<string, Omit<DossierRelation, 'typeText'> & { createdBy: string }>();
+
+  constructor() {
+    for (const r of seedRelations) {
+      const type = [...this.types.values()].find((t) => t.text === r.type)!;
+      const id = newId();
+      this.rels.set(id, { id, fromId: r.fromId, toId: r.toId, typeId: type.id, note: r.note, createdAt: new Date().toISOString(), createdBy: r.createdBy });
+    }
+  }
+
+  private out({ createdBy: _c, ...r }: Omit<DossierRelation, 'typeText'> & { createdBy: string }): DossierRelation {
+    return { ...r, typeText: this.types.get(r.typeId)?.text ?? '' };
+  }
+
+  async listTypes(userId: string) {
+    const all = [...this.types.values()];
+    return [...all.filter((t) => t.ownerId === null), ...all.filter((t) => t.ownerId === userId).sort((a, b) => a.text.localeCompare(b.text))]
+      .map((t) => ({ ...t }));
+  }
+  async createType(userId: string, text: string) {
+    if ([...this.types.values()].some((t) => t.text === text && (t.ownerId === null || t.ownerId === userId))) {
+      throw new Conflict('RELATION_TYPE_EXISTS');
+    }
+    const t: RelationType = { id: newId(), ownerId: userId, text };
+    this.types.set(t.id, t);
+    return { ...t };
+  }
+  async removeType(userId: string, id: string) {
+    if (this.types.get(id)?.ownerId !== userId) return;
+    this.types.delete(id);
+    for (const [rid, r] of this.rels) if (r.typeId === id) this.rels.delete(rid);
+  }
+  async list(dossierId: string) {
+    return [...this.rels.values()].filter((r) => r.fromId === dossierId || r.toId === dossierId).map((r) => this.out(r));
+  }
+  async get(id: string) {
+    const r = this.rels.get(id);
+    return r ? this.out(r) : null;
+  }
+  async add(rel: { fromId: string; toId: string; typeId: string; note: string | null }, actorId: string) {
+    const same = [...this.rels.values()].find(
+      (r) => r.typeId === rel.typeId && ((r.fromId === rel.fromId && r.toId === rel.toId) || (r.fromId === rel.toId && r.toId === rel.fromId)),
+    );
+    if (same) {
+      same.note = rel.note;
+      return this.out(same);
+    }
+    const r = { ...rel, id: newId(), createdAt: new Date().toISOString(), createdBy: actorId };
+    this.rels.set(r.id, r);
+    return this.out(r);
+  }
+  async setNote(id: string, note: string | null) {
+    const r = this.rels.get(id);
+    if (!r) throw new Error('NOT_FOUND');
+    r.note = note;
+    return this.out(r);
+  }
+  async remove(id: string) {
+    this.rels.delete(id);
   }
 }

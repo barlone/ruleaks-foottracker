@@ -4,7 +4,7 @@ import type { CreateFastifyContextOptions } from '@trpc/server/adapters/fastify'
 import type { Access, User } from '@ft/shared';
 import { config } from './config.ts';
 import type { Deps } from './ports.ts';
-import { TagExists, VersionConflict } from './ports.ts';
+import { Conflict, VersionConflict } from './ports.ts';
 
 export interface Ctx {
   deps: Deps;
@@ -53,8 +53,8 @@ const mapErrors = t.middleware(async ({ next }) => {
     if (cause instanceof VersionConflict) {
       throw new TRPCError({ code: 'CONFLICT', message: 'VERSION_CONFLICT', cause });
     }
-    if (cause instanceof TagExists) {
-      throw new TRPCError({ code: 'CONFLICT', message: 'TAG_EXISTS', cause });
+    if (cause instanceof Conflict) {
+      throw new TRPCError({ code: 'CONFLICT', message: cause.message, cause });
     }
     if (cause instanceof Error && cause.message === 'NOT_FOUND') {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'NOT_FOUND' });

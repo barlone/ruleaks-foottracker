@@ -3,7 +3,7 @@ import type { Deps } from './ports.ts';
 import { MemoryBotBridge } from './adapters/memory/bot.ts';
 import { MemoryGateway } from './adapters/memory/gateway.ts';
 import {
-  MemoryDossiers, MemoryInvestigations, MemorySearches, MemorySessions, MemoryTags, MemoryUsers,
+  MemoryDossiers, MemoryInvestigations, MemoryRelations, MemorySearches, MemorySessions, MemoryTags, MemoryUsers,
 } from './adapters/memory/store.ts';
 import { BotDbBridge } from './adapters/botdb/bot.ts';
 import { HttpGateway } from './adapters/http/gateway.ts';
@@ -14,6 +14,7 @@ import { PgSearches } from './adapters/postgres/searches.ts';
 import { PgDossiers } from './adapters/postgres/dossiers.ts';
 import { PgInvestigations } from './adapters/postgres/investigations.ts';
 import { PgTags } from './adapters/postgres/tags.ts';
+import { PgRelations } from './adapters/postgres/relations.ts';
 
 // Сборка зависимостей по флагам enabled в config.ini. Каждый источник включается отдельно:
 //   [bot-db]     enabled → BotDbBridge (подписка и токен из БД бота), иначе имитация бота с демо-учётками;
@@ -41,12 +42,13 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
   };
 }
 
-type Store = Pick<Deps, 'users' | 'sessions' | 'searches' | 'dossiers' | 'investigations' | 'tags'>;
+type Store = Pick<Deps, 'users' | 'sessions' | 'searches' | 'dossiers' | 'investigations' | 'tags' | 'relations'>;
 
 function memoryStore(): Store {
   const tags = new MemoryTags();
   return {
     tags,
+    relations: new MemoryRelations(),
     users: new MemoryUsers(),
     sessions: new MemorySessions(),
     searches: new MemorySearches(),
@@ -75,5 +77,6 @@ async function openProjectStore(cfg: AppConfig, log: (msg: string) => void): Pro
     dossiers: new PgDossiers(pool),
     investigations: new PgInvestigations(pool),
     tags: new PgTags(pool),
+    relations: new PgRelations(pool),
   };
 }

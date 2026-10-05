@@ -95,6 +95,33 @@ export const Tag = z.object({
   color: z.string(),
 });
 
+// ---------- Связи между персонами ----------
+// Типы связей — словарь как у тегов: тексты общие, тип виден автору; предопределённые (ownerId = null) — всем.
+
+/** Текст типа связи: пробелы схлопнуты, всегда в нижнем регистре. */
+export const normalizeRelationText = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+
+export const RelationText = z.string().transform(normalizeRelationText).pipe(z.string().min(1).max(64));
+export const RelationNote = z.string().trim().max(500);
+
+export const RelationType = z.object({
+  id: Id,
+  /** null — предопределённый тип. */
+  ownerId: Id.nullable(),
+  text: z.string(),
+});
+
+/** Связь «досье → досье» одного типа; показывается в обоих досье. */
+export const DossierRelation = z.object({
+  id: Id,
+  fromId: Id,
+  toId: Id,
+  typeId: Id,
+  typeText: z.string(),
+  note: z.string().nullable(),
+  createdAt: z.string(),
+});
+
 // ---------- Досье ----------
 
 export const DossierKind = z.enum(['person', 'group']);
@@ -318,6 +345,8 @@ export type InvestigationVisibility = z.infer<typeof InvestigationVisibility>;
 export type ShareRole = z.infer<typeof ShareRole>;
 export type Share = z.infer<typeof Share>;
 export type Tag = z.infer<typeof Tag>;
+export type RelationType = z.infer<typeof RelationType>;
+export type DossierRelation = z.infer<typeof DossierRelation>;
 export type Source = z.infer<typeof Source>;
 export type Access = z.infer<typeof Access>;
 export type User = z.infer<typeof User>;

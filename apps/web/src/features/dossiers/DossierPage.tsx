@@ -21,6 +21,7 @@ import { toast } from '../../lib/toast.ts';
 import { dossierRoute } from '../../router.tsx';
 import { MediaGallery } from './MediaGallery.tsx';
 import { PLATFORM_LABELS, PostsCard } from './PostsCard.tsx';
+import { RelationsCard } from './RelationsCard.tsx';
 
 type Of<T extends DossierItem['type']> = Extract<DossierItem, { type: T }>;
 type NewItem = RouterInputs['dossiers']['addItem']['item'];
@@ -271,6 +272,8 @@ export function DossierPage() {
               })}
             </div>
           </Card>
+
+          {d.kind === 'person' && <RelationsCard dossierId={d.id} editable={editable} />}
 
           <Card compact
             title={<><Link2 size={13} /> Соцсети и ссылки</>}

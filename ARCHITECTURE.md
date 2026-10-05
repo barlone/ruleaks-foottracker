@@ -237,12 +237,17 @@ facts(id, investigation_id, text_md, occurred_at, sources jsonb)   fact_nodes(fa
 hypotheses(id, investigation_id, title, text_md, status)     hypothesis_evidence(hypothesis_id, fact_id, stance)
 revisions(object_type, object_id, version, diff)             audit_log(user_id, action, object_type, object_id, meta, ip)
 tag_texts(id, text)  tags(id, owner_id, text_id, color)  dossier_tags(dossier_id, tag_id, position)  investigation_tags(…)
+relation_texts(id, text)  relation_types(id, owner_id NULL=предопределённый, text_id)  dossier_relations(id, from_id, to_id, type_id, note)
 ```
 
 - Теги — словарь: тексты (`tag_texts`, всегда заглавными) общие для всех, а словарь у каждого свой (`tags`: текст +
   цвет фона), и видит человек только свои теги. На объект ставится тег из словаря того, кто его поставил, — у
   соавторов он показывается с цветом автора; править тег может только владелец словаря, снять с объекта — любой
   редактор. Удаление тега из словаря снимает его со всех объектов.
+- Связи между персонами — `dossier_relations`: связь хранится один раз (from → to) и показывается в обоих досье;
+  между двумя персонами несколько связей разных типов, у каждой необязательное пояснение. Типы — словарь как у тегов
+  (тексты общие, в нижнем регистре; свой тип виден автору), плюс предопределённые (`owner_id IS NULL`): родственник,
+  совместная работа / учеба / служба. Другая персона показывается, только если её досье можно читать.
 - Идентификаторы — `uuidv7()` (PostgreSQL 18): упорядочены по времени, индексы растут без фрагментации.
 - Доступы — две таблицы (`dossier_shares`, `investigation_shares`) с настоящими внешними ключами, а не одна полиморфная.
 - JSONB — для гибких частей (тело элемента досье, источники, props узла, ответ шлюза); то, по чему ищут

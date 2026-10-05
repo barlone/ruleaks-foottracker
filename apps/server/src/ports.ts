@@ -4,7 +4,7 @@
 
 import type {
   Access, Dossier, DossierItem, DossierSummary, Fact, GraphEdge, GraphNode, Hypothesis,
-  Investigation, InvestigationSummary, SearchJob, SearchSection, Share, Tag, User,
+  Investigation, InvestigationSummary, DossierRelation, RelationType, SearchJob, SearchSection, Share, Tag, User,
 } from '@ft/shared';
 
 // ---------- Бот (владелец пользователей и подписок) ----------
@@ -104,6 +104,23 @@ export interface TagRepo {
   remove(userId: string, id: string): Promise<void>;
 }
 
+/** Связи между досье персон и словарь их типов. */
+export interface RelationRepo {
+  /** Предопределённые типы + словарь пользователя. */
+  listTypes(userId: string): Promise<RelationType[]>;
+  /** Такой тип уже есть (свой или предопределённый) — Conflict RELATION_TYPE_EXISTS. */
+  createType(userId: string, text: string): Promise<RelationType>;
+  /** Только свой тип; удаление удаляет и связи этого типа. */
+  removeType(userId: string, id: string): Promise<void>;
+  /** Связи, где досье — любая из сторон. */
+  list(dossierId: string): Promise<DossierRelation[]>;
+  get(id: string): Promise<DossierRelation | null>;
+  /** Связь того же типа между теми же досье (в любом направлении) уже есть — обновляется её пояснение. */
+  add(r: { fromId: string; toId: string; typeId: string; note: string | null }, actorId: string): Promise<DossierRelation>;
+  setNote(id: string, note: string | null): Promise<DossierRelation>;
+  remove(id: string): Promise<void>;
+}
+
 /** Теги объекта задаются списком id тегов из словарей (порядок — как в списке). */
 export type DossierPatch = Partial<Pick<Dossier, 'title' | 'summaryMd' | 'visibility' | 'memberIds' | 'coverMediaUrl'> & { tagIds: string[] }>;
 export type InvestigationPatch = Partial<Pick<Investigation, 'title' | 'descriptionMd' | 'visibility'> & { tagIds: string[] }>;
@@ -145,6 +162,7 @@ export interface Deps {
   dossiers: DossierRepo;
   investigations: InvestigationRepo;
   tags: TagRepo;
+  relations: RelationRepo;
 }
 
 /** Конфликт версий (оптимистичная блокировка) — роутер превращает в CONFLICT. */
@@ -154,8 +172,11 @@ export class VersionConflict extends Error {
   }
 }
 
-/** Тег с таким текстом уже есть в словаре пользователя — роутер превращает в CONFLICT TAG_EXISTS. */
-export class TagExists extends Error {
+/** Конфликт с машиночитаемым кодом (TAG_EXISTS, RELATION_TYPE_EXISTS…) — роутер превращает в CONFLICT. */
+export class Conflict extends Error {}
+
+/** Тег с таким текстом уже есть в словаре пользователя. */
+export class TagExists extends Conflict {
   constructor() {
     super('TAG_EXISTS');
   }

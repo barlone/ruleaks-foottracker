@@ -2,12 +2,13 @@ import { useEffect, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Share2, Trash2, User, Users,
+  ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2, User, Users,
 } from 'lucide-react';
 import { LEAK_FIELDS, FIELD_TO_KIND, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/common.tsx';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
+import { ObjectActions } from '../../components/ObjectActions.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields, emptySource, finishSource, type SourceDraft } from '../../components/SourceFields.tsx';
@@ -87,27 +88,21 @@ export function DossierPage() {
   const editable = d.role !== 'viewer' && !!me.data?.access.active;
   const items = <T extends DossierItem['type']>(t: T) => d.items.filter((i): i is Of<T> => i.type === t);
   const add = (item: NewItem) => addItem.mutateAsync({ id, item }).then(() => setAdding(null));
-  const ownerActions = d.role === 'owner' && (
-    <>
-      <Button onClick={() => setSharing(true)}><Share2 size={15} /> Доступ</Button>
-      <Button
-        variant="danger"
-        onClick={() => confirm(`Удалить досье «${d.title}»?`) && remove.mutate({ id })}
-        title="Удалить"
-      >
-        <Trash2 size={15} />
-      </Button>
-    </>
-  );
 
   return (
     <div className="text-plus-1 space-y-[1.2rem] py-[1.2rem] pl-6 pr-[30px]">
-      {/* «Все досье» и кнопки владельца — одной строкой над колонками. */}
+      {/* «Все досье» и кнопки (экспорт, доступ, удаление) — одной строкой над колонками. */}
       <div className="flex min-h-9 items-center justify-between gap-4">
         <Link to="/dossiers" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
           <ArrowLeft size={13} /> все досье
         </Link>
-        {ownerActions && <div className="flex gap-2">{ownerActions}</div>}
+        <ObjectActions
+          kind="dossier"
+          title={d.title}
+          isOwner={d.role === 'owner'}
+          onShare={() => setSharing(true)}
+          onDelete={() => remove.mutate({ id })}
+        />
       </div>
 
       {/* Две колонки на всю высоту: шапка — над основными боксами (поле названия не шире «Сводки»),

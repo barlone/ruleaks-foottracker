@@ -1,8 +1,9 @@
 import { lazy, Suspense, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ArrowLeft, Lightbulb, ListChecks, Network, Pencil, Share2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Lightbulb, ListChecks, Network, Pencil } from 'lucide-react';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
+import { ObjectActions } from '../../components/ObjectActions.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { TagsBar } from '../../components/Tags.tsx';
 import { Button, Empty, Spinner, Tag } from '../../components/ui.tsx';
@@ -53,22 +54,22 @@ export function InvestigationPage() {
   return (
     <div className="text-plus-1 flex h-full flex-col">
       <header className="border-b border-line bg-panel/60 pb-0 pl-6 pr-[30px] pt-4 backdrop-blur">
-        {/* «Все расследования» и кнопки владельца — одной строкой над заголовком. */}
-        {(me.data || inv.role === 'owner') && (
-          <div className="mb-2 flex items-center justify-between gap-4">
-            {me.data ? (
-              <Link to="/investigations" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
-                <ArrowLeft size={13} /> все расследования
-              </Link>
-            ) : <span />}
-            {inv.role === 'owner' && (
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => setSharing(true)}><Share2 size={14} /> Доступ</Button>
-                <Button size="sm" variant="danger" onClick={() => confirm(`Удалить «${inv.title}»?`) && remove.mutate({ id })}><Trash2 size={14} /></Button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* «Все расследования» и кнопки (экспорт, доступ, удаление) — одной строкой над заголовком. */}
+        <div className="mb-2 flex items-center justify-between gap-4">
+          {me.data ? (
+            <Link to="/investigations" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
+              <ArrowLeft size={13} /> все расследования
+            </Link>
+          ) : <span />}
+          <ObjectActions
+            kind="investigation"
+            size="sm"
+            title={inv.title}
+            isOwner={inv.role === 'owner'}
+            onShare={() => setSharing(true)}
+            onDelete={() => remove.mutate({ id })}
+          />
+        </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">

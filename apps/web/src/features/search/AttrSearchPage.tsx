@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Check, CornerDownRight, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
+import { Check, CornerDownRight, Filter, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
 import { FIELD_TO_KIND, LEAK_FIELDS, SEARCH_KINDS, detectKinds, isUkrainianPhone, type DeepRow, type LeakCard, type LeakField } from '@ft/shared';
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
@@ -147,7 +147,12 @@ export function AttrSearchPage() {
 function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boolean; onPivot: (kind: string, value: string) => void }) {
   const [selected, setSelected] = useState<Map<string, PendingValue>>(new Map());
   const [dialog, setDialog] = useState(false);
-  useEffect(() => setSelected(new Map()), [job?.id]);
+  // Фильтр по найденным атрибутам: пусто — показывать всё.
+  const [fields, setFields] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setSelected(new Map());
+    setFields(new Set());
+  }, [job?.id]);
 
   if (job?.state === 'choose') {
     return (
@@ -169,6 +174,25 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
   const rows = res?.job?.rows ?? [];
   const summary = job.deep ? `${rows.length} связанных значений` : `${leaks.length} утечек`;
 
+  // Атрибуты, которые есть в результатах, и сколько у каждого значений.
+  const counts = new Map<string, number>();
+  if (job.deep) for (const r of rows) counts.set(r.prm, (counts.get(r.prm) ?? 0) + 1);
+  else for (const c of leaks) for (const t of c.tuples ?? []) for (const f of Object.keys(LEAK_FIELDS) as LeakField[]) {
+    const n = t[f]?.length ?? 0;
+    if (n) counts.set(f, (counts.get(f) ?? 0) + n);
+  }
+  const fieldOrder = Object.keys(LEAK_FIELDS);
+  const found = [...counts.keys()].sort((a, b) => (fieldOrder.indexOf(a) + 1 || 999) - (fieldOrder.indexOf(b) + 1 || 999));
+  const active = new Set([...fields].filter((f) => counts.has(f)));
+  const shown = (f: string) => !active.size || active.has(f);
+  const toggleField = (f: string) => {
+    const next = new Set(active);
+    if (next.has(f)) next.delete(f);
+    else next.add(f);
+    setFields(next);
+  };
+  const visibleLeaks = leaks.filter((c) => c.tuples?.some((t) => fieldOrder.some((f) => shown(f) && t[f as LeakField]?.length)));
+
   const toggle = (key: string, label: string, value: string) => {
     const id = `${key}:${value}`;
     const next = new Map(selected);
@@ -186,12 +210,16 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
       )}
       <ResultBar summary={summary} selected={selected.size} onAdd={() => setDialog(true)} />
 
+      {found.length > 0 && (
+        <FieldFilter found={found} counts={counts} active={active} onToggle={toggleField} onReset={() => setFields(new Set())} />
+      )}
+
       {job.deep ? (
-        <DeepResult rows={rows} selected={selected} onToggle={toggle} onPivot={onPivot} />
+        <DeepResult rows={rows.filter((r) => shown(r.prm))} selected={selected} onToggle={toggle} onPivot={onPivot} />
       ) : (
         <div className="space-y-4">
           {leaks.length === 0 && <Empty>Ничего не найдено</Empty>}
-          {leaks.map((card, i) => (
+          {visibleLeaks.map((card, i) => (
             <Card
               key={i}
               title={<>{card.leak} {card.trusted && <ShieldCheck size={13} className="text-mint" />}</>}
@@ -200,9 +228,9 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
               {/* Записи одной утечки разделены тонкой серой чертой. Две колонки — только когда сам бокс
                   достаточно широк (container query), иначе значения с иконками действий не помещаются. */}
               <div className="@container divide-y divide-white/10">
-                {card.tuples?.map((t) => (
+                {card.tuples?.filter((t) => fieldOrder.some((f) => shown(f) && t[f as LeakField]?.length)).map((t) => (
                   <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 py-3 first:pt-0 last:pb-0 @4xl:grid-cols-2">
-                    {(Object.keys(LEAK_FIELDS) as LeakField[]).flatMap((f) =>
+                    {(Object.keys(LEAK_FIELDS) as LeakField[]).filter(shown).flatMap((f) =>
                       (t[f] ?? []).map((v) => (
                         <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
                       )),
@@ -222,6 +250,47 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
         search={{ id: job.id, section: 'attr', kind: job.kind, query: job.query, deep: job.deep, summary }}
       />
     </>
+  );
+}
+
+/** Бокс фильтра: только атрибуты, найденные в результатах; клик включает/выключает атрибут. */
+function FieldFilter({
+  found, counts, active, onToggle, onReset,
+}: {
+  found: string[];
+  counts: Map<string, number>;
+  active: Set<string>;
+  onToggle: (f: string) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-panel px-4 py-2.5">
+      <span className="mr-1 flex items-center gap-1.5 font-mono text-xs text-dim">
+        <Filter size={13} className="text-mint" /> Атрибуты:
+      </span>
+      {found.map((f) => {
+        const on = active.has(f);
+        return (
+          <button
+            key={f}
+            type="button"
+            onClick={() => onToggle(f)}
+            className={clsx(
+              'inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wide transition',
+              on ? 'border-mint bg-mint/15 text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
+            )}
+          >
+            {LEAK_FIELDS[f as LeakField] ?? f}
+            <span className={on ? 'text-mint/70' : 'text-mute'}>{counts.get(f)}</span>
+          </button>
+        );
+      })}
+      {active.size > 0 && (
+        <button type="button" onClick={onReset} className="ml-1 cursor-pointer font-mono text-[11px] text-mute hover:text-mint">
+          показать все
+        </button>
+      )}
+    </div>
   );
 }
 

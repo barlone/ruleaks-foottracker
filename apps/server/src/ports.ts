@@ -124,8 +124,6 @@ export interface RelationRepo {
     r: { dossierId: string; otherId: string; typeId: string; note?: string | null; otherNote?: string | null },
     actorId: string,
   ): Promise<DossierRelation>;
-  /** Пояснение связи в досье dossierId (той стороны, которой это досье является). */
-  setNote(id: string, dossierId: string, note: string | null): Promise<DossierRelation>;
   remove(id: string): Promise<void>;
 }
 

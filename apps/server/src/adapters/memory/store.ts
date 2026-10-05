@@ -426,13 +426,6 @@ export class MemoryRelations implements RelationRepo {
     this.rels.set(r.id, r);
     return this.out(r);
   }
-  async setNote(id: string, dossierId: string, note: string | null) {
-    const r = this.rels.get(id);
-    if (!r || (r.fromId !== dossierId && r.toId !== dossierId)) throw new Error('NOT_FOUND');
-    if (r.fromId === dossierId) r.fromNote = note;
-    else r.toNote = note;
-    return this.out(r);
-  }
   async remove(id: string) {
     this.rels.delete(id);
   }

@@ -98,20 +98,6 @@ export class PgRelations implements RelationRepo {
     return (await this.get(id)) ?? notFound();
   }
 
-  async setNote(id: string, dossierId: string, note: string | null) {
-    if (!isUuid(id) || !isUuid(dossierId)) notFound();
-    // Пояснение той стороны, которой является dossierId.
-    const r = await this.db.query(
-      `UPDATE dossier_relations
-       SET from_note = CASE WHEN from_id = $2 THEN $3 ELSE from_note END,
-           to_note   = CASE WHEN to_id   = $2 THEN $3 ELSE to_note END
-       WHERE id = $1 AND (from_id = $2 OR to_id = $2)`,
-      [id, dossierId, note],
-    );
-    if (!r.rowCount) notFound();
-    return (await this.get(id)) ?? notFound();
-  }
-
   async remove(id: string) {
     if (!isUuid(id)) return;
     await this.db.query(`DELETE FROM dossier_relations WHERE id = $1`, [id]);

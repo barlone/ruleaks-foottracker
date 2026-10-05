@@ -6,8 +6,8 @@ import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 
 // Связи между досье персон. Связь видна в обоих досье; другая сторона — только если её досье можно читать.
 // Тип связи общий, пояснение — своё у каждой стороны (в досье A «сын», в досье B «отец»).
-// Добавить связь — право правки своего досье и чтения другого; пояснение стороны — право правки её досье
-// (пояснение другой стороны при добавлении — если её досье тоже можно править); удалить — правка любой из сторон.
+// Добавить/изменить связи — право правки своего досье и чтения другого; пояснение другой стороны — если её досье
+// тоже можно править; удалить — правка любой из сторон.
 
 async function readable(ctx: Ctx, id: string): Promise<Dossier | null> {
   const d = await ctx.deps.dossiers.get(id);
@@ -62,8 +62,8 @@ export const relationsRouter = router({
         /** in — связь указана в досье другой персоны. */
         direction: outgoing ? ('out' as const) : ('in' as const),
         other: { id: o.id, title: o.title, coverMediaUrl: o.coverMediaUrl },
-        /** Править пояснение этой стороны. */
-        canEditNote: editHere,
+        /** Править связи с этой персоной из этого досье. */
+        canEdit: editHere,
         /** Удалить связь — правка любой из сторон. */
         canRemove: editHere || can(ctx.user.id, 'edit', o),
         createdAt: r.createdAt,
@@ -71,12 +71,17 @@ export const relationsRouter = router({
     });
   }),
 
-  /** Одна или несколько связей между двумя персонами (по одной на тип; пояснения — для каждой стороны). */
-  add: activeProcedure
+  /**
+   * Связи с другой персоной: по одной на тип, пояснения — для каждой стороны.
+   * replace = false (окно «Новая связь») — добавить/обновить указанные; replace = true (правка) — набор связей
+   * с этой персоной становится ровно таким: снятые типы удаляются (нужна правка любой из сторон — она есть).
+   */
+  save: activeProcedure
     .input(z.object({
       dossierId: z.string(),
       otherId: z.string(),
-      links: z.array(z.object({ typeId: z.string(), note: RelationNote.optional(), otherNote: RelationNote.optional() })).min(1).max(20),
+      links: z.array(z.object({ typeId: z.string(), note: RelationNote.optional(), otherNote: RelationNote.optional() })).max(20),
+      replace: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
       const d = await ctx.deps.dossiers.get(input.dossierId);
@@ -84,32 +89,30 @@ export const relationsRouter = router({
       if (!can(ctx.user.id, 'edit', d)) throw new TRPCError({ code: 'FORBIDDEN', message: 'NO_RIGHTS' });
       const o = await readable(ctx, input.otherId);
       if (!o || o.id === d.id || d.kind !== 'person' || o.kind !== 'person') throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_RELATION' });
-      const types = new Set((await ctx.deps.relations.listTypes(ctx.user.id)).map((t) => t.id));
+      if (!input.replace && !input.links.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_RELATION' });
+
+      // Между этими двумя досье — в любом направлении.
+      const existing = (await ctx.deps.relations.list(d.id)).filter((r) => r.fromId === o.id || r.toId === o.id);
+      // Допустимые типы: предопределённые, свой словарь и уже стоящие на связи (их мог поставить соавтор).
+      const types = new Set([...(await ctx.deps.relations.listTypes(ctx.user.id)).map((t) => t.id), ...existing.map((r) => r.typeId)]);
       if (input.links.some((l) => !types.has(l.typeId))) throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_RELATION_TYPE' });
+
+      if (input.replace) {
+        const keep = new Set(input.links.map((l) => l.typeId));
+        for (const r of existing) if (!keep.has(r.typeId)) await ctx.deps.relations.remove(r.id);
+      }
       // Пояснение в чужом досье — только если его тоже можно править; иначе его допишет владелец того досье.
       const editOther = can(ctx.user.id, 'edit', o);
       for (const l of input.links) {
         await ctx.deps.relations.add(
           {
-            dossierId: d.id, otherId: o.id, typeId: l.typeId, note: nullable(l.note),
+            // undefined — не трогать пояснение существующей связи, '' — очистить.
+            dossierId: d.id, otherId: o.id, typeId: l.typeId, note: l.note === undefined ? undefined : nullable(l.note),
             otherNote: editOther && l.otherNote !== undefined ? nullable(l.otherNote) : undefined,
           },
           ctx.user.id,
         );
       }
-      return true;
-    }),
-
-  /** Пояснение связи в досье dossierId — нужна правка именно этого досье. */
-  setNote: activeProcedure
-    .input(z.object({ id: z.string(), dossierId: z.string(), note: RelationNote }))
-    .mutation(async ({ ctx, input }) => {
-      const r = await ctx.deps.relations.get(input.id);
-      if (!r || (r.fromId !== input.dossierId && r.toId !== input.dossierId)) throw new TRPCError({ code: 'NOT_FOUND' });
-      const d = await ctx.deps.dossiers.get(input.dossierId);
-      if (!d || !can(ctx.user.id, 'read', d)) throw new TRPCError({ code: 'NOT_FOUND' });
-      if (!can(ctx.user.id, 'edit', d)) throw new TRPCError({ code: 'FORBIDDEN', message: 'NO_RIGHTS' });
-      await ctx.deps.relations.setNote(input.id, input.dossierId, nullable(input.note));
       return true;
     }),
 

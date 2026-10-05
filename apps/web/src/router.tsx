@@ -12,6 +12,10 @@ import { InvestigationsPage } from './features/investigations/InvestigationsPage
 
 const rootRoute = createRootRoute({ component: Root });
 
+// Роутер разбирает значения из адреса как JSON: ?q=123456789 приходит числом, а не строкой.
+// Набранная руками ссылка с цифрами не должна ронять страницу — приводим к строке.
+const text = z.preprocess((v) => (v === undefined || v === null ? undefined : String(v)), z.string().optional());
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -23,21 +27,21 @@ const indexRoute = createRoute({
 export const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search',
-  validateSearch: z.object({ kind: z.string().optional(), q: z.string().optional(), deep: z.boolean().optional() }),
+  validateSearch: z.object({ kind: text, q: text, deep: z.boolean().optional().catch(undefined) }),
   component: AttrSearchPage,
 });
 
 export const tgSearchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search/telegram',
-  validateSearch: z.object({ mode: z.string().optional(), q: z.string().optional() }),
+  validateSearch: z.object({ mode: text, q: text }),
   component: TgSearchPage,
 });
 
 export const fuzzySearchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search/fuzzy',
-  validateSearch: z.object({ mode: z.string().optional(), q: z.string().optional(), vehicpart: z.string().optional() }),
+  validateSearch: z.object({ mode: text, q: text, vehicpart: text }),
   component: FuzzySearchPage,
 });
 
@@ -64,7 +68,7 @@ export const investigationsRoute = createRoute({
 export const investigationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/investigations/$id',
-  validateSearch: z.object({ tab: z.enum(['graph', 'facts', 'hypotheses']).optional(), focus: z.string().optional() }),
+  validateSearch: z.object({ tab: z.enum(['graph', 'facts', 'hypotheses']).optional().catch(undefined), focus: text }),
   component: lazyRouteComponent(() => import('./features/investigations/InvestigationPage.tsx'), 'InvestigationPage'),
 });
 

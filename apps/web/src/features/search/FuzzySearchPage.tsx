@@ -142,16 +142,21 @@ function FuzzyJobView({ job, loading }: { job: Job | undefined; loading: boolean
       <ResultBar summary={summary} selected={selected.size} onAdd={() => setDialog(true)} />
       {results.length === 0 && <Empty>Ничего не найдено</Empty>}
       <div className="grid gap-3 lg:grid-cols-2">
-        {results.map((r, i) => (
+        {results.map((r, i) => {
+          const details = MATCH_FIELDS.some(([f]) => ((r[f] as string[] | undefined) ?? []).length > 0);
+          return (
           <Card key={i} className="!p-4">
             <ValueRow field={matchField} value={r.match} checked={selected.has(`${matchField}:${r.match}`)} onToggle={toggle} onPivot={pivot} />
+            {/* Найденное значение (email или госномер) отделено от остальных сведений тонкой чертой в цвет рамки бокса. */}
+            {details && <div className="my-2 border-t border-line" />}
             {MATCH_FIELDS.flatMap(([f, key]) =>
               ((r[f] as string[] | undefined) ?? []).map((v) => (
                 <ValueRow key={key + v} field={key} value={v} checked={selected.has(`${key}:${v}`)} onToggle={toggle} onPivot={pivot} />
               )),
             )}
           </Card>
-        ))}
+          );
+        })}
       </div>
       <AddToDossierDialog
         open={dialog}

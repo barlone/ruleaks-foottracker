@@ -5,11 +5,12 @@ import {
 } from 'lucide-react';
 import { LEAK_FIELDS, FIELD_TO_KIND, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/common.tsx';
+import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields, emptySource, finishSource, type SourceDraft } from '../../components/SourceFields.tsx';
-import { Button, Card, Dialog, Empty, Field, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
+import { Button, Card, CopyButton, Dialog, Empty, Field, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
@@ -228,16 +229,23 @@ export function DossierPage() {
                 return (
                   <div key={a.id} className="group flex items-start gap-3 py-2">
                     <span className="w-28 shrink-0 pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
-                    <span className="min-w-0 flex-1 break-words font-mono text-sm">{a.value}</span>
-                    <SourceBadge source={a.source} />
-                    <span className="flex gap-1.5 opacity-0 transition group-hover:opacity-100">
-                      {kind && (
-                        <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute hover:text-mint">
-                          <FileSearch size={14} />
-                        </Link>
-                      )}
-                      {editable && <DeleteBtn onClick={() => removeItem.mutate({ id, itemId: a.id })} />}
-                    </span>
+                    {/* Значение занимает всю ширину до правого края; оценка источника и кнопки — строкой под ним. */}
+                    <div className="min-w-0 flex-1">
+                      <div className="break-words font-mono text-sm">{a.value}</div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <SourceBadge source={a.source} />
+                        <ValueActions field={a.key} value={a.value} />
+                        <CopyButton value={a.value} title={`Скопировать: ${a.label}`} />
+                        <span className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                          {kind && (
+                            <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute hover:text-mint">
+                              <FileSearch size={14} />
+                            </Link>
+                          )}
+                          {editable && <DeleteBtn onClick={() => removeItem.mutate({ id, itemId: a.id })} />}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 );
               })}

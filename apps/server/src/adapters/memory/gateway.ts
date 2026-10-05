@@ -99,6 +99,10 @@ function fakeLeaks(query: string): LeakCard[] {
         plates: i === 0 && h % 2 ? ['А123ВС777'] : undefined,
         works: i === 1 ? ['ООО «Северный ветер»'] : undefined,
       },
+      // У первой утечки — вторая запись (в реальных ответах записей в утечке обычно несколько).
+      ...(i === 0
+        ? [{ tuple: (h % 100000) * 10 + 9, names: [name], phones: [phone], addrs: ['г. Энск, пр. Мира, д. 3, кв. 41'], geolocs: ['55.7558, 37.6173'], weblinks: ['https://example.com/u/' + (h % 1000)], ips: ['203.0.113.' + (h % 250)], regdates: ['14.06.2019'] }]
+        : []),
     ],
   }));
 }
@@ -157,14 +161,22 @@ function fakeComments(seed: number, userId: number, count: number, likes: boolea
       r2msg_id: reply ? msg - 3 : 0,
       grp_id: g.grp_id,
       usr_id: userId,
-      dt: new Date(Date.UTC(2025, (seed + i) % 12, 1 + ((seed + i * 5) % 27), 6 + ((seed + i * 3) % 16), (i * 13) % 60)).toISOString(),
+      // Как JSONTime шлюза: «ДД.ММ.ГГГГ ЧЧ:ММ:СС» в UTC.
+      dt: gatewayTime(new Date(Date.UTC(2025, (seed + i) % 12, 1 + ((seed + i * 5) % 27), 6 + ((seed + i * 3) % 16), (i * 13) % 60))),
       url: `${g.url}/${msg}`,
       text: PHRASES[(seed + i) % PHRASES.length]!,
       r2text: reply ? PHRASES[(seed + i + 3) % PHRASES.length]! : '',
       likes: likes ? [{ emoji: EMOJI[(seed + i) % EMOJI.length]!, at: new Date(Date.UTC(2025, i % 12, 3 + i)).toISOString() }] : undefined,
     };
-  }).sort((a, b) => b.dt.localeCompare(a.dt));
+  }).sort((a, b) => sortableTime(b.dt).localeCompare(sortableTime(a.dt)));
 }
+
+const pad = (n: number) => String(n).padStart(2, '0');
+function gatewayTime(d: Date): string {
+  return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+/** «ДД.ММ.ГГГГ ЧЧ:ММ:СС» → «ГГГГММДДЧЧММСС» для сортировки. */
+const sortableTime = (s: string) => s.replace(/^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})$/, '$3$2$1$4$5$6');
 
 function fakeOneUser(tgid: string, likes: boolean, answers: boolean) {
   const h = hash(tgid);

@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Check, CornerDownRight, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
-import { FIELD_TO_KIND, LEAK_FIELDS, SEARCH_KINDS, detectKind, type DeepRow, type LeakCard, type LeakField } from '@ft/shared';
-import { Button, Card, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
+import { FIELD_TO_KIND, LEAK_FIELDS, SEARCH_KINDS, detectKinds, isUkrainianPhone, type DeepRow, type LeakCard, type LeakField } from '@ft/shared';
+import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { searchRoute } from '../../router.tsx';
 import { AddToDossierDialog, type PendingValue } from './AddToDossierDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
+import { ValueActions } from './ValueActions.tsx';
 
 type Job = RouterOutputs['search']['job'];
 
@@ -36,9 +37,14 @@ export function AttrSearchPage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
-  const detected = useMemo(() => detectKind(value), [value]);
-  const effectiveKind = kind === 'auto' ? detected : kind;
+  // Варианты «Авто: …» — подходящие по маске виды поиска в порядке вероятности (как кнопки в боте).
+  // kind: 'auto' — самый вероятный; 'auto:<вид>' — выбранный вариант «Авто»; '<вид>' — выбран вручную.
+  const detected = useMemo(() => detectKinds(value), [value]);
+  const autoPick = kind.startsWith('auto:') ? kind.slice(5) : null;
+  const effectiveKind = kind === 'auto' || autoPick ? (autoPick && detected.includes(autoPick) ? autoPick : detected[0] ?? null) : kind;
+  const selectValue = kind === 'auto' || autoPick ? (effectiveKind ? `auto:${effectiveKind}` : 'auto') : kind;
   const kindInfo = SEARCH_KINDS.find((k) => k.id === effectiveKind);
+  const label = (id: string) => SEARCH_KINDS.find((k) => k.id === id)?.label ?? id;
 
   const start = trpc.search.start.useMutation({
     onSuccess: (j) => {
@@ -99,8 +105,12 @@ export function AttrSearchPage() {
                   disabled={disabled}
                 />
               </div>
-              <Select value={kind} onChange={(e) => setKind(e.target.value)} className="h-12 md:w-56" disabled={disabled}>
-                <option value="auto">Авто{detected ? `: ${SEARCH_KINDS.find((k) => k.id === detected)?.label}` : ''}</option>
+              <Select value={selectValue} onChange={(e) => setKind(e.target.value)} className="h-12 md:w-60" disabled={disabled}>
+                {detected.length === 0 && <option value="auto">Авто</option>}
+                {detected.map((id) => (
+                  <option key={`auto:${id}`} value={`auto:${id}`}>Авто: {label(id)}</option>
+                ))}
+                <option disabled>──────────────</option>
                 {SEARCH_KINDS.map((k) => (
                   <option key={k.id} value={k.id}>{k.label}</option>
                 ))}
@@ -114,7 +124,9 @@ export function AttrSearchPage() {
                 <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} disabled={!kindInfo?.deep} className="accent-[var(--color-mint)]" />
                 <Layers size={14} className="text-mint" /> Глубокий поиск со связями
               </label>
-              {kind === 'auto' && value && !detected && <Tag tone="warn">тип не распознан — выберите вручную</Tag>}
+              {(kind === 'auto' || autoPick) && value.trim() && !detected.length && (
+                <Tag tone="warn">{isUkrainianPhone(value) ? 'поиск только по номерам РФ' : 'тип не распознан — выберите вручную'}</Tag>
+              )}
               {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
             </div>
           </form>
@@ -137,6 +149,18 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
   const [dialog, setDialog] = useState(false);
   useEffect(() => setSelected(new Map()), [job?.id]);
 
+  if (job?.state === 'choose') {
+    return (
+      <Card title="Ник принадлежит нескольким пользователям">
+        <p className="mb-3 text-sm text-dim">Выберите Telegram ID для запроса «{job.query}»:</p>
+        <div className="flex flex-wrap gap-2">
+          {job.candidates?.map((id) => (
+            <Button key={id} onClick={() => onPivot('tgid', id)}>{id}</Button>
+          ))}
+        </div>
+      </Card>
+    );
+  }
   const status = <JobStatus job={job} loading={loading} />;
   if (!job || job.state !== 'done') return status;
 
@@ -155,6 +179,11 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
 
   return (
     <>
+      {job.params.via && (
+        <div className="font-mono text-xs text-dim">
+          Telegram ID <span className="text-mint">{job.params.tgid}</span> · найден по {job.params.via}
+        </div>
+      )}
       <ResultBar summary={summary} selected={selected.size} onAdd={() => setDialog(true)} />
 
       {job.deep ? (
@@ -168,15 +197,19 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
               title={<>{card.leak} {card.trusted && <ShieldCheck size={13} className="text-mint" />}</>}
               actions={<Tag tone="dim">{card.tuples?.length ?? 0} зап.</Tag>}
             >
-              {card.tuples?.map((t) => (
-                <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                  {(Object.keys(LEAK_FIELDS) as LeakField[]).flatMap((f) =>
-                    (t[f] ?? []).map((v) => (
-                      <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
-                    )),
-                  )}
-                </div>
-              ))}
+              {/* Записи одной утечки разделены тонкой серой чертой. Две колонки — только когда сам бокс
+                  достаточно широк (container query), иначе значения с иконками действий не помещаются. */}
+              <div className="@container divide-y divide-white/10">
+                {card.tuples?.map((t) => (
+                  <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 py-3 first:pt-0 last:pb-0 @4xl:grid-cols-2">
+                    {(Object.keys(LEAK_FIELDS) as LeakField[]).flatMap((f) =>
+                      (t[f] ?? []).map((v) => (
+                        <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
+                      )),
+                    )}
+                  </div>
+                ))}
+              </div>
             </Card>
           ))}
         </div>
@@ -205,7 +238,7 @@ export function ValueRow({
   const label = LEAK_FIELDS[field as LeakField] ?? field;
   const pivotKind = FIELD_TO_KIND[field as LeakField];
   return (
-    <div className="group flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-mint/5">
+    <div className="group flex flex-wrap items-center gap-2 rounded-md px-1.5 py-1 hover:bg-mint/5">
       <button
         onClick={() => onToggle(field, label, value)}
         className={clsx('grid size-4 shrink-0 cursor-pointer place-items-center rounded border', checked ? 'border-mint bg-mint text-mint-ink' : 'border-line')}
@@ -214,17 +247,22 @@ export function ValueRow({
         {checked && <Check size={11} strokeWidth={3} />}
       </button>
       <span className="w-32 shrink-0 font-mono text-[11px] uppercase tracking-wide text-mute">{label}</span>
-      <span className="min-w-0 flex-1 break-words font-mono text-sm">{value}</span>
+      <span className="min-w-[7rem] flex-1 break-words font-mono text-sm">{value}</span>
       {via && <span className="hidden truncate font-mono text-[10px] text-mute md:inline">через {via}</span>}
-      {pivotKind && (
-        <button
-          onClick={() => onPivot(pivotKind, value)}
-          className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"
-          title="Искать по этому значению"
-        >
-          <Zap size={14} />
-        </button>
-      )}
+      {/* Иконки держатся вместе: в узкой колонке они переносятся под значение, а не ломают его по символам. */}
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {pivotKind && (
+          <button
+            onClick={() => onPivot(pivotKind, value)}
+            className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"
+            title="Искать по этому значению"
+          >
+            <Zap size={14} />
+          </button>
+        )}
+        <ValueActions field={field} value={value} />
+        <CopyButton value={value} title={`Скопировать: ${label}`} />
+      </div>
     </div>
   );
 }

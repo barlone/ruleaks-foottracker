@@ -4,7 +4,7 @@ import { Check, CornerDownRight, ExternalLink, MessagesSquare, Search as SearchI
 import { Link } from '@tanstack/react-router';
 import { WEEK_DAYS, type TgComment, type TgGroup, type TgMonthActivity, type TgUserMsgs, type TgWeekActivity } from '@ft/shared';
 import { Card, Empty, Segmented, Tag } from '../../components/ui.tsx';
-import { fmtDate } from '../../lib/format.ts';
+import { fmtUtc } from '../../lib/format.ts';
 
 // Отрисовка ответов /tgcmnts/v1/*: комментарии одного пользователя, многих, счётчики активности.
 
@@ -14,7 +14,7 @@ export const ckey = (c: TgComment) => `${c.grp_id}:${c.msg_id}`;
 /** Комментарий как Markdown-цитата для заметки досье. */
 export function commentToMarkdown(c: TgComment, group: TgGroup | undefined): string {
   const head = c.r2text ? `> ↪ *${c.r2text}*\n>\n` : '';
-  return `${head}> ${c.text}\n\n— [${group?.name ?? 'Telegram'}](${c.url}), ${fmtDate(c.dt, true)}`;
+  return `${head}> ${c.text}\n\n— [${group?.name ?? 'Telegram'}](${c.url}), ${fmtUtc(c.dt)} (UTC)`;
 }
 
 export function CommentList({
@@ -62,8 +62,10 @@ export function CommentList({
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-mute">
                 <Tag tone="info">{g?.name ?? `группа ${c.grp_id}`}</Tag>
-                <span>{fmtDate(c.dt, true)}</span>
-                {c.likes?.map((l, i) => <span key={i} title={`реакция ${fmtDate(l.at, true)}`}>{l.emoji}</span>)}
+                <span>
+                  {fmtUtc(c.dt)} <span className="text-mute/70">(UTC)</span>
+                </span>
+                {c.likes?.map((l, i) => <span key={i} title={`реакция ${fmtUtc(l.at)} (UTC)`}>{l.emoji}</span>)}
                 <a href={c.url} target="_blank" rel="noreferrer noopener" className="ml-auto inline-flex items-center gap-1 hover:text-mint">
                   #{c.msg_id} <ExternalLink size={11} />
                 </a>

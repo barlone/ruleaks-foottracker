@@ -22,7 +22,7 @@ const rl = (p: string) => `/ruleaks/v1/${p}`;
 export const SEARCH_KINDS = [
   { id: 'phone', label: 'Телефон', param: 'phone', raw: rl('raw_search.byphone'), deep: rl('deep_search.byphone'), placeholder: '+7 916 123-45-67' },
   { id: 'email', label: 'Email', param: 'email', raw: rl('raw_search.byemail'), deep: rl('deep_search.byemail'), placeholder: 'user@mail.ru' },
-  { id: 'name', label: 'ФИО (+ дата рождения)', param: 'name1', raw: rl('raw_search.bypartname_bday'), deep: rl('deep_search.bypartname_bday'), placeholder: 'Иванов Иван 01.02.1990' },
+  { id: 'name', label: 'ФИО (+ дата рождения)', param: 'name1', raw: rl('raw_search.bypartname_bday'), deep: null, placeholder: 'Иванов Иван Иванович 01.02.1990' },
   { id: 'tgid', label: 'Telegram ID', param: 'tgid', raw: rl('raw_search.bytgid'), deep: rl('deep_search.bytgid'), placeholder: '123456789' },
   { id: 'inn', label: 'ИНН', param: 'inn', raw: rl('raw_search.byinn'), deep: rl('deep_search.byinn'), placeholder: '771234567890' },
   { id: 'snils', label: 'СНИЛС', param: 'snils', raw: rl('raw_search.bysnils'), deep: rl('deep_search.bysnils'), placeholder: '123-456-789 01' },
@@ -34,8 +34,8 @@ export const SEARCH_KINDS = [
   { id: 'link', label: 'Ссылка на соцсеть', param: 'link', raw: rl('raw_search.bylink'), deep: rl('deep_search.bylink'), placeholder: 'vk.com/id1' },
   { id: 'fbid', label: 'Facebook ID', param: 'fbid', raw: rl('raw_search.byfbid'), deep: rl('deep_search.byfbid'), placeholder: '100001234567890' },
   { id: 'ip', label: 'IP-адрес', param: 'ip', raw: rl('raw_search.byip'), deep: rl('deep_search.byip'), placeholder: '95.31.18.119' },
-  { id: 'milpn', label: 'Личный номер (воен.)', param: 'milpn', raw: rl('raw_search.bymilpn'), deep: rl('deep_search.bymilpn'), placeholder: 'АБ-123456' },
-  { id: 'bsvid', label: 'Свид. о рождении', param: 'bsvid', raw: rl('raw_search.bybsvid'), deep: rl('deep_search.bybsvid'), placeholder: 'I-МЮ 123456' },
+  { id: 'milpn', label: 'Личный номер (воен.)', param: 'milpn', raw: rl('raw_search.bymilpn'), deep: rl('deep_search.bymilpn'), placeholder: 'Х-136096' },
+  { id: 'bsvid', label: 'Свид. о рождении', param: 'bsvid', raw: rl('raw_search.bybsvid'), deep: rl('deep_search.bybsvid'), placeholder: 'I-МЮ123456' },
   { id: 'orgnn', label: 'ИНН организации', param: 'orgnn', raw: rl('raw_search.byorgnn'), deep: null, placeholder: '7701234567' },
   { id: 'addr', label: 'Адрес (часть)', param: 'addr1', raw: rl('raw_search.bypartaddr'), deep: null, placeholder: 'Москва Тверская 7' },
 ].map((k) => ({ ...k, service: 'ruleaks' as const })) satisfies SearchKind[];
@@ -46,27 +46,233 @@ export function findKind(id: string): SearchKind | undefined {
   return SEARCH_KINDS.find((k) => k.id === id);
 }
 
-/** Упрощённое автоопределение типа ввода (полная версия — app/services/input_detector.py бота). */
-export function detectKind(raw: string): SearchKindId | null {
-  const v = raw.trim();
-  if (!v) return null;
-  const digits = v.replace(/[\s\-()+]/g, '');
-  if (/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(v)) return 'email';
-  if (/^(https?:\/\/)?(www\.)?(vk\.com|ok\.ru|t\.me|instagram\.com|facebook\.com)\//i.test(v)) return 'link';
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(v)) return 'ip';
-  if (/^[A-HJ-NPR-Z0-9]{17}$/i.test(v)) return 'vin';
-  if (/^[АВЕКМНОРСТУХABEKMHOPCTYX]\d{3}[АВЕКМНОРСТУХABEKMHOPCTYX]{2}\d{2,3}$/i.test(v.replace(/\s/g, ''))) return 'plate';
-  if (/^\d{3}-?\d{3}-?\d{3}[\s-]?\d{2}$/.test(v)) return 'snils';
-  if (/^\d+$/.test(digits)) {
-    if (/^(\+?7|8)\d{10}$/.test(digits)) return 'phone';
-    if (digits.length === 16) return 'card';
-    if (digits.length === 12) return 'inn';
-    if (digits.length === 10 && /\s/.test(v)) return 'pasp';
-    if (digits.length === 10) return 'orgnn';
-    if (digits.length >= 5 && digits.length <= 11) return 'tgid';
+// ---------------------------------------------------------------------------
+// Автоопределение вида поиска — порт бота: app/core/input_detector.py (маски, контрольные
+// суммы) и app/bot/search_type_suggester.py (ранжирование). Бот по введённой строке
+// показывает кнопки подходящих видов поиска; сайт — пункты «Авто: …» в списке критериев.
+// Отличие от бота: в цифровых значениях пробелы, дефисы и скобки не мешают
+// («+7 953 952-62-73» — телефон), сайту их удобно вставлять как есть.
+// ---------------------------------------------------------------------------
+
+const RE = {
+  email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  phone: /^\+?[78]9\d{9}$/,
+  // Код региона необязателен; прицепы — «АВ1234».
+  plate: /^(?:[А-ЯЁа-яёA-Za-z]{1,2}\d{3,4}[А-ЯЁа-яёA-Za-z]{2}|[А-ЯЁа-яёA-Za-z]{2}\d{4})(?:[-\s]?\d{2,3})?$/,
+  vin: /^[A-Z0-9]{17}$/i,
+  card: /^[245]\d{15,19}$/,
+  fbid: /^1000\d{11,12}$/,
+  tgid: /^\d{5,15}$/,
+  tgnik: /^@[A-Za-z][A-Za-z0-9_]{3,31}$/,
+  snils: /^\d{11}$/,
+  inn: /^\d{12}$/,
+  pasp: /^\d{10}$/,
+  fpasp: /^\d{2}[-\s]?\d{7}$/,
+  bsvid: /^[IVXLCDM]{1,4}[\s-]?[A-ZА-ЯЁ]{2}\d{6}$/i,
+  milpn: /^[A-Za-zА-ЯЁа-яё][-\s]?\d{6}$/,
+  link: /^https?:\/\/\S+/,
+  // Ссылки на соцсети без схемы — удобство сайта (в боте только http(s)://).
+  linkBare: /^(www\.)?(vk\.com|ok\.ru|t\.me|instagram\.com|facebook\.com)\/\S+/i,
+  ip: /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/,
+  // ФИО (фамилия 2+ буквы, имя и отчество могут быть инициалами) с датой рождения или без.
+  name: new RegExp(
+    String.raw`^(?:([А-Яа-яЁё]{2,})(?:\s+([А-Яа-яЁё]+)){1,2}|([А-Яа-яЁё]{2,}))\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)$|` +
+      String.raw`^([А-Яа-яЁё]{2,})\s+([А-Яа-яЁё]+)(?:\s+([А-Яа-яЁё]+))?$|` +
+      String.raw`^([А-Яа-яЁё]{2,})\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)$`,
+  ),
+  addr: /^(?=(?:\S+\s+){2,5}\S+$)(?:[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)?\s+){2,3}(?:д(?:ом)?\.?\s*)?\d+[А-Яа-яЁё]?(?:\s+(?:кв(?:артира)?\.?\s*)?\d+)?$/i,
+  orgnn: /^\d{10}$/,
+};
+
+/** СНИЛС: контрольное число по последним двум цифрам. */
+function snilsOk(s: string): boolean {
+  if (s.length !== 11) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += Number(s[i]) * (9 - i);
+  const control = sum < 100 ? sum : sum === 100 || sum === 101 ? 0 : sum % 101 === 100 ? 0 : sum % 101;
+  return control === Number(s.slice(9));
+}
+
+/** Номер карты: алгоритм Луна. Длиннее 19 цифр — номер счёта, у него другая схема, принимаем. */
+function cardOk(s: string): boolean {
+  if (s.length > 19) return true;
+  let sum = 0;
+  let dbl = false;
+  for (let i = s.length - 1; i >= 0; i--) {
+    let d = Number(s[i]);
+    if (dbl && (d *= 2) > 9) d -= 9;
+    sum += d;
+    dbl = !dbl;
   }
-  if (/^[А-ЯЁа-яё-]+(\s+[А-ЯЁа-яё.-]+){0,2}(\s+\d{2}\.\d{2}\.\d{4})?$/.test(v)) return 'name';
-  return null;
+  return sum % 10 === 0;
+}
+
+/** «Иванов И.А. 01.02.1990» → «Иванов И А 01.02.1990» (normalize_name бота): инициалы — отдельные буквы. */
+function normalizeName(v: string): string {
+  const m = /^(.*?)[\s.,]*((?:\d{2}|\*)[.\-/](?:\d{2}|\*)[.\-/](?:\d{4}|\*))\s*$/.exec(v.trim());
+  const [namePart, date] = m ? [m[1]!, m[2]!] : [v, ''];
+  return `${namePart.replace(/[\s.,]+/g, ' ').trim()} ${date}`.trim();
+}
+
+/** Все подходящие виды поиска в порядке проверки бота (InputDetector.detect). */
+function detectAll(raw: string): SearchKindId[] {
+  const t = raw.trim();
+  if (!t) return [];
+  // Цифровое значение с разделителями — проверяем без них.
+  const v = /^[\d\s\-+()]+$/.test(t) && /\d/.test(t) ? t.replace(/[\s\-()]/g, '') : t;
+  const out: SearchKindId[] = [];
+  const add = (k: SearchKindId, ok: boolean) => ok && !out.includes(k) && out.push(k);
+  add('email', RE.email.test(v));
+  add('phone', RE.phone.test(v));
+  add('plate', RE.plate.test(v));
+  add('vin', RE.vin.test(v));
+  add('card', RE.card.test(v) && cardOk(v));
+  add('fbid', RE.fbid.test(v));
+  add('tgid', RE.tgid.test(v) || RE.tgnik.test(v));
+  add('snils', RE.snils.test(v) && snilsOk(v));
+  add('inn', RE.inn.test(v));
+  add('pasp', RE.pasp.test(v));
+  add('fpasp', RE.fpasp.test(t) || RE.fpasp.test(v));
+  add('bsvid', RE.bsvid.test(v));
+  add('milpn', RE.milpn.test(v));
+  add('link', RE.link.test(v) || RE.linkBare.test(v));
+  add('ip', RE.ip.test(v));
+  add('name', RE.name.test(normalizeName(v)));
+  add('orgnn', RE.orgnn.test(v));
+  add('addr', RE.addr.test(v));
+  return out;
+}
+
+// Ранжирование (search_type_suggester.py): меньше — выше.
+const PRIORITY: Record<SearchKindId, number> = {
+  phone: 20, email: 10, name: 12, vin: 8, plate: 9, pasp: 18, fpasp: 17, milpn: 16, card: 19,
+  tgid: 40, fbid: 35, inn: 22, snils: 21, bsvid: 13, link: 7, ip: 6, orgnn: 30, addr: 32,
+};
+
+function score(k: SearchKindId, raw: string): number {
+  let s = PRIORITY[k] ?? 100;
+  const digits = raw.trim().replace(/[\s\-()]/g, '');
+  if (/^\d+$/.test(digits)) {
+    const n = digits.length;
+    const adj: Partial<Record<number, Partial<Record<SearchKindId, number>>>> = {
+      9: { fpasp: -15, tgid: 10 },
+      10: { pasp: -15, orgnn: -10, tgid: 8 },
+      11: { phone: -10, snils: -6, tgid: 6 },
+      12: { inn: -8, tgid: 5 },
+    };
+    s += adj[n]?.[k] ?? 0;
+  }
+  return s;
+}
+
+/** Сколько вариантов «Авто: …» показывать — как кнопок в боте. */
+export const MAX_DETECTED_KINDS = 4;
+
+/** Подходящие виды поиска для введённой строки, самый вероятный — первым. */
+export function detectKinds(raw: string): SearchKindId[] {
+  const found = detectAll(raw);
+  return found
+    .map((k, i) => ({ k, i, s: score(k, raw) }))
+    .sort((a, b) => a.s - b.s || a.i - b.i)
+    .slice(0, MAX_DETECTED_KINDS)
+    .map((x) => x.k);
+}
+
+/** Самый вероятный вид поиска (или null). */
+export function detectKind(raw: string): SearchKindId | null {
+  return detectKinds(raw)[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Нормализация значения и параметры запроса — порт InputNormalizer (app/core/normalizers.py)
+// и _build_payload (app/bot/handlers/search.py) бота.
+// ---------------------------------------------------------------------------
+
+const LAT_TO_CYR: Record<string, string> = { A: 'А', B: 'В', E: 'Е', K: 'К', M: 'М', H: 'Н', O: 'О', P: 'Р', C: 'С', T: 'Т', Y: 'У', X: 'Х' };
+const CYR_TO_LAT: Record<string, string> = {
+  А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', У: 'Y', Х: 'X',
+  Ж: 'X', З: '3', И: 'I', Л: 'L', П: 'P', Ф: 'F', Ь: '', Ъ: '', Ы: 'Y', Э: 'E',
+};
+const mapChars = (s: string, m: Record<string, string>) => [...s].map((c) => m[c] ?? c).join('');
+
+/** Значение в том виде, в каком его отправляет бот (InputNormalizer.normalize). */
+export function normalizeQuery(kind: string, raw: string): string {
+  const v = raw.trim();
+  switch (kind) {
+    case 'phone': {
+      const d = v.replace(/\D/g, '');
+      if (d.length === 11 && (d[0] === '8' || d[0] === '7')) return `7${d.slice(1)}`;
+      if (d.length === 10) return `7${d}`;
+      return d;
+    }
+    case 'email':
+      return v.toLowerCase();
+    case 'plate':
+      return mapChars(v.toUpperCase().replace(/[\s-]/g, ''), LAT_TO_CYR);
+    case 'vin':
+      return mapChars(v.toUpperCase().replace(/\s/g, ''), CYR_TO_LAT);
+    case 'pasp':
+    case 'fbid':
+      return v.replace(/\D/g, '');
+    case 'tgid':
+      return /^@[A-Za-z][A-Za-z0-9_]{3,31}$/.test(v) ? v : v.replace(/\D/g, '');
+    case 'fpasp':
+    case 'inn':
+    case 'snils':
+    case 'card':
+    case 'orgnn':
+      return v.replace(/[\s-]/g, '');
+    case 'bsvid':
+      return mapChars(v.toUpperCase().replace(/[\s-]/g, ''), LAT_TO_CYR);
+    case 'milpn': {
+      let m = v.toUpperCase().replace(/\s+/g, '').replace(/[–—]/g, '-');
+      if (m.startsWith('X')) m = `Х${m.slice(1)}`;
+      if (!m.includes('-') && /^\p{L}\d+$/u.test(m)) m = `${m[0]}-${m.slice(1)}`;
+      return m;
+    }
+    case 'link':
+      return v.replace(/\/+$/, '');
+    case 'name':
+      return normalizeName(v);
+    case 'addr':
+      return v.replace(/\s+/g, ' ');
+    default:
+      return v;
+  }
+}
+
+const ADDR_PARTS = 6;
+
+/**
+ * Параметры запроса к шлюзу для вида поиска (_build_payload бота).
+ * ФИО: «Иванов Иван Иванович 03.09.1980» → name1..name3 + day, month, year; недостающее — «*».
+ * Адрес: первые шесть слов → addr1..addr6, недостающие — пустые.
+ * Остальные виды — одно значение в параметре kind.param.
+ */
+export function searchParams(kind: SearchKind, raw: string): Record<string, string> {
+  const value = normalizeQuery(kind.id, raw);
+  if (kind.id === 'name') {
+    const date = /\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)\s*$/.exec(value);
+    const names = (date ? value.slice(0, date.index) : value).trim().split(/\s+/).filter(Boolean);
+    return {
+      name1: names[0] ?? '*',
+      name2: names[1] ?? '*',
+      name3: names[2] ?? '*',
+      day: date?.[1] ?? '*',
+      month: date?.[2] ?? '*',
+      year: date?.[3] ?? '*',
+    };
+  }
+  if (kind.id === 'addr') {
+    const parts = value.split(' ').filter(Boolean).slice(0, ADDR_PARTS);
+    return Object.fromEntries(Array.from({ length: ADDR_PARTS }, (_, i) => [`addr${i + 1}`, parts[i] ?? '']));
+  }
+  return { [kind.param]: value };
+}
+
+/** Украинский мобильный (+380…): бэкенд ищет только по номерам РФ (is_ukrainian_phone бота). */
+export function isUkrainianPhone(raw: string): boolean {
+  return /^\+?380\d{9}$/.test(raw.trim().replace(/[\s\-()]/g, ''));
 }
 
 // --- Форма ответа шлюза (service/ruleaks/model.go) ---

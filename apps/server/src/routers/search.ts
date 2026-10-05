@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   FUZZY_MODE_IDS, SEARCH_KINDS, SearchSectionSchema, TG_MODE_IDS,
-  checkMask, detectKind, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser,
+  checkMask, detectKind, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
   type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import type { GatewayAnswer } from '../ports.ts';
@@ -19,7 +19,6 @@ const StartInput = z.discriminatedUnion('section', [
     kind: z.string(),
     value: z.string().trim().min(1).max(256),
     deep: z.boolean(),
-    bday: z.string().max(10).optional(),
   }),
   z.object({
     section: z.literal('tg'),
@@ -86,9 +85,8 @@ function planAttr(input: Extract<StartInput, { section: 'attr' }>): Plan {
   const kind = findKind(input.kind);
   if (!kind) throw new TRPCError({ code: 'BAD_REQUEST', message: 'UNKNOWN_KIND' });
   const deep = input.deep && !!kind.deep;
-  const params: Record<string, string> = { [kind.param]: input.value };
-  if (input.bday) params.bday = input.bday;
-  return { path: deep ? kind.deep! : kind.raw, params, service: 'ruleaks', kind: kind.id, deep, extra: input.bday ? { bday: input.bday } : {} };
+  // Значение нормализуется и раскладывается по параметрам, как в боте (ФИО → name1..3 + day/month/year).
+  return { path: deep ? kind.deep! : kind.raw, params: searchParams(kind, input.value), service: 'ruleaks', kind: kind.id, deep, extra: {} };
 }
 
 function planFuzzy(input: Extract<StartInput, { section: 'fuzzy' }>): Plan {
@@ -147,8 +145,21 @@ export const searchRouter = router({
     };
 
     let plan: Plan;
-    if (input.section === 'attr') plan = planAttr(input);
-    else if (input.section === 'fuzzy') plan = planFuzzy(input);
+    if (input.section === 'attr') {
+      plan = planAttr(input);
+      // Поиск по Telegram ID с @ником: сначала ник → ID (search_ids.bynik), как в боте.
+      const nik = input.kind === 'tgid' ? parseTgUser(input.value) : null;
+      if (nik?.kind === 'nik') {
+        const ids = await ctx.deps.gateway.tgIdsByNik(tok, nik.value).catch((e: Error) => e);
+        const stop = (state: 'failed' | 'choose', patch: Partial<SearchJob>) =>
+          ctx.deps.searches.create({ ...base, ...patch, kind: plan.kind, deep: plan.deep, params: {}, state, gatewayJobId: null, gatewayService: 'ruleaks' });
+        if (ids instanceof Error) return stop('failed', { error: ids.message });
+        if (ids.length === 0) return stop('failed', { error: `Пользователь @${nik.value} не найден` });
+        if (ids.length > 1) return stop('choose', { candidates: ids });
+        const kind = findKind('tgid')!;
+        plan = { ...plan, params: { [kind.param]: ids[0]! }, extra: { ...plan.extra, tgid: ids[0]!, via: `@${nik.value}` } };
+      }
+    } else if (input.section === 'fuzzy') plan = planFuzzy(input);
     else {
       const mode = findTgMode(input.mode)!;
       const params: Record<string, string> = {};

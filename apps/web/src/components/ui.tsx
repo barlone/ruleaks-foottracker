@@ -1,7 +1,8 @@
 import clsx from 'clsx';
 import * as RDialog from '@radix-ui/react-dialog';
-import { X } from 'lucide-react';
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { Check, Copy, X } from 'lucide-react';
+import { copyText } from '../lib/clipboard.ts';
+import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 
 // Базовые компоненты в стилистике ruleaks.link: чёрный фон, мятный акцент, моноширинные подписи.
 
@@ -167,5 +168,26 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
         </button>
       ))}
     </div>
+  );
+}
+
+/** Иконка «скопировать в буфер обмена»; после копирования на секунду показывает галочку. */
+export function CopyButton({ value, title = 'Скопировать', className }: { value: string; title?: string; className?: string }) {
+  const [state, setState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  useEffect(() => {
+    if (state === 'idle') return;
+    const t = setTimeout(() => setState('idle'), 1200);
+    return () => clearTimeout(t);
+  }, [state]);
+  return (
+    <button
+      type="button"
+      onClick={async () => setState((await copyText(value)) ? 'ok' : 'fail')}
+      title={state === 'ok' ? 'Скопировано' : state === 'fail' ? 'Не удалось скопировать' : title}
+      aria-label={title}
+      className={clsx('shrink-0 cursor-pointer transition', state === 'ok' ? 'text-mint' : state === 'fail' ? 'text-danger' : 'text-mute hover:text-mint', className)}
+    >
+      {state === 'ok' ? <Check size={14} /> : <Copy size={14} />}
+    </button>
   );
 }

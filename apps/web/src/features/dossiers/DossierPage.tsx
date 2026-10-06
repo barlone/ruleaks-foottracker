@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2, User, Users,
+  ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
 import { LEAK_FIELDS, FIELD_TO_KIND, POST_KIND_LABELS, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/common.tsx';
@@ -13,13 +13,14 @@ import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields, emptySource, finishSource, type SourceDraft } from '../../components/SourceFields.tsx';
 import { TagsBar } from '../../components/Tags.tsx';
-import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
+import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, FilePicker, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
 import { dossierRoute } from '../../router.tsx';
 import { MediaGallery } from './MediaGallery.tsx';
+import { CoverBox, PHOTO_ALBUM } from './PhotosDialog.tsx';
 import { PLATFORM_LABELS, PostsCard } from './PostsCard.tsx';
 import { RelationsCard } from './RelationsCard.tsx';
 
@@ -86,6 +87,9 @@ export function DossierPage() {
   const editable = d.role !== 'viewer' && !!me.data?.access.active;
   const items = <T extends DossierItem['type']>(t: T) => d.items.filter((i): i is Of<T> => i.type === t);
   const add = (item: NewItem) => addItem.mutateAsync({ id, item }).then(() => setAdding(null));
+  // Фото персоны — отдельный альбом: правятся через бокс у названия и в «Медиа» не дублируются.
+  const photos = items('media').filter((m) => m.album === PHOTO_ALBUM);
+  const media = items('media').filter((m) => m.album !== PHOTO_ALBUM);
 
   return (
     <div className="text-plus-1 space-y-[1.2rem] py-[1.2rem] pl-6 pr-[30px]">
@@ -109,13 +113,7 @@ export function DossierPage() {
         <div className="min-w-0 space-y-[1.2rem]">
           {/* Шапка */}
           <header className="flex flex-wrap items-start gap-[1.2rem]">
-            <div className="size-32 shrink-0 overflow-hidden rounded-2xl border border-line bg-bg-soft shadow-glow-sm">
-              {d.coverMediaUrl ? (
-                <img src={d.coverMediaUrl} alt="" className="size-full object-cover" />
-              ) : (
-                <div className="grid size-full place-items-center text-mint/30">{d.kind === 'group' ? <Users size={48} /> : <User size={48} />}</div>
-              )}
-            </div>
+            <CoverBox dossierId={d.id} kind={d.kind} coverUrl={d.coverMediaUrl} photos={photos} editable={editable} />
             <div className="min-w-0 flex-1 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Tag tone="dim">{d.kind === 'group' ? 'группа лиц' : 'персона'}</Tag>
@@ -196,9 +194,9 @@ export function DossierPage() {
             title={<><Camera size={13} /> Медиа</>}
             actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('media')}><Plus size={13} /> Добавить</Button>}
           >
-            {items('media').length ? (
+            {media.length ? (
               <MediaGallery
-                items={items('media')}
+                items={media}
                 editable={editable}
                 coverUrl={d.coverMediaUrl}
                 onReorder={(ids) => reorder.mutate({ id, orderedIds: ids })}
@@ -206,7 +204,7 @@ export function DossierPage() {
                 onCover={(url) => update.mutate({ id, version: d.version, patch: { coverMediaUrl: url } })}
               />
             ) : (
-              <Empty>Фотографий нет</Empty>
+              <Empty>Медиафайлов нет</Empty>
             )}
           </Card>
 
@@ -472,7 +470,7 @@ function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | '
     body = (
       <>
         <Field label="Файл" hint="В прототипе файл встраивается как data URL; в проде — presigned-загрузка в S3, превью, EXIF.">
-          <input type="file" accept="image/*" onChange={(e) => onFile(e.target.files?.[0])} className="block w-full text-sm text-dim file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-line file:bg-mint/10 file:px-3 file:py-1.5 file:text-mint" />
+          <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
         </Field>
         <Field label="…или URL изображения"><Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} /></Field>
         {value && <img src={value} alt="" className="max-h-48 rounded-lg border border-line" />}

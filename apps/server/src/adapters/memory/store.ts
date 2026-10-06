@@ -231,7 +231,10 @@ export class MemoryDossiers implements DossierRepo {
   }
   async removeItem(id: string, itemId: string) {
     const d = this.must(id);
+    const gone = d.items.find((i) => i.id === itemId);
     d.items = d.items.filter((i) => i.id !== itemId);
+    // Удалили изображение-обложку — обложки больше нет (если та же картинка не осталась другим элементом).
+    if (gone?.type === 'media' && gone.url === d.coverMediaUrl && !d.items.some((i) => i.type === 'media' && i.url === gone.url)) d.coverMediaUrl = null;
     bump(d);
     return this.out(d);
   }

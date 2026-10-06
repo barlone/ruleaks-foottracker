@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import * as RDialog from '@radix-ui/react-dialog';
 import { Check, Copy, Trash2, X } from 'lucide-react';
 import { copyText } from '../lib/clipboard.ts';
-import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 
 // Базовые компоненты в стилистике ruleaks.link: чёрный фон, мятный акцент, моноширинные подписи.
 
@@ -221,5 +221,45 @@ export function ConfirmDeleteBtn({ onConfirm, className, title = 'Удалить
     >
       {armed ? <span className="grid size-3.5 place-items-center rounded-sm bg-danger font-mono text-[10px] font-bold leading-none text-black">?</span> : <Trash2 size={13} />}
     </button>
+  );
+}
+
+/**
+ * Выбор файла. Подписи стандартного <input type="file"> рисует браузер на языке системы
+ * («Вибрати файл», «Choose file»…) — поэтому свой вид: кнопка + имя выбранного файла, сам input скрыт.
+ */
+export function FilePicker({
+  accept, multiple, disabled, onFiles, className,
+}: {
+  accept?: string;
+  /** Несколько файлов сразу. */
+  multiple?: boolean;
+  disabled?: boolean;
+  onFiles: (files: File[]) => void;
+  className?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState<string | null>(null);
+  return (
+    <span className={clsx('flex min-w-0 items-center gap-3', className)}>
+      <Button type="button" size="sm" disabled={disabled} onClick={() => ref.current?.click()}>
+        {multiple ? 'Выбрать файлы' : 'Выбрать файл'}
+      </Button>
+      <span className={clsx('min-w-0 truncate text-sm', name ? 'text-text' : 'text-dim')}>{name ?? (multiple ? 'Файлы не выбраны' : 'Файл не выбран')}</span>
+      <input
+        ref={ref}
+        type="file"
+        accept={accept}
+        multiple={multiple}
+        className="hidden"
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          setName(files.length > 1 ? `выбрано файлов: ${files.length}` : files[0]?.name ?? null);
+          onFiles(files);
+          // Тот же файл можно выбрать снова (иначе change не сработает).
+          e.target.value = '';
+        }}
+      />
+    </span>
   );
 }

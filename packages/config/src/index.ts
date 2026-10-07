@@ -129,7 +129,7 @@ export interface AppConfig {
 const DEV_COOKIE_SECRET = 'dev-only-cookie-secret-change-me-please';
 
 /** Ищет config.ini вверх от cwd до корня монорепо (package.json с workspaces). */
-function findConfig(): string | null {
+export function findConfig(): string | null {
   if (process.env.FT_CONFIG) return resolve(process.env.FT_CONFIG);
   let dir = process.cwd();
   for (;;) {

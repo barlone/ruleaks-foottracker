@@ -55,7 +55,8 @@ secret so a password change ends all sessions, and only the solo user's sessions
 `SoloBridge` (`adapters/solo.ts`) replaces the bot: access is always active/unlimited, the API token is `[api] token`,
 `[bot-db]`/`dev-login` are forced off, and `deps.soloUserId` is upserted at startup from `user-tg-id`/`user-name`.
 Bot-only procedures (`start`/`status`/`devConfirm`) answer `NOT_FOUND`; the web reads `auth.mode`.
-`npm run password-hash` prints the hash line.
+`npm run password-hash` asks for the password and writes the hash into `config.ini` line by line (comments kept;
+offers to switch `auth`; creates the file from the template if missing; `-- --print` only prints).
 
 Each data source is switched independently by its `enabled` flag:
 

@@ -1,6 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Asterisk, FolderSearch, LogOut, Network, RefreshCw, Search, Send, ShieldAlert } from 'lucide-react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { ArrowUp, Asterisk, FolderSearch, LogOut, Network, RefreshCw, Search, Send, ShieldAlert } from 'lucide-react';
 import { trpc } from '../lib/trpc.ts';
 import { toasts } from '../lib/toast.ts';
 import { useStore } from '../lib/store.ts';
@@ -19,6 +20,7 @@ const NAV = [
 export function Root() {
   const me = trpc.auth.me.useQuery();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const mainRef = useRef<HTMLElement>(null);
 
   if (me.isLoading) {
     return (
@@ -49,9 +51,11 @@ export function Root() {
       <Sidebar />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <SubscriptionBanner />
-        <main className="min-h-0 flex-1 overflow-auto">
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </main>
+        {/* key — после перехода на другую страницу заново следим за её содержимым. */}
+        <ScrollTopButton key={path} target={mainRef} />
       </div>
       <Toaster />
     </div>
@@ -181,6 +185,47 @@ function Toaster() {
           {t.text}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Прокрутка страницы в начало — как в HTML-отчётах бота. Видна, только когда есть куда прокручивать вверх.
+ * Прокручивается не окно, а <main>; кнопка — в правом нижнем углу (вверху справа при прокрутке
+ * стоит закреплённая строка результатов поиска с «Снимком в досье»).
+ */
+function ScrollTopButton({ target }: { target: RefObject<HTMLElement | null> }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = target.current;
+    if (!el) return;
+    const update = () => setVisible(el.scrollTop > 1);
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    // Содержимое меняется (переход на другую страницу, подгрузка результатов) — позиция тоже.
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
+  }, [target]);
+  if (!visible) return null;
+  // Обёртка держит позицию: у основной кнопки .btn-sheen задаёт position: relative (styles.css) и перебил бы absolute.
+  return (
+    <div className="absolute bottom-[18px] right-6 z-30">
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={() => target.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+        title="Прокрутить в начало"
+        aria-label="Прокрутить в начало"
+        // p-0! — базовый px-3 кнопки size="sm" иначе сжимает значок до 8 px.
+        className="size-8 p-0!"
+      >
+        <ArrowUp size={16} className="shrink-0" />
+      </Button>
     </div>
   );
 }

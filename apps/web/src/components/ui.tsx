@@ -107,8 +107,16 @@ export function Tag({ children, tone = 'mint', className }: { children: ReactNod
 }
 
 export function Dialog({
-  open, onOpenChange, title, children, wide,
-}: { open: boolean; onOpenChange: (v: boolean) => void; title: ReactNode; children: ReactNode; wide?: boolean }) {
+  open, onOpenChange, title, children, wide, width,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  title: ReactNode;
+  children: ReactNode;
+  wide?: boolean;
+  /** Своя максимальная ширина (класс max-w-…) вместо max-w-lg / max-w-3xl. */
+  width?: string;
+}) {
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <RDialog.Portal>
@@ -119,7 +127,7 @@ export function Dialog({
             onOpenAutoFocus={(e) => e.preventDefault()}
             className={clsx(
               'relative w-full animate-fade-up rounded-2xl border border-line bg-panel p-6 shadow-glow',
-              wide ? 'max-w-3xl' : 'max-w-lg',
+              width ?? (wide ? 'max-w-3xl' : 'max-w-lg'),
             )}
           >
             <div className="mb-5 flex items-center justify-between">

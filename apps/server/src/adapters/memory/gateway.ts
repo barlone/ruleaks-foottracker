@@ -33,7 +33,9 @@ export class MemoryGateway implements SearchGateway {
     else if (path.endsWith('comments.month_activity')) result = job({ years: fakeMonthActivity(query) });
     else if (path.endsWith('comments.week_activity')) result = job({ years: fakeWeekActivity(query) });
     else if (path.endsWith('comments.answers_to_him') || path.endsWith('comments.fulltext_search')) result = job({ users: fakeMultiUser(query) });
-    else if (path.includes('/tgcmnts/')) result = job(fakeOneUser(query, path.endsWith('comments.likes'), path.endsWith('comments.his_answers')));
+    // Как у шлюза: реакции сгруппированы по авторам сообщений, на которые реагировал пользователь.
+    else if (path.endsWith('comments.likes')) result = job({ users: fakeMultiUser(query, true) });
+    else if (path.includes('/tgcmnts/')) result = job(fakeOneUser(query, path.endsWith('comments.his_answers')));
     else return { state: 'failed', jobId: null, error: `Неизвестный путь ${path}` };
 
     this.jobs.set(jobId, { doneAt: Date.now() + HEAVY_DURATION_MS, result });
@@ -178,19 +180,19 @@ function gatewayTime(d: Date): string {
 /** «ДД.ММ.ГГГГ ЧЧ:ММ:СС» → «ГГГГММДДЧЧММСС» для сортировки. */
 const sortableTime = (s: string) => s.replace(/^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})$/, '$3$2$1$4$5$6');
 
-function fakeOneUser(tgid: string, likes: boolean, answers: boolean) {
+function fakeOneUser(tgid: string, answers: boolean) {
   const h = hash(tgid);
-  return { groups: GROUPS, comments: fakeComments(h, Number(tgid) || 0, answers ? 5 : 9, likes) };
+  return { groups: GROUPS, comments: fakeComments(h, Number(tgid) || 0, answers ? 5 : 9, false) };
 }
 
-function fakeMultiUser(query: string): TgUserMsgs[] {
+function fakeMultiUser(query: string, likes = false): TgUserMsgs[] {
   const h = hash(query);
   return Array.from({ length: 3 }, (_, i) => {
     const id = 100000000 + ((h >>> i) % 900000000);
     return {
       user: { id, names: [fakeName(h + i)], niks: [['ensk_watcher', 'auto_lover', 'market_guy'][i]!] },
       groups: GROUPS,
-      comments: fakeComments(h + i * 11, id, 2 + i, false),
+      comments: fakeComments(h + i * 11, id, 2 + i, likes),
     };
   });
 }

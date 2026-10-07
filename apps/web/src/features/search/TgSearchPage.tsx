@@ -34,6 +34,13 @@ export function TgSearchPage() {
     },
   });
   const job = useSearchJob(jobId);
+  // Открыли поиск из истории — вкладка режима и поле запроса как у него.
+  const shownJob = job.data;
+  useEffect(() => {
+    if (!shownJob) return;
+    if (findTgMode(shownJob.kind)) setMode(shownJob.kind as TgModeId);
+    setValue(shownJob.query);
+  }, [shownJob?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function run(m: TgModeId = mode, v = value) {
     if (!v.trim()) return;
@@ -185,8 +192,19 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
     body = <CommentList comments={comments} groups={(res.groups as TgGroup[] | undefined) ?? []} selected={new Set(posts.keys())} onToggle={(c) => toggleComment(c, (res.groups as TgGroup[]) ?? [])} />;
   } else if (mode.result === 'multi') {
     const list = (res.users as TgUserMsgs[] | undefined) ?? [];
-    summary = `${list.length} польз., ${list.reduce((s, u) => s + (u.comments?.length ?? 0), 0)} сообщ.`;
+    const msgs = list.reduce((s, u) => s + (u.comments?.length ?? 0), 0);
+    if (job.kind === 'likes') {
+      // Реакции: карточки — авторы сообщений, на которые реагировал пользователь.
+      const n = list.reduce((s, u) => s + (u.comments ?? []).reduce((k, c) => k + (c.likes?.length ?? 0), 0), 0);
+      summary = `${n} реакц. · ${msgs} сообщ. · ${list.length} авт.`;
+    } else {
+      summary = `${list.length} польз., ${msgs} сообщ.`;
+    }
     body = (
+      <>
+      {job.kind === 'likes' && list.length > 0 && (
+        <p className="font-mono text-xs text-dim">Сообщения, на которые пользователь поставил реакции, — по авторам сообщений.</p>
+      )}
       <MultiUserList
         users={list}
         selected={new Set(posts.keys())}
@@ -195,6 +213,7 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
         picked={new Set(users.keys())}
         onPickUser={pickUser}
       />
+      </>
     );
   } else if (mode.result === 'month') {
     summary = 'активность по месяцам';

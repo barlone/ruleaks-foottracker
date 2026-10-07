@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { ImagePlus, Plus, Star, User, Users } from 'lucide-react';
+import { ClipboardPaste, ImagePlus, Plus, Star, User, Users } from 'lucide-react';
 import { newId, type DossierItem } from '@ft/shared';
 import { Button, ConfirmDeleteBtn, Dialog, Empty, FilePicker, Input } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
@@ -129,6 +129,47 @@ function PhotosDialog({
       setUrl('');
     });
 
+  /** Файлы-изображения (выбранные, вставленные из буфера) → фото досье. */
+  async function addFiles(files: File[], caption?: (f: File) => string | undefined) {
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    if (!images.length) return;
+    try {
+      await addPhotos(await Promise.all(images.map(async (f) => ({ url: await toDataUrl(f), caption: caption ? caption(f) : f.name }))));
+    } catch {
+      toast('Не удалось прочитать изображение', 'error');
+    }
+  }
+  // Скриншот или скопированная картинка не имеют осмысленного имени файла («image.png») — подписи нет.
+  const fromClipboard = (files: File[]) => addFiles(files, () => undefined);
+
+  // Ctrl+V при открытом окне: изображение из буфера сразу добавляется. Текст (ссылка в поле) вставляется как обычно.
+  useEffect(() => {
+    if (!open || !editable) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+      if (!files.length || busy) return;
+      e.preventDefault();
+      void fromClipboard(files);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }); // каждый рендер — чтобы обработчик видел актуальные busy/coverUrl
+
+  /** Кнопка «Вставить из буфера»: Clipboard API (браузер может спросить разрешение). */
+  async function pasteButton() {
+    try {
+      const files: File[] = [];
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (type) files.push(new File([await item.getType(type)], 'clipboard', { type }));
+      }
+      if (files.length) await fromClipboard(files);
+      else toast('В буфере обмена нет изображения', 'error');
+    } catch {
+      toast('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне', 'error');
+    }
+  }
+
   const setMain = (u: string) =>
     run(async () => {
       const d = await utils.dossiers.get.fetch({ id: dossierId });
@@ -146,7 +187,7 @@ function PhotosDialog({
     });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Фото" wide>
+    <Dialog open={open} onOpenChange={onOpenChange} title="Фото" width="max-w-[55rem]">
       <div className="space-y-4">
         {photos.length === 0 ? (
           <Empty>Фото нет</Empty>
@@ -183,19 +224,21 @@ function PhotosDialog({
             <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-dim">
               <ImagePlus size={13} className="text-mint" /> Добавить фото
             </div>
-            <FilePicker
-              accept="image/*"
-              multiple
-              disabled={busy}
-              onFiles={async (files) => {
-                if (!files.length) return;
-                try {
-                  void addPhotos(await Promise.all(files.map(async (f) => ({ url: await toDataUrl(f), caption: f.name }))));
-                } catch {
-                  toast('Не удалось прочитать изображение', 'error');
-                }
-              }}
-            />
+            {/* Файлы и буфер обмена — в одну строку. */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <FilePicker
+                accept="image/*"
+                multiple
+                disabled={busy}
+                onFiles={(files) => void addFiles(files)}
+              />
+              <div className="flex items-center gap-3">
+                <Button type="button" size="sm" disabled={busy} onClick={() => void pasteButton()}>
+                  <ClipboardPaste size={13} /> Вставить из буфера
+                </Button>
+                <span className="text-sm text-dim">или <kbd className="rounded border border-line px-1 font-mono text-xs text-text">Ctrl+V</kbd> в этом окне</span>
+              </div>
+            </div>
             <form
               className="flex gap-2"
               onSubmit={(e) => {
@@ -207,7 +250,8 @@ function PhotosDialog({
               <Button type="submit" size="sm" disabled={!url.trim() || busy}><Plus size={13} /> Добавить</Button>
             </form>
             <p className="font-mono text-[10px] text-mute">
-              Можно выбрать несколько файлов сразу; большие изображения уменьшаются до 1600 px. Первое фото становится основным.
+              Можно выбрать несколько файлов сразу или вставить скриншот / скопированную картинку из буфера обмена;
+              большие изображения уменьшаются до 1600 px. Первое фото становится основным.
             </p>
           </div>
         )}

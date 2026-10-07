@@ -374,7 +374,9 @@ export interface TgMode {
 
 export const TG_MODES = [
   { id: 'comments', label: 'Комментарии', path: tg('comments.get'), input: 'user', result: 'comments', hint: 'Комментарии пользователя в группах и каналах' },
-  { id: 'likes', label: 'Реакции', path: tg('comments.likes'), input: 'user', result: 'comments', hint: 'Реакции пользователя на чужие сообщения' },
+  // comments.likes отвечает как многопользовательский поиск: users[] — авторы сообщений, на которые реагировал
+  // пользователь, у каждого сообщения с массивом likes (его реакции).
+  { id: 'likes', label: 'Реакции', path: tg('comments.likes'), input: 'user', result: 'multi', hint: 'Реакции пользователя на чужие сообщения' },
   { id: 'his_answers', label: 'Ответы пользователя', path: tg('comments.his_answers'), input: 'user', result: 'comments', hint: 'Ответы пользователя на чужие сообщения' },
   { id: 'answers_to_him', label: 'Ответы пользователю', path: tg('comments.answers_to_him'), input: 'user', result: 'multi', hint: 'Кто и что отвечал пользователю' },
   { id: 'month_activity', label: 'Активность по месяцам', path: tg('comments.month_activity'), input: 'user', result: 'month', hint: 'Число комментариев по месяцам' },

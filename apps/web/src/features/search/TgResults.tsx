@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { Check, CornerDownRight, ExternalLink, MessagesSquare, Search as SearchIcon, User } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, CornerDownRight, ExternalLink, MessagesSquare, Search as SearchIcon, User } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { WEEK_DAYS, highlightParts, tgTimeToIso, type FtHighlight, type TgComment, type TgGroup, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity } from '@ft/shared';
 import type { PendingPost } from './AddToDossierDialog.tsx';
@@ -46,8 +46,63 @@ function MessageText({ text, highlight }: { text: string; highlight?: FtHighligh
   );
 }
 
+/** Сообщений на страницу в результатах поиска по Telegram. */
+export const TG_PAGE_SIZE = 300;
+
+/**
+ * Номер страницы для списка: при смене списка (новый поиск, другой фильтр) — снова первая;
+ * при переходе — прокрутка к началу списка (anchor).
+ */
+function usePaging(total: number, resetKey: unknown) {
+  const [page, setPage] = useState(0);
+  const anchor = useRef<HTMLDivElement>(null);
+  useEffect(() => setPage(0), [resetKey]);
+  const pages = Math.max(1, Math.ceil(total / TG_PAGE_SIZE));
+  const current = Math.min(page, pages - 1);
+  const go = (p: number) => {
+    setPage(p);
+    anchor.current?.scrollIntoView({ block: 'start' });
+  };
+  return { page: current, pages, go, anchor, from: current * TG_PAGE_SIZE, to: Math.min(total, (current + 1) * TG_PAGE_SIZE) };
+}
+
+/** Переключатель страниц: ‹ 1 2 … 7 › и «301–600 из 1234». */
+function Pager({ page, pages, total, from, to, go }: { page: number; pages: number; total: number; from: number; to: number; go: (p: number) => void }) {
+  if (pages <= 1) return null;
+  // Номера: первая, последняя и соседние с текущей; пропуски — «…».
+  const nums = [...new Set([0, page - 1, page, page + 1, pages - 1])].filter((p) => p >= 0 && p < pages).sort((a, b) => a - b);
+  const btn = (p: number, label: React.ReactNode, title?: string) => (
+    <button
+      key={`${p}-${String(title)}`}
+      type="button"
+      disabled={p === page || p < 0 || p >= pages}
+      onClick={() => go(p)}
+      title={title}
+      className={clsx(
+        'grid h-7 min-w-7 cursor-pointer place-items-center rounded-md px-1.5 font-mono text-xs transition disabled:cursor-default',
+        p === page ? 'bg-mint font-bold text-mint-ink' : 'text-dim hover:bg-mint/10 hover:text-mint disabled:opacity-30 disabled:hover:bg-transparent',
+      )}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <nav className="flex flex-wrap items-center gap-1 rounded-xl border border-line-soft bg-panel px-2 py-1.5">
+      {btn(page - 1, <ChevronLeft size={14} />, 'Предыдущая страница')}
+      {nums.map((p, i) => (
+        <span key={p} className="flex items-center gap-1">
+          {i > 0 && p - nums[i - 1]! > 1 && <span className="px-0.5 font-mono text-xs text-mute">…</span>}
+          {btn(p, p + 1)}
+        </span>
+      ))}
+      {btn(page + 1, <ChevronRight size={14} />, 'Следующая страница')}
+      <span className="ml-2 font-mono text-[11px] text-mute">{from + 1}–{to} из {total}</span>
+    </nav>
+  );
+}
+
 export function CommentList({
-  comments, groups, selected, onToggle, highlight,
+  comments, groups, selected, onToggle, highlight, paginate = true,
 }: {
   comments: TgComment[];
   groups: TgGroup[];
@@ -55,6 +110,8 @@ export function CommentList({
   onToggle: (c: TgComment) => void;
   /** Полнотекстовый поиск: что подсвечивать. */
   highlight?: FtHighlight;
+  /** Свои страницы по TG_PAGE_SIZE; в многопользовательском списке страницы общие (MultiUserList). */
+  paginate?: boolean;
 }) {
   const byId = useMemo(() => new Map(groups.map((g) => [g.grp_id, g])), [groups]);
   const [group, setGroup] = useState<number | null>(null);
@@ -63,11 +120,14 @@ export function CommentList({
     for (const c of comments) m.set(c.grp_id, (m.get(c.grp_id) ?? 0) + 1);
     return m;
   }, [comments]);
-  const shown = group ? comments.filter((c) => c.grp_id === group) : comments;
+  const filtered = group ? comments.filter((c) => c.grp_id === group) : comments;
+  const paging = usePaging(paginate ? filtered.length : 0, `${group}:${comments.length}:${comments[0]?.msg_id ?? ''}`);
+  const shown = paginate ? filtered.slice(paging.from, paging.to) : filtered;
+  const pager = paginate && <Pager {...paging} total={filtered.length} />;
 
   if (!comments.length) return <Empty>Комментариев не найдено</Empty>;
   return (
-    <div className="space-y-3">
+    <div ref={paging.anchor} className="scroll-mt-16 space-y-3">
       <div className="flex flex-wrap gap-1.5">
         <button onClick={() => setGroup(null)} className={clsx('cursor-pointer rounded-md px-2 py-1 font-mono text-xs', !group ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint')}>
           все · {comments.length}
@@ -78,6 +138,7 @@ export function CommentList({
           </button>
         ))}
       </div>
+      {pager}
       {shown.map((c) => {
         const g = byId.get(c.grp_id);
         const on = selected.has(ckey(c));
@@ -130,6 +191,7 @@ export function CommentList({
           </article>
         );
       })}
+      {pager}
     </div>
   );
 }
@@ -145,10 +207,28 @@ export function MultiUserList({
   picked: Set<string>;
   onPickUser: (tgid: string, label: string) => void;
 }) {
+  // Страница — ровно TG_PAGE_SIZE сообщений подряд; автор, чьи сообщения не уместились, продолжается на следующей.
+  const total = useMemo(() => users.reduce((s, u) => s + (u.comments?.length ?? 0), 0), [users]);
+  const paging = usePaging(total, users);
+  const pageUsers = useMemo(() => {
+    const out: TgUserMsgs[] = [];
+    let pos = 0;
+    for (const u of users) {
+      const list = u.comments ?? [];
+      const a = Math.max(paging.from - pos, 0);
+      const b = Math.min(paging.to - pos, list.length);
+      if (b > a) out.push({ ...u, comments: list.slice(a, b) });
+      pos += list.length;
+      if (pos >= paging.to) break;
+    }
+    return out;
+  }, [users, paging.from, paging.to]);
   if (!users.length) return <Empty>Ничего не найдено</Empty>;
+  const pager = <Pager {...paging} total={total} />;
   return (
-    <div className="space-y-4">
-      {users.map((u, i) => {
+    <div ref={paging.anchor} className="scroll-mt-16 space-y-4">
+      {pager}
+      {pageUsers.map((u, i) => {
         const id = String(u.user?.id ?? '');
         const name = u.user?.names?.[0];
         const nik = u.user?.niks?.[0];
@@ -176,10 +256,18 @@ export function MultiUserList({
               </>
             }
           >
-            <CommentList comments={u.comments ?? []} groups={u.groups ?? []} selected={selected} onToggle={(c) => onToggle(c, u.groups ?? [], u.user)} highlight={highlight} />
+            <CommentList
+              comments={u.comments ?? []}
+              groups={u.groups ?? []}
+              selected={selected}
+              onToggle={(c) => onToggle(c, u.groups ?? [], u.user)}
+              highlight={highlight}
+              paginate={false}
+            />
           </Card>
         );
       })}
+      {pager}
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  ExportRequest, Fact, GraphEdge, GraphNode, Hypothesis, InvestigationVisibility, ShareRole, newId, type Investigation,
+  ExportRequest, Fact, PdfRequest, GraphEdge, GraphNode, Hypothesis, InvestigationVisibility, ShareRole, newId, type Investigation,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { exportInvestigation } from '../export/build.ts';
+import { investigationPdf } from '../pdf/report.ts';
 import { activeProcedure, authedProcedure, publicProcedure, router, type Ctx } from '../trpc.ts';
 import { TagIds, checkTagIds } from './tags.ts';
 
@@ -127,6 +128,12 @@ export const investigationsRouter = router({
   exportFile: authedProcedure.input(ExportRequest).mutation(async ({ ctx, input }) => {
     const inv = await load(ctx, input.id, 'read');
     return exportInvestigation(ctx.deps, ctx.user.id, inv, input);
+  }),
+
+  /** PDF-отчёт (base64): досье узлов — только те, что пользователь может читать. */
+  exportPdf: authedProcedure.input(PdfRequest).mutation(async ({ ctx, input }) => {
+    const inv = await load(ctx, input.id, 'read');
+    return investigationPdf(ctx.deps, ctx.user.id, inv, input);
   }),
 
   remove: activeProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {

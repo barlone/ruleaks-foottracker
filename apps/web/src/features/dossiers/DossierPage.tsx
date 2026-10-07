@@ -81,7 +81,7 @@ export function DossierPage() {
   const [editTitle, setEditTitle] = useState<string | null>(null);
   const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'media' | 'note' | 'post'>(null);
   const [sharing, setSharing] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<'file' | 'pdf' | null>(null);
 
   if (q.isLoading) return <div className="grid h-64 place-items-center"><Spinner /></div>;
   if (q.error || !q.data) return <div className="p-6"><Empty>{errorText(q.error)}</Empty></div>;
@@ -106,7 +106,8 @@ export function DossierPage() {
           isOwner={d.role === 'owner'}
           onShare={() => setSharing(true)}
           onDelete={() => remove.mutate({ id })}
-          onExportFile={() => setExporting(true)}
+          onExportFile={() => setExporting('file')}
+          onExportPdf={() => setExporting('pdf')}
         />
       </div>
 
@@ -317,7 +318,7 @@ export function DossierPage() {
 
       <AddItemDialog kind={adding} onClose={() => setAdding(null)} onAdd={add} />
 
-      <ExportDialog kind="dossier" id={id} open={exporting} onOpenChange={setExporting} />
+      <ExportDialog kind="dossier" format={exporting ?? 'file'} id={id} open={!!exporting} onOpenChange={(v) => !v && setExporting(null)} />
 
       <ShareDialog
         open={sharing}

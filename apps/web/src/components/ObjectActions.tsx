@@ -16,7 +16,6 @@ export function ObjectActions({
   size?: 'sm' | 'md';
   onShare: () => void;
   onDelete: () => void;
-  /** Экспорт в PDF пока не написан. */
   onExportFile?: () => void;
   onExportPdf?: () => void;
 }) {

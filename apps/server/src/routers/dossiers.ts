@@ -1,11 +1,12 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  AttributeItem, DossierItem, DossierKind, DossierVisibility, ExportRequest, LinkItem, MediaItem, NoteItem, PostItem, ShareRole,
+  AttributeItem, DossierItem, DossierKind, DossierVisibility, ExportRequest, LinkItem, PdfRequest, MediaItem, NoteItem, PostItem, ShareRole,
   SnapshotItem, newId, type Dossier,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { exportDossier } from '../export/build.ts';
+import { dossierPdf } from '../pdf/report.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 import { TagIds, checkTagIds } from './tags.ts';
 
@@ -139,6 +140,12 @@ export const dossiersRouter = router({
   exportFile: authedProcedure.input(ExportRequest).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'read');
     return exportDossier(ctx.deps, ctx.user.id, d, input);
+  }),
+
+  /** PDF-отчёт (base64); пароль — шифрование самого PDF. */
+  exportPdf: authedProcedure.input(PdfRequest).mutation(async ({ ctx, input }) => {
+    const d = await load(ctx, input.id, 'read');
+    return dossierPdf(ctx.deps, ctx.user.id, d, input);
   }),
 
   remove: activeProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {

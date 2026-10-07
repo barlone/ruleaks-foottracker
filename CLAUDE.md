@@ -147,6 +147,14 @@ matches objects by `uid` among the importer's own live objects and fully overwri
 repos; the dialog lists them first), otherwise creates private copies with that `uid`. tRPC reserves procedure names
 like `apply`/`call`. Details: ARCHITECTURE.md §7.1.
 
+### PDF report
+
+`dossiers.exportPdf` / `investigations.exportPdf` (authed, read access) → `apps/server/src/pdf/report.ts`: pdfmake with
+the Roboto TTFs shipped in the `pdfmake` package (loaded via `createRequire` — the CJS module exports an instance, so
+ESM named imports don't work), `pdf/markdown.ts` (marked lexer → pdfmake blocks), `pdf/graph.ts` (graph as SVG from
+saved node positions). pdfmake's URL and local-file access is locked down; only data-URL JPEG/PNG/SVG images render.
+Optional password = native PDF AES-256 encryption. The web uses the same `ExportDialog` with `format="pdf"`.
+
 ### Search (bot parity)
 
 Three sections mirror the bot's menu: `attr` (`/search`, `/deepsearch`), `tg` (`/tgsearch`, Telegram comments

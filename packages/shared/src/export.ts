@@ -215,3 +215,29 @@ export type ExportInvestigation = z.infer<typeof ExportInvestigation>;
 export type ExportSearch = z.infer<typeof ExportSearch>;
 export type ExportMeta = z.infer<typeof ExportMeta>;
 export type ExportRequest = z.infer<typeof ExportRequest>;
+
+// ---------- PDF-отчёт ----------
+// Не формат обмена, а документ для чтения: собирает сервер (pdfmake), пароль — штатное шифрование PDF (AES-256);
+// без пароля PDF не шифруется.
+
+export const PdfOptions = z.object({
+  /** Фото персоны и изображения из «Медиа» и заметок. */
+  photos: z.boolean(),
+  /** Связанные досье отдельными разделами: у досье — участники и связанные персоны, у расследования — досье узлов. */
+  related: z.boolean(),
+  /** Источники сведений и их оценка (система Адмиралтейства). */
+  sources: z.boolean(),
+});
+
+export const PdfRequest = z.object({
+  id: z.string(),
+  author: z.string().trim().max(256),
+  note: z.string().trim().max(4000),
+  password: z.string().max(256),
+  options: PdfOptions,
+  /** Часовой пояс читателя (IANA) — в нём даты в отчёте; неизвестный — UTC. */
+  timeZone: z.string().max(64).default('UTC'),
+});
+
+export type PdfOptions = z.infer<typeof PdfOptions>;
+export type PdfRequest = z.infer<typeof PdfRequest>;

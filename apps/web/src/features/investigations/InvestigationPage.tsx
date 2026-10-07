@@ -44,7 +44,7 @@ export function InvestigationPage() {
   const unshare = trpc.investigations.unshare.useMutation(onDone);
   const remove = trpc.investigations.remove.useMutation({ onSuccess: () => navigate({ to: '/investigations' }) });
   const [sharing, setSharing] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<'file' | 'pdf' | null>(null);
   const [editDesc, setEditDesc] = useState<string | null>(null);
   const [showDesc, setShowDesc] = useState(false);
 
@@ -71,7 +71,8 @@ export function InvestigationPage() {
             onShare={() => setSharing(true)}
             onDelete={() => remove.mutate({ id })}
             // Публичное расследование без входа экспортировать нельзя.
-            onExportFile={me.data ? () => setExporting(true) : undefined}
+            onExportFile={me.data ? () => setExporting('file') : undefined}
+            onExportPdf={me.data ? () => setExporting('pdf') : undefined}
           />
         </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -155,7 +156,9 @@ export function InvestigationPage() {
         onUnshare={(userId) => unshare.mutate({ id, userId })}
         error={share.error ? errorText(share.error) : null}
       />
-      {me.data && <ExportDialog kind="investigation" id={id} open={exporting} onOpenChange={setExporting} />}
+      {me.data && (
+        <ExportDialog kind="investigation" format={exporting ?? 'file'} id={id} open={!!exporting} onOpenChange={(v) => !v && setExporting(null)} />
+      )}
     </div>
   );
 }

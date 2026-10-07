@@ -262,14 +262,15 @@ class Builder {
       await writer.add(m.file, new Uint8ArrayReader(m.bytes), { ...enc, level: STORED.has(m.mime) ? 0 : 6 });
     }
     const bytes = await writer.close();
-    return { fileName: fileName(root.title, root.type), data: Buffer.from(bytes).toString('base64') };
+    return { fileName: exportFileName(root.title, root.type), data: Buffer.from(bytes).toString('base64') };
   }
 }
 
-function fileName(title: string, type: 'dossier' | 'investigation'): string {
+/** Имя скачиваемого файла: «Название ГГГГ-ММ-ДД.ftx» (для PDF — .pdf). */
+export function exportFileName(title: string, type: 'dossier' | 'investigation', ext: string = EXPORT_EXTENSION): string {
   // eslint-disable-next-line no-control-regex
   const safe = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || (type === 'dossier' ? 'досье' : 'расследование');
-  return `${safe} ${new Date().toISOString().slice(0, 10)}.${EXPORT_EXTENSION}`;
+  return `${safe} ${new Date().toISOString().slice(0, 10)}.${ext}`;
 }
 
 /** Досье + участники группы + связанные персоны (полностью, один уровень). */

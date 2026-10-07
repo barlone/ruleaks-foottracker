@@ -32,10 +32,13 @@ export class MemoryGateway implements SearchGateway {
     else if (path.includes('regexp_search')) result = job({ results: fakeFuzzy(query, path.includes('plates'), params.vehicpart) });
     else if (path.endsWith('comments.month_activity')) result = job({ years: fakeMonthActivity(query) });
     else if (path.endsWith('comments.week_activity')) result = job({ years: fakeWeekActivity(query) });
-    else if (path.endsWith('comments.answers_to_him') || path.endsWith('comments.fulltext_search')) result = job({ users: fakeMultiUser(query) });
+    // Шлюз: одиночный ответ (groups + comments) — только у comments.get, остальные — users[].
+    else if (path.endsWith('comments.answers_to_him') || path.endsWith('comments.fulltext_search') || path.endsWith('comments.his_answers')) {
+      result = job({ users: fakeMultiUser(query) });
+    }
     // Как у шлюза: реакции сгруппированы по авторам сообщений, на которые реагировал пользователь.
     else if (path.endsWith('comments.likes')) result = job({ users: fakeMultiUser(query, true) });
-    else if (path.includes('/tgcmnts/')) result = job(fakeOneUser(query, path.endsWith('comments.his_answers')));
+    else if (path.includes('/tgcmnts/')) result = job(fakeOneUser(query));
     else return { state: 'failed', jobId: null, error: `Неизвестный путь ${path}` };
 
     this.jobs.set(jobId, { doneAt: Date.now() + HEAVY_DURATION_MS, result });
@@ -180,9 +183,9 @@ function gatewayTime(d: Date): string {
 /** «ДД.ММ.ГГГГ ЧЧ:ММ:СС» → «ГГГГММДДЧЧММСС» для сортировки. */
 const sortableTime = (s: string) => s.replace(/^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})$/, '$3$2$1$4$5$6');
 
-function fakeOneUser(tgid: string, answers: boolean) {
+function fakeOneUser(tgid: string) {
   const h = hash(tgid);
-  return { groups: GROUPS, comments: fakeComments(h, Number(tgid) || 0, answers ? 5 : 9, false) };
+  return { groups: GROUPS, comments: fakeComments(h, Number(tgid) || 0, 9, false) };
 }
 
 function fakeMultiUser(query: string, likes = false): TgUserMsgs[] {

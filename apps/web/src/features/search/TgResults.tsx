@@ -82,7 +82,6 @@ export function CommentList({
                 <span>
                   {fmtUtc(c.dt)} <span className="text-mute/70">(UTC)</span>
                 </span>
-                {c.likes?.map((l, i) => <span key={i} title={`реакция ${fmtUtc(l.at)} (UTC)`}>{l.emoji}</span>)}
                 <a href={c.url} target="_blank" rel="noreferrer noopener" className="ml-auto inline-flex items-center gap-1 hover:text-mint">
                   #{c.msg_id} <ExternalLink size={11} />
                 </a>
@@ -93,6 +92,26 @@ export function CommentList({
                 </div>
               )}
               <div className="whitespace-pre-wrap text-sm">{c.text}</div>
+              {/* Реакции — под сообщением, как в отчёте бота (template_tglikes.html): эмодзи вдвое крупнее текста
+                  сообщения и время реакции (UTC). */}
+              {!!c.likes?.length && (
+                <div className="mt-3 border-t border-dashed border-line pt-2.5">
+                  <div className="mb-1.5 font-mono text-[11px] text-mute">Реакции ({c.likes.length}):</div>
+                  <div className="flex flex-wrap gap-2">
+                    {c.likes.map((l, i) => (
+                      <span key={i} className="inline-flex items-center gap-2 rounded-lg border border-line-soft bg-bg-soft px-2.5 py-0.5">
+                        {/* Глиф эмодзи стоит на базовой линии — приподнимаем, чтобы был по центру рядом со временем. */}
+                        <span className="-translate-y-[0.06em] text-[1.75rem] leading-none">{l.emoji}</span>
+                        {l.at && (
+                          <span className="whitespace-nowrap font-mono text-xs text-dim">
+                            {fmtUtc(l.at)} <span className="text-mute">(UTC)</span>
+                          </span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </article>
         );

@@ -3,11 +3,12 @@ import { z } from 'zod';
 import {
   FUZZY_MODE_IDS, SEARCH_KINDS, SearchSectionSchema, TG_MODE_IDS,
   checkFulltext, checkMask, detectKind, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
-  type LeakCard, type SearchJob, type SearchSection,
+  TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import type { GatewayAnswer } from '../ports.ts';
 import { appConfig } from '../config.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
+import { tgSearchPdf } from '../pdf/tgReport.ts';
 
 // Сайт — посредник между браузером и шлюзом: токен пользователя не покидает сервер,
 // опрос job.results ведёт сервер, а результат сохраняется снимком (у шлюза он живёт минуты).
@@ -205,4 +206,12 @@ export const searchRouter = router({
   clearHistory: authedProcedure
     .input(z.object({ section: SearchSectionSchema }))
     .mutation(({ ctx, input }) => ctx.deps.searches.clear(ctx.user.id, input.section)),
+
+  /** PDF-отчёт по своему завершённому поиску в Telegram (из сохранённого снимка — шлюз не вызывается). */
+  exportTgPdf: authedProcedure.input(TgPdfRequest).mutation(async ({ ctx, input }) => {
+    const job = await ctx.deps.searches.get(input.jobId, ctx.user.id);
+    if (!job || job.section !== 'tg') throw new TRPCError({ code: 'NOT_FOUND' });
+    if (job.state !== 'done') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Поиск ещё не завершён' });
+    return tgSearchPdf(ctx.deps, ctx.user.id, job, input);
+  }),
 });

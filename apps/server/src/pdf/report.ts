@@ -8,6 +8,7 @@ import {
 import { can } from '../authz.ts';
 import { exportFileName } from '../export/build.ts';
 import type { Deps } from '../ports.ts';
+import { EMOJI_DIR, EMOJI_FONT, emojiFontDef } from './emoji.ts';
 import { graphSvg } from './graph.ts';
 import { clean, markdownToPdf, type MdContext } from './markdown.ts';
 
@@ -21,9 +22,9 @@ const require = createRequire(import.meta.url);
 const pdfmake = require('pdfmake') as typeof import('pdfmake');
 const ROBOTO = (require('pdfmake/fonts/Roboto.js') as TFontDictionary).Roboto!;
 const FONT_DIR = resolve(dirname(String(ROBOTO.normal)));
-pdfmake.addFonts({ Roboto: ROBOTO });
+pdfmake.addFonts({ Roboto: ROBOTO, [EMOJI_FONT]: emojiFontDef });
 pdfmake.setUrlAccessPolicy(() => false);
-pdfmake.setLocalAccessPolicy((p) => resolve(p).startsWith(FONT_DIR));
+pdfmake.setLocalAccessPolicy((p) => resolve(p).startsWith(FONT_DIR) || resolve(p).startsWith(EMOJI_DIR));
 
 const APP = 'RuLeaks.Следопыт';
 const MINT = '#0f7a5c';
@@ -51,7 +52,7 @@ const tableSection = (title: string, widths: (string | number)[], header: string
 });
 
 /** Отчёт в работе: что можно читать, какие досье стали разделами, форматирование дат. */
-class Report {
+export class Report {
   /** Досье, вошедшие в отчёт отдельными разделами (на них ведут ссылки). */
   sections = new Set<string>();
   /** Досье, которые пользователь может читать: название для ссылок и списков. */
@@ -329,13 +330,21 @@ class Report {
 
   // ---------- Документ ----------
 
-  async render(title: string, kind: 'dossier' | 'investigation', body: Content[]): Promise<{ fileName: string; data: string }> {
+  /** extra — дополнительные строки шапки (у отчёта поиска: запрос, пользователь, итог). */
+  async render(
+    title: string,
+    kind: 'dossier' | 'investigation' | 'search',
+    body: Content[],
+    extra: [string, Content][] = [],
+  ): Promise<{ fileName: string; data: string }> {
     const { author, note, password } = this.req;
+    const label = { dossier: 'досье', investigation: 'расследование', search: 'поиск в Telegram' }[kind];
     const meta: Content = {
       table: {
         widths: [80, '*'],
         body: [
-          [{ text: 'Отчёт', style: 'th' }, { text: `${kind === 'dossier' ? 'досье' : 'расследование'} · ${APP}` }],
+          [{ text: 'Отчёт', style: 'th' }, { text: `${label} · ${APP}` }],
+          ...extra.map(([k, v]) => [{ text: k, style: 'th' }, v]),
           ...(author ? [[{ text: 'Автор', style: 'th' }, { text: clean(author) }]] : []),
           [{ text: 'Сформирован', style: 'th' }, { text: this.dateTime(new Date().toISOString()) }],
           ...(note ? [[{ text: 'Примечание', style: 'th' }, { text: clean(note) }]] : []),

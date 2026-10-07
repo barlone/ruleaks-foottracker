@@ -14,7 +14,7 @@ const NOUN = { dossier: 'досье', investigation: 'расследования
 /** У досье связанные — участники и связанные персоны, у расследования — досье узлов графа. */
 const RELATED = { dossier: 'Связанные персоны и участники группы — отдельными разделами', investigation: 'Досье персон из графа — отдельными разделами' } as const;
 
-function download(fileName: string, base64: string, type: string) {
+export function download(fileName: string, base64: string, type: string) {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   const url = URL.createObjectURL(new Blob([bytes], { type }));
   const a = document.createElement('a');

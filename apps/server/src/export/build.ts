@@ -267,9 +267,10 @@ class Builder {
 }
 
 /** Имя скачиваемого файла: «Название ГГГГ-ММ-ДД.ftx» (для PDF — .pdf). */
-export function exportFileName(title: string, type: 'dossier' | 'investigation', ext: string = EXPORT_EXTENSION): string {
+export function exportFileName(title: string, type: 'dossier' | 'investigation' | 'search', ext: string = EXPORT_EXTENSION): string {
+  const fallback = { dossier: 'досье', investigation: 'расследование', search: 'поиск' }[type];
   // eslint-disable-next-line no-control-regex
-  const safe = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || (type === 'dossier' ? 'досье' : 'расследование');
+  const safe = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || fallback;
   return `${safe} ${new Date().toISOString().slice(0, 10)}.${ext}`;
 }
 

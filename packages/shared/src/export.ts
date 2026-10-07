@@ -239,5 +239,20 @@ export const PdfRequest = z.object({
   timeZone: z.string().max(64).default('UTC'),
 });
 
+/** Больше сообщений в одном PDF-отчёте поиска не собираем: тысячи страниц pdfmake строит минутами. */
+export const TG_PDF_MAX = 5000;
+
+/** PDF-отчёт по результату поиска в Telegram (снимок search_jobs). */
+export const TgPdfRequest = z.object({
+  jobId: z.string(),
+  author: z.string().trim().max(256),
+  note: z.string().trim().max(4000),
+  password: z.string().max(256),
+  /** Только отмеченные сообщения — ключи «группа:сообщение»; нет — все. */
+  only: z.array(z.string().max(64)).max(50_000).optional(),
+  timeZone: z.string().max(64).default('UTC'),
+});
+
+export type TgPdfRequest = z.infer<typeof TgPdfRequest>;
 export type PdfOptions = z.infer<typeof PdfOptions>;
 export type PdfRequest = z.infer<typeof PdfRequest>;

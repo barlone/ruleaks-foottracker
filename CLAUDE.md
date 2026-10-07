@@ -154,6 +154,10 @@ the Roboto TTFs shipped in the `pdfmake` package (loaded via `createRequire` —
 ESM named imports don't work), `pdf/markdown.ts` (marked lexer → pdfmake blocks), `pdf/graph.ts` (graph as SVG from
 saved node positions). pdfmake's URL and local-file access is locked down; only data-URL JPEG/PNG/SVG images render.
 Optional password = native PDF AES-256 encryption. The web uses the same `ExportDialog` with `format="pdf"`.
+`search.exportTgPdf` (`pdf/tgReport.ts`) builds a report from a saved Telegram search snapshot (all or only the selected
+messages, at most `TG_PDF_MAX` = 5000), like the bot's HTML reports. Emoji render with monochrome Noto Emoji
+(`@fontsource/noto-emoji`, the WOFF file — pdfkit fails on WOFF2) via `pdf/emoji.ts`; the dossier report's `clean()`
+strips emoji instead. Keep messages longer than a page breakable: an `unbreakable` block taller than a page is lost.
 
 ### Search (bot parity)
 

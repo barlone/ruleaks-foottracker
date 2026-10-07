@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { AtSign, Send, UserRound } from 'lucide-react';
+import { AtSign, FileText, Send, UserRound } from 'lucide-react';
 import {
   TG_MODES, checkFulltext, findTgMode, fulltextHighlight, parseTgUser,
   type TgComment, type TgGroup, type TgModeId, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity,
@@ -10,6 +10,7 @@ import { Button, Card, Empty, Input, Spinner, Tag } from '../../components/ui.ts
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { tgSearchRoute } from '../../router.tsx';
+import { TgPdfDialog } from './TgPdfDialog.tsx';
 import { AddToDossierDialog, type PendingPost, type PendingValue } from './AddToDossierDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
 import { CommentList, MonthActivity, MultiUserList, WeekActivity, ckey, commentToPost } from './TgResults.tsx';
@@ -176,6 +177,7 @@ const TgJobView = memo(function TgJobView({ job, loading, onRun }: { job: Job | 
   const [posts, setPosts] = useState<Map<string, PendingPost>>(new Map());
   const [users, setUsers] = useState<Map<string, string>>(new Map());
   const [dialog, setDialog] = useState(false);
+  const [pdfOpen, setPdfOpen] = useState(false);
   useEffect(() => {
     setPosts(new Map());
     setUsers(new Map());
@@ -231,13 +233,17 @@ const TgJobView = memo(function TgJobView({ job, loading, onRun }: { job: Job | 
 
   let body;
   let summary = '';
+  /** Сообщений в результате — для окна PDF; у активности их нет. */
+  let total: number | null = null;
   if (mode.result === 'comments') {
     const comments = (res.comments as TgComment[] | undefined) ?? [];
+    total = comments.length;
     summary = `${comments.length} сообщ.${res.truncated ? ' (не все)' : ''}`;
     body = <CommentList comments={comments} groups={(res.groups as TgGroup[] | undefined) ?? []} selected={new Set(posts.keys())} onToggle={(c) => toggleComment(c, (res.groups as TgGroup[]) ?? [])} />;
   } else if (mode.result === 'multi') {
     const list = (res.users as TgUserMsgs[] | undefined) ?? [];
     const msgs = list.reduce((s, u) => s + (u.comments?.length ?? 0), 0);
+    total = msgs;
     if (job.kind === 'likes') {
       // Реакции: карточки — авторы сообщений, на которые реагировал пользователь.
       const n = list.reduce((s, u) => s + (u.comments ?? []).reduce((k, c) => k + (c.likes?.length ?? 0), 0), 0);
@@ -277,7 +283,17 @@ const TgJobView = memo(function TgJobView({ job, loading, onRun }: { job: Job | 
           {job.params.via && job.params.via !== 'id' && <> · найден по {job.params.via}</>}
         </div>
       )}
-      <ResultBar summary={summary} selected={posts.size + users.size} onAdd={() => setDialog(true)} />
+      <ResultBar
+        summary={summary}
+        selected={posts.size + users.size}
+        onAdd={() => setDialog(true)}
+        extra={
+          <Button size="sm" onClick={() => setPdfOpen(true)} title="Отчёт по результату поиска в PDF">
+            <FileText size={15} /> PDF
+          </Button>
+        }
+      />
+      <TgPdfDialog jobId={job.id} total={total} selected={[...posts.keys()]} open={pdfOpen} onOpenChange={setPdfOpen} />
       {body}
       <AddToDossierDialog
         open={dialog}

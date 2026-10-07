@@ -128,15 +128,27 @@ export function JobStatus({ job, loading }: { job: RouterOutputs['search']['job'
   return null;
 }
 
-export function ResultBar({ summary, selected, onAdd, label }: { summary: string; selected: number; onAdd: () => void; label?: string }) {
+export function ResultBar({
+  summary, selected, onAdd, label, extra,
+}: {
+  summary: string;
+  selected: number;
+  onAdd: () => void;
+  label?: string;
+  /** Кнопки справа от «Снимок в досье» (PDF в поиске по Telegram). */
+  extra?: ReactNode;
+}) {
   return (
     <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-xl border border-line bg-panel/95 px-4 py-2.5 backdrop-blur">
       <div className="font-mono text-xs text-dim">
         <span className="text-mint">{summary}</span> · отмечено: {selected}
       </div>
-      <Button variant="primary" size="sm" onClick={onAdd}>
-        <FolderPlus size={15} /> {label ?? (selected ? 'Отмеченное в досье' : 'Снимок в досье')}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button variant="primary" size="sm" onClick={onAdd}>
+          <FolderPlus size={15} /> {label ?? (selected ? 'Отмеченное в досье' : 'Снимок в досье')}
+        </Button>
+        {extra}
+      </div>
     </div>
   );
 }

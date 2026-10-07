@@ -382,7 +382,8 @@ export const TG_MODES = [
   { id: 'answers_to_him', label: 'Ответы пользователю', path: tg('comments.answers_to_him'), input: 'user', result: 'multi', hint: 'Кто и что отвечал пользователю' },
   { id: 'month_activity', label: 'Активность по месяцам', path: tg('comments.month_activity'), input: 'user', result: 'month', hint: 'Число комментариев по месяцам' },
   { id: 'week_activity', label: 'Активность по часам', path: tg('comments.week_activity'), input: 'user', result: 'week', hint: 'Распределение по дням недели и часам — помогает оценить часовой пояс и режим дня' },
-  { id: 'fulltext', label: 'Полнотекстовый поиск', path: tg('comments.fulltext_search'), input: 'text', result: 'multi', hint: 'Поиск по тексту комментариев. Операторы: & (и), | (или), скобки. Пример: (орлан | о-30) & краснополь' },
+  // Шлюз ищет через websearch_to_tsquery('russian', …) — синтаксис «как в поисковиках», не to_tsquery (см. tsquery.ts).
+  { id: 'fulltext', label: 'Полнотекстовый поиск', path: tg('comments.fulltext_search'), input: 'text', result: 'multi', hint: 'Поиск по тексту комментариев: слова через пробел — все сразу, or — любое из, -слово — исключить, "фраза в кавычках" — слова подряд; окончания не важны' },
 ] as const satisfies readonly TgMode[];
 
 export type TgModeId = (typeof TG_MODES)[number]['id'];

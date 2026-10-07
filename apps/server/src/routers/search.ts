@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   FUZZY_MODE_IDS, SEARCH_KINDS, SearchSectionSchema, TG_MODE_IDS,
-  checkMask, detectKind, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
+  checkFulltext, checkMask, detectKind, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
   type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import type { GatewayAnswer } from '../ports.ts';
@@ -165,6 +165,9 @@ export const searchRouter = router({
       const params: Record<string, string> = {};
       const extra: Record<string, string> = {};
       if (mode.input === 'text') {
+        // Заведомо пустой запрос (одни стоп-слова, одни исключения, меньше 3 букв) не тратит запрос к шлюзу.
+        const check = checkFulltext(input.value);
+        if (check.errors.length) throw new TRPCError({ code: 'BAD_REQUEST', message: check.errors[0]! });
         params.expression = input.value;
       } else {
         const who = await resolveTgUser(ctx, tok, input.value).catch((e: Error) => ({ error: e.message }));

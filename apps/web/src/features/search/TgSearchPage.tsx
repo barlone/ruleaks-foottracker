@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { AtSign, Send, UserRound } from 'lucide-react';
 import {
-  TG_MODES, findTgMode, parseTgUser,
+  TG_MODES, checkFulltext, findTgMode, parseTgUser,
   type TgComment, type TgGroup, type TgModeId, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity,
 } from '@ft/shared';
 import { Button, Card, Empty, Input, Spinner, Tag } from '../../components/ui.tsx';
@@ -53,6 +53,8 @@ export function TgSearchPage() {
   useRunOnMount(() => run(params.mode as TgModeId, params.q!), !!(params.q && params.mode && me.data?.access.active));
 
   const who = info.input === 'user' && value.trim() ? parseTgUser(value) : null;
+  // Полнотекстовый: как выражение поймёт PostgreSQL (websearch_to_tsquery) и что в нём не сработает.
+  const ft = info.input === 'text' && value.trim() ? checkFulltext(value) : null;
   const disabled = !me.data?.access.active;
 
   return (
@@ -96,12 +98,12 @@ export function TgSearchPage() {
                 autoFocus
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder={info.input === 'user' ? '1143789744 · @nickname · +7 916 123-45-67' : '(орлан | о-30 | о-10) & краснополь'}
+                placeholder={info.input === 'user' ? '1143789744 · @nickname · +7 916 123-45-67' : 'орлан краснополь or "беспилотник над городом" -продам'}
                 className="h-12 pl-10 font-mono text-base"
                 disabled={disabled}
               />
             </div>
-            <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !value.trim() || start.isPending || (info.input === 'user' && !who)}>
+            <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !value.trim() || start.isPending || (info.input === 'user' && !who) || !!ft?.errors.length}>
               {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
             </Button>
           </div>
@@ -116,6 +118,18 @@ export function TgSearchPage() {
             )}
             {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
           </div>
+          {ft && (
+            <div className="space-y-1.5 rounded-lg border border-line-soft bg-bg-soft px-3 py-2">
+              {ft.explain && (
+                <div className="text-sm">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-mute">PostgreSQL поймёт так: </span>
+                  <span className="font-mono text-mint">{ft.explain}</span>
+                </div>
+              )}
+              {ft.errors.map((e) => <div key={e} className="text-sm text-danger">✕ {e}</div>)}
+              {ft.warnings.map((w) => <div key={w} className="text-sm text-warn">⚠ {w}</div>)}
+            </div>
+          )}
         </form>
       </Card>
 

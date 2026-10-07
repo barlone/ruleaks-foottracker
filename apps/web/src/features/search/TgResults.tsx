@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { Check, CornerDownRight, ExternalLink, MessagesSquare, Search as SearchIcon, User } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
-import { WEEK_DAYS, tgTimeToIso, type TgComment, type TgGroup, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity } from '@ft/shared';
+import { WEEK_DAYS, highlightParts, tgTimeToIso, type FtHighlight, type TgComment, type TgGroup, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity } from '@ft/shared';
 import type { PendingPost } from './AddToDossierDialog.tsx';
 import { Card, Empty, Segmented, Tag } from '../../components/ui.tsx';
 import { fmtUtc } from '../../lib/format.ts';
@@ -34,13 +34,27 @@ export function commentToPost(c: TgComment, group: TgGroup | undefined, opts: { 
   };
 }
 
+/** Текст сообщения; слова, по которым нашёл полнотекстовый поиск, — на тёмно-жёлтом фоне. */
+function MessageText({ text, highlight }: { text: string; highlight?: FtHighlight }) {
+  if (!highlight) return <>{text}</>;
+  return (
+    <>
+      {highlightParts(text, highlight).map((p, i) =>
+        p.hit ? <mark key={i} className="rounded-sm bg-[#b8860b] px-0.5 text-white">{p.text}</mark> : p.text,
+      )}
+    </>
+  );
+}
+
 export function CommentList({
-  comments, groups, selected, onToggle,
+  comments, groups, selected, onToggle, highlight,
 }: {
   comments: TgComment[];
   groups: TgGroup[];
   selected: Set<string>;
   onToggle: (c: TgComment) => void;
+  /** Полнотекстовый поиск: что подсвечивать. */
+  highlight?: FtHighlight;
 }) {
   const byId = useMemo(() => new Map(groups.map((g) => [g.grp_id, g])), [groups]);
   const [group, setGroup] = useState<number | null>(null);
@@ -91,7 +105,7 @@ export function CommentList({
                   <CornerDownRight size={12} className="mt-0.5 shrink-0" /> <span className="line-clamp-2">{c.r2text}</span>
                 </div>
               )}
-              <div className="whitespace-pre-wrap text-sm">{c.text}</div>
+              <div className="whitespace-pre-wrap text-sm"><MessageText text={c.text} highlight={highlight} /></div>
               {/* Реакции — под сообщением, как в отчёте бота (template_tglikes.html): эмодзи вдвое крупнее текста
                   сообщения и время реакции (UTC). */}
               {!!c.likes?.length && (
@@ -121,8 +135,9 @@ export function CommentList({
 }
 
 export function MultiUserList({
-  users, selected, onToggle, onUserComments, picked, onPickUser,
+  users, selected, onToggle, onUserComments, picked, onPickUser, highlight,
 }: {
+  highlight?: FtHighlight;
   users: TgUserMsgs[];
   selected: Set<string>;
   onToggle: (c: TgComment, groups: TgGroup[], user: TgUser | undefined) => void;
@@ -161,7 +176,7 @@ export function MultiUserList({
               </>
             }
           >
-            <CommentList comments={u.comments ?? []} groups={u.groups ?? []} selected={selected} onToggle={(c) => onToggle(c, u.groups ?? [], u.user)} />
+            <CommentList comments={u.comments ?? []} groups={u.groups ?? []} selected={selected} onToggle={(c) => onToggle(c, u.groups ?? [], u.user)} highlight={highlight} />
           </Card>
         );
       })}

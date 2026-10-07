@@ -1,9 +1,12 @@
+import { stemRu } from './stem.ts';
+
 // Проверка выражения полнотекстового поиска по Telegram. Шлюз выполняет его в PostgreSQL как
 // websearch_to_tsquery('russian', expression) (dsstalker-api-gate, service/tgcomments/db.go), поэтому правила —
 // websearch-синтаксиса (https://www.postgresql.org/docs/current/textsearch-controls.html), а не to_tsquery:
 //   слова через пробел — И;  or — ИЛИ;  -слово — НЕ;  "слова в кавычках" — фраза (слова подряд, <->).
 // websearch_to_tsquery не выдаёт синтаксических ошибок: & | ! ( ) <-> : * для него — просто разделители,
 // поэтому «(а | б) & в» молча превращается в «а И б И в». Это и ловит проверка.
+// В сообщениях для пользователя — «поиск», а не «PostgreSQL».
 // Приоритет как в tsquery: И связывает сильнее ИЛИ — «а б or в» = (а И б) ИЛИ в; скобок нет.
 // Поведение сверено с PostgreSQL 18 (websearch_to_tsquery('russian', …)):
 //   «-» перед словом — НЕ, даже через пробел («орлан - краснополь» = орлан И НЕ краснополь);
@@ -36,7 +39,7 @@ export interface FtTerm {
 export interface FulltextCheck {
   /** Группы, объединённые ИЛИ; внутри группы — И. */
   groups: FtTerm[][];
-  /** Как поймёт PostgreSQL, словами: «(орлан И краснополь) ИЛИ "о-30"». */
+  /** Как поймёт поиск (PostgreSQL), словами: «(орлан И краснополь) ИЛИ "о-30"». */
   explain: string;
   /** Поиск бессмысленен или шлюз его отклонит — кнопку блокируем. */
   errors: string[];
@@ -63,7 +66,7 @@ export function checkFulltext(raw: string): FulltextCheck {
   if (/[()]/.test(s)) foreign.push('скобки не группируют: «(а or б) в» пишите как «а в or б в»');
   if (/<\d*-?>|<->/.test(s)) foreign.push('«<->» — слова подряд ищутся фразой в кавычках: "а б"');
   if (/:\*|:[abcd]\b/.test(s)) foreign.push('«:*» и веса не поддерживаются; окончания и так не важны');
-  if (foreign.length) warnings.push(`Эти символы PostgreSQL здесь игнорирует: ${foreign.join('; ')}`);
+  if (foreign.length) warnings.push(`Эти символы поиск игнорирует: ${foreign.join('; ')}`);
 
   if ((s.match(/"/g)?.length ?? 0) % 2) warnings.push('Непарная кавычка — фраза продлится до конца строки');
 
@@ -134,25 +137,25 @@ export function checkFulltext(raw: string): FulltextCheck {
   const filled = groups.filter((g) => g.length);
   // «or» в конце строки: последняя группа пустая.
   if (orIgnored || (groups.length > 1 && groups.at(-1)!.length === 0)) {
-    warnings.push('«or» в начале, в конце строки или два подряд PostgreSQL отбрасывает');
+    warnings.push('«or» в начале, в конце строки или два подряд поиск отбрасывает');
   }
   if (dashSpace) warnings.push('Минус через пробел всё равно исключает следующее слово: «а - б» = а И НЕ б');
   for (const w of splitSeen) {
     const [head, ...nums] = w.split(/(?=-\p{N})/u);
     warnings.push(
-      `«${w}» PostgreSQL делит на «${head}» и число ${nums.map((n) => `«${n}»`).join(', ')}` +
+      `«${w}» поиск делит на «${head}» и число ${nums.map((n) => `«${n}»`).join(', ')}` +
         (RU_STOP.has(head!) ? ` — «${head}» стоп-слово, ищется только ${nums.map((n) => `«${n}»`).join(', ')}` : ''),
     );
   }
 
   if (stopSeen.size) {
-    warnings.push(`Стоп-слова PostgreSQL отбрасывает и по ним не ищет: ${[...stopSeen].map((w) => `«${w}»`).join(', ')}`);
+    warnings.push(`Стоп-слова поиск отбрасывает и по ним не ищет: ${[...stopSeen].map((w) => `«${w}»`).join(', ')}`);
   }
 
   const live = (g: FtTerm[]) => g.filter((t) => !t.stop);
   const positive = filled.some((g) => live(g).some((t) => !t.not));
   if (!errors.length && filled.length && filled.every((g) => live(g).length === 0)) {
-    errors.push('Остались одни стоп-слова — PostgreSQL их отбрасывает, искать нечего');
+    errors.push('Остались одни стоп-слова — поиск их отбрасывает, искать нечего');
   } else if (!errors.length && filled.length && !positive) {
     errors.push('Одни исключения («-слово») найдут почти всё подряд — добавьте слово, которое должно быть');
   } else if (filled.some((g) => live(g).length && live(g).every((t) => t.not))) {
@@ -167,4 +170,50 @@ export function checkFulltext(raw: string): FulltextCheck {
   const explain = filled.map(groupText).filter(Boolean).join(' ИЛИ ');
 
   return { groups: filled, explain, errors, warnings: [...new Set(warnings)] };
+}
+
+/** Что подсвечивать в результатах: основы слов (как их сравнивает поиск) и числа. */
+export interface FtHighlight {
+  stems: Set<string>;
+  /** Латинские слова (их словарь — english_stem): подсвечиваются по началу слова. */
+  latin: string[];
+  numbers: string[];
+}
+
+/** Подсветка для выражения: слова, которые должны быть (без исключений и стоп-слов), в виде основ. */
+export function fulltextHighlight(raw: string): FtHighlight {
+  const h: FtHighlight = { stems: new Set(), latin: [], numbers: [] };
+  for (const g of checkFulltext(raw).groups) {
+    for (const t of g) {
+      if (t.not || t.stop) continue;
+      for (const w of t.text.split(' ')) {
+        if (RU_STOP.has(w)) continue;
+        if (/^-?\p{N}+$/u.test(w)) h.numbers.push(w.replace(/^-/, ''));
+        else if (/^[a-z0-9_]+$/.test(w)) h.latin.push(w);
+        else h.stems.add(stemRu(w));
+      }
+    }
+  }
+  return h;
+}
+
+/** Текст сообщения → куски с отметкой «совпало со словом запроса» (для подсветки). */
+export function highlightParts(text: string, h: FtHighlight): { text: string; hit: boolean }[] {
+  if (!h.stems.size && !h.latin.length && !h.numbers.length) return [{ text, hit: false }];
+  const out: { text: string; hit: boolean }[] = [];
+  let last = 0;
+  for (const m of text.matchAll(/[\p{L}\p{N}_]+/gu)) {
+    const w = m[0].toLowerCase();
+    const hit = /^\p{N}+$/u.test(w)
+      ? h.numbers.includes(w)
+      : /^[a-z0-9_]+$/.test(w)
+        ? h.latin.some((q) => w === q || (q.length >= 3 && w.startsWith(q)))
+        : h.stems.has(stemRu(w));
+    if (!hit) continue;
+    if (m.index > last) out.push({ text: text.slice(last, m.index), hit: false });
+    out.push({ text: m[0], hit: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), hit: false });
+  return out;
 }

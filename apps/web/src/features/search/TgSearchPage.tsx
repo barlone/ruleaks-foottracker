@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { AtSign, Send, UserRound } from 'lucide-react';
 import {
-  TG_MODES, checkFulltext, findTgMode, parseTgUser,
+  TG_MODES, checkFulltext, findTgMode, fulltextHighlight, parseTgUser,
   type TgComment, type TgGroup, type TgModeId, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity,
 } from '@ft/shared';
 import { Button, Card, Empty, Input, Spinner, Tag } from '../../components/ui.tsx';
@@ -53,8 +53,18 @@ export function TgSearchPage() {
   useRunOnMount(() => run(params.mode as TgModeId, params.q!), !!(params.q && params.mode && me.data?.access.active));
 
   const who = info.input === 'user' && value.trim() ? parseTgUser(value) : null;
-  // Полнотекстовый: как выражение поймёт PostgreSQL (websearch_to_tsquery) и что в нём не сработает.
-  const ft = info.input === 'text' && value.trim() ? checkFulltext(value) : null;
+  // Полнотекстовый: как выражение поймёт поиск (websearch_to_tsquery в PostgreSQL) и что в нём не сработает.
+  // Разбор — через 300 мс после последнего нажатия, чтобы не мешать набору.
+  const [ftValue, setFtValue] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setFtValue(value), 300);
+    return () => clearTimeout(t);
+  }, [value]);
+  const ft = useMemo(() => (info.input === 'text' && ftValue.trim() ? checkFulltext(ftValue) : null), [info.input, ftValue]);
+  // Стабильная ссылка на run: иначе блок результатов перерисовывался бы на каждое нажатие клавиши.
+  const runRef = useRef(run);
+  runRef.current = run;
+  const onRun = useCallback((m: TgModeId, v: string) => runRef.current(m, v), []);
   const disabled = !me.data?.access.active;
 
   return (
@@ -109,6 +119,19 @@ export function TgSearchPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
             <span>{info.hint}</span>
+            {info.input === 'text' && (
+              <span>
+                Пример:{' '}
+                <button
+                  type="button"
+                  onClick={() => setValue(FULLTEXT_EXAMPLE)}
+                  title="Подставить пример в поле"
+                  className="cursor-pointer rounded border border-line-soft px-1.5 font-mono text-xs text-mint hover:border-mint/50"
+                >
+                  {FULLTEXT_EXAMPLE}
+                </button>
+              </span>
+            )}
             {info.input === 'user' && value.trim() && (
               who ? (
                 <Tag>{who.kind === 'tgid' ? 'Telegram ID' : who.kind === 'nik' ? <><AtSign size={11} />ник → ID</> : 'телефон → ID'}</Tag>
@@ -122,7 +145,7 @@ export function TgSearchPage() {
             <div className="space-y-1.5 rounded-lg border border-line-soft bg-bg-soft px-3 py-2">
               {ft.explain && (
                 <div className="text-sm">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-mute">PostgreSQL поймёт так: </span>
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-mute">Поиск поймёт так: </span>
                   <span className="font-mono text-mint">{ft.explain}</span>
                 </div>
               )}
@@ -134,7 +157,7 @@ export function TgSearchPage() {
       </Card>
 
       {jobId ? (
-        <TgJobView job={job.data} loading={job.isLoading} onRun={run} />
+        <TgJobView job={job.data} loading={job.isLoading} onRun={onRun} />
       ) : (
         <Empty>
           Пользователя можно указать по ID, @нику или телефону — ник и телефон сервер
@@ -146,7 +169,10 @@ export function TgSearchPage() {
   );
 }
 
-function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boolean; onRun: (m: TgModeId, v: string) => void }) {
+const FULLTEXT_EXAMPLE = 'орлан краснополь or "беспилотник над городом" -продам';
+
+/** Результат поиска; memo — набор текста в поле поиска его не перерисовывает. */
+const TgJobView = memo(function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boolean; onRun: (m: TgModeId, v: string) => void }) {
   const [posts, setPosts] = useState<Map<string, PendingPost>>(new Map());
   const [users, setUsers] = useState<Map<string, string>>(new Map());
   const [dialog, setDialog] = useState(false);
@@ -154,6 +180,11 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
     setPosts(new Map());
     setUsers(new Map());
   }, [job?.id]);
+  // Подсветка слов полнотекстового запроса — считается один раз на запрос.
+  const highlight = useMemo(
+    () => (job && findTgMode(job.kind)?.input === 'text' ? fulltextHighlight(job.query) : undefined),
+    [job?.kind, job?.query], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   if (job?.state === 'choose') {
     return (
@@ -226,6 +257,7 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
         onUserComments={(id) => onRun('comments', id)}
         picked={new Set(users.keys())}
         onPickUser={pickUser}
+        highlight={highlight}
       />
       </>
     );
@@ -256,4 +288,4 @@ function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boo
       />
     </>
   );
-}
+});

@@ -2,8 +2,8 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import type { Content, TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
 import {
-  CREDIBILITY_LABELS, FUZZY_MODES, NODE_TYPE_LABELS, POST_KIND_LABELS, SEARCH_KINDS, TG_MODES,
-  type Dossier, type DossierItem, type Investigation, type PdfRequest, type SearchSection, type Source,
+  CREDIBILITY_LABELS, NODE_TYPE_LABELS, POST_KIND_LABELS,
+  type Dossier, type DossierItem, type Investigation, type PdfRequest, type Source,
 } from '@ft/shared';
 import { can } from '../authz.ts';
 import { exportFileName } from '../export/build.ts';
@@ -12,8 +12,8 @@ import { graphSvg } from './graph.ts';
 import { clean, markdownToPdf, type MdContext } from './markdown.ts';
 
 // PDF-отчёт по досье или расследованию (pdfmake, шрифт Roboto из пакета pdfmake — с кириллицей).
-// В отчёт попадает только то, что пользователь может читать. Снимки поиска — только описанием (вид, запрос, итог):
-// нужное из ответов шлюза уже перенесено в атрибуты. Изображения — только data URL (JPEG, PNG, SVG):
+// В отчёт попадает только то, что пользователь может читать. Снимков поиска в отчёте нет: нужное из ответов шлюза
+// уже перенесено в атрибуты. Изображения — только data URL (JPEG, PNG, SVG):
 // внешние адреса и локальные пути pdfmake открывать запрещено (политики доступа ниже).
 // Пароль — штатное шифрование PDF (AES-256, PDF 1.7 ext 3); без пароля PDF не шифруется.
 
@@ -33,11 +33,6 @@ const PLATFORM: Record<string, string> = {
 };
 const SOURCE_KIND: Record<Source['kind'], string> = { search: 'поиск', url: 'веб', manual: 'вручную', humint: 'HUMINT', document: 'документ' };
 const HYPOTHESIS_STATUS = { open: 'открыта', supported: 'подкреплена', confirmed: 'подтверждена', refuted: 'опровергнута' } as const;
-
-function kindLabel(section: SearchSection, kind: string): string {
-  const list: readonly { id: string; label: string }[] = section === 'attr' ? SEARCH_KINDS : section === 'tg' ? TG_MODES : FUZZY_MODES;
-  return list.find((k) => k.id === kind)?.label ?? kind;
-}
 
 /** headlineLevel — заголовок не остаётся один внизу страницы (см. pageBreakBefore). */
 const h2 = (text: string): Content => ({ text, style: 'h2', headlineLevel: 1 });
@@ -257,15 +252,6 @@ class Report {
       }
     }
 
-    const snaps = items('snapshot');
-    if (snaps.length) {
-      out.push(tableSection('Снимки поиска', [110, '*', 120, 60], ['Вид поиска', 'Запрос', 'Итог', 'Дата'], snaps.map((s) => [
-        { text: `${kindLabel(s.section, s.kind)}${s.deep ? ' · deep' : ''}` },
-        { text: clean(s.query) },
-        { text: clean(s.summary), color: '#555' },
-        { text: this.date(s.createdAt) },
-      ])));
-    }
     return out;
   }
 

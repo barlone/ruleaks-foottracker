@@ -75,11 +75,12 @@ function Brand({ compact }: { compact?: boolean }) {
 }
 
 function TopBar() {
+  const mode = trpc.auth.mode.useQuery();
   return (
     <header className="relative z-10 flex h-14 items-center justify-between border-b border-line px-5">
       <Brand />
       <Link to="/search">
-        <Button variant="primary" size="sm">Войти через Telegram</Button>
+        <Button variant="primary" size="sm">{mode.data === 'bot-db' ? 'Войти через Telegram' : 'Войти'}</Button>
       </Link>
     </header>
   );
@@ -89,6 +90,9 @@ function Sidebar() {
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
   const logout = trpc.auth.logout.useMutation({ onSuccess: () => utils.invalidate() });
+  // Без бота (auth = none | password-sha256) пользователь один и подписки нет.
+  const mode = trpc.auth.mode.useQuery();
+  const solo = mode.data !== undefined && mode.data !== 'bot-db';
   const user = me.data!;
 
   return (
@@ -125,13 +129,17 @@ function Sidebar() {
           </div>
         </div>
         <div className={clsx('mb-2 rounded-md border px-2 py-1 font-mono text-[11px]', user.access.active ? 'border-line text-mint' : 'border-warn/30 text-warn')}>
-          {user.access.active
+          {solo
+            ? '● персональный режим'
+            : user.access.active
             ? user.access.unlimited ? '● безлимитный доступ' : `● подписка до ${fmtDate(user.access.until)}`
             : '○ подписка неактивна'}
         </div>
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => logout.mutate()}>
-          <LogOut size={14} /> Выйти
-        </Button>
+        {mode.data !== 'none' && (
+          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => logout.mutate()}>
+            <LogOut size={14} /> Выйти
+          </Button>
+        )}
       </div>
     </aside>
   );

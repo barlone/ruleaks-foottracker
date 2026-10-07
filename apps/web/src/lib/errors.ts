@@ -14,6 +14,8 @@ const MESSAGES: Record<string, string> = {
   BAD_RELATION: 'Связь возможна только между разными досье персон, доступными вам',
   BAD_RELATION_TYPE: 'Можно выбрать только предопределённый тип связи или тип из своего словаря',
   NO_API_TOKEN: 'У аккаунта нет токена API — получите его в боте',
+  BAD_PASSWORD: 'Неверный пароль',
+  TOO_MANY_ATTEMPTS: 'Слишком много неудачных попыток — подождите минуту',
 };
 
 export function errorText(e: unknown): string {

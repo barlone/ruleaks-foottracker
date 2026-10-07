@@ -10,7 +10,8 @@
     "dev": "concurrently -n server,web -c green,cyan \"npm run dev -w @ft/server\" \"npm run dev -w @ft/web\"",
     "build": "npm run build -w @ft/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "db": "npm run migrate -w @ft/db --"
+    "db": "npm run migrate -w @ft/db --",
+    "password-hash": "node packages/config/src/password-hash.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

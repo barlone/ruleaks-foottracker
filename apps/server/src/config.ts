@@ -16,10 +16,16 @@ function load(): AppConfig {
 
 export const appConfig = load();
 
+const { auth } = appConfig;
+
 export const config = {
   port: appConfig.server.port,
   host: appConfig.server.host,
-  cookieSecret: appConfig.server.cookieSecret,
+  /** none | password-sha256 | bot-db ([config] auth). */
+  authMode: auth.mode,
+  passwordSha256: auth.passwordSha256,
+  // При входе по паролю хеш пароля входит в секрет подписи cookie: смена пароля завершает все сессии.
+  cookieSecret: auth.mode === 'password-sha256' ? `${appConfig.server.cookieSecret}:${auth.passwordSha256}` : appConfig.server.cookieSecret,
   sessionCookie: 'ft_sid',
   sessionTtlMs: appConfig.server.sessionTtlMs,
   loginTtlMs: 5 * 60 * 1000,

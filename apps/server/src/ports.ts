@@ -160,7 +160,10 @@ export interface InvestigationRepo {
 }
 
 export interface Deps {
+  /** При [config] auth = none | password-sha256 — SoloBridge (без бота, подписка не проверяется). */
   bot: BotBridge;
+  /** Единственный пользователь соло-режима ([config] user-tg-id); при входе через бота — null. */
+  soloUserId: string | null;
   gateway: SearchGateway;
   users: UserRepo;
   sessions: SessionRepo;

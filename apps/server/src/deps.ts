@@ -6,6 +6,7 @@ import {
   MemoryDossiers, MemoryInvestigations, MemoryRelations, MemorySearches, MemorySessions, MemoryTags, MemoryUsers,
 } from './adapters/memory/store.ts';
 import { BotDbBridge } from './adapters/botdb/bot.ts';
+import { SoloBridge, soloApiToken } from './adapters/solo.ts';
 import { HttpGateway } from './adapters/http/gateway.ts';
 import { openPool } from './adapters/pg.ts';
 import { migrationStatus } from '@ft/db/status';
@@ -17,12 +18,20 @@ import { PgTags } from './adapters/postgres/tags.ts';
 import { PgRelations } from './adapters/postgres/relations.ts';
 
 // Сборка зависимостей по флагам enabled в config.ini. Каждый источник включается отдельно:
+//   [config]     auth = none | password-sha256 → SoloBridge: один пользователь, без бота и проверки подписки,
+//                токен API из [api] token; [bot-db] при этом не подключается;
 //   [bot-db]     enabled → BotDbBridge (подписка и токен из БД бота), иначе имитация бота с демо-учётками;
 //   [api]        enabled → HttpGateway (реальный поиск), иначе имитация шлюза с вымышленными данными;
 //   [project-db] enabled → PostgreSQL: пользователи, сессии, история поиска, досье, расследования;
 //                         иначе — память с демо-данными (сбрасывается при перезапуске).
 export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Promise<Deps> {
   const store = cfg.projectDb.enabled ? await openProjectStore(cfg, log) : memoryStore();
+
+  if (cfg.auth.mode !== 'bot-db') {
+    const { tgId, displayName } = cfg.auth.user;
+    const { id } = await store.users.upsertByTgId({ tgId, displayName, username: null });
+    return { bot: new SoloBridge(soloApiToken(cfg.api)), soloUserId: id, gateway: gateway(cfg), ...store };
+  }
 
   let bot: Deps['bot'] = new MemoryBotBridge();
   if (cfg.botDb.enabled) {
@@ -35,12 +44,10 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
     bot = new BotDbBridge(pool, { devLogin: cfg.server.devLogin && cfg.server.loopback });
   }
 
-  return {
-    bot,
-    gateway: cfg.api.enabled ? new HttpGateway(cfg.api) : new MemoryGateway(),
-    ...store,
-  };
+  return { bot, soloUserId: null, gateway: gateway(cfg), ...store };
 }
+
+const gateway = (cfg: AppConfig) => (cfg.api.enabled ? new HttpGateway(cfg.api) : new MemoryGateway());
 
 type Store = Pick<Deps, 'users' | 'sessions' | 'searches' | 'dossiers' | 'investigations' | 'tags' | 'relations'>;
 

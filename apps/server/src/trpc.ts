@@ -29,13 +29,17 @@ export function makeCreateContext(deps: Deps) {
   return async ({ req, res }: CreateFastifyContextOptions): Promise<Ctx> => {
     const raw = req.cookies[config.sessionCookie];
     const unsigned = raw ? req.unsignCookie(raw) : null;
-    const sid = unsigned?.valid ? unsigned.value : null;
-    let user: User | null = null;
-    if (sid) {
+    let sid = unsigned?.valid ? unsigned.value : null;
+    // auth = none: входить не нужно, каждый запрос — от имени соло-пользователя.
+    let userId = config.authMode === 'none' ? deps.soloUserId : null;
+    if (sid && !userId) {
       const session = await deps.sessions.get(sid);
-      const u = session ? await deps.users.get(session.userId) : null;
-      if (u) user = { ...u, access: await loadAccess(deps, u.tgId) };
+      // Вход по паролю: сессии других пользователей (оставшиеся от входа через бота) не принимаются.
+      if (session && (config.authMode !== 'password-sha256' || session.userId === deps.soloUserId)) userId = session.userId;
+      else sid = null;
     }
+    const u = userId ? await deps.users.get(userId) : null;
+    const user: User | null = u ? { ...u, access: await loadAccess(deps, u.tgId) } : null;
     return { deps, req, res, sid, user };
   };
 }

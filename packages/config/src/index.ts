@@ -31,8 +31,20 @@ const DbSection = z.object({
   'connect-timeout-sec': int(3, 1, 60),
 });
 
+/** Способ входа: bot-db — через бота (подписка и токен из его базы), none — без входа, password-sha256 — по паролю. */
+export const AUTH_MODES = ['none', 'password-sha256', 'bot-db'] as const;
+export type AuthMode = (typeof AUTH_MODES)[number];
+
 /** Секции файла. Отдельно от Schema — по ним проверяются неизвестные ключи и env-переопределения. */
 const SECTIONS = {
+  config: z.object({
+    auth: z.preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.enum(AUTH_MODES).default('bot-db')),
+    /** sha256 пароля в hex (auth = password-sha256). */
+    'password-sha256': str(),
+    /** Соло-режим (none / password-sha256): Telegram ID и имя единственного пользователя сайта. */
+    'user-tg-id': str('0'),
+    'user-name': str('Следопыт'),
+  }),
   server: z.object({
     host: str('127.0.0.1'),
     port: int(3001, 1, 65535),
@@ -55,10 +67,13 @@ const SECTIONS = {
     'timeout-sec': int(30, 1, 600),
     'poll-interval-ms': int(1500, 200, 60_000),
     'job-timeout-sec': int(300, 10, 3600),
+    /** UUID-токен шлюза для соло-режима (auth = none / password-sha256); при bot-db токен берётся из базы бота. */
+    token: str(),
   }),
 };
 
 const Schema = z.object({
+  config: SECTIONS.config.prefault({}),
   server: SECTIONS.server.prefault({}),
   telegram: SECTIONS.telegram.prefault({}),
   'project-db': SECTIONS['project-db'].prefault({}),
@@ -84,6 +99,13 @@ export interface DbConfig {
 export interface AppConfig {
   /** Откуда прочитан конфиг (null — файла нет, всё по умолчанию). */
   file: string | null;
+  /** Вход. Соло-режим (none / password-sha256) — один пользователь user, подписка не проверяется. */
+  auth: {
+    mode: AuthMode;
+    /** sha256 пароля, hex в нижнем регистре (только password-sha256). */
+    passwordSha256: string;
+    user: { tgId: string; displayName: string };
+  };
   server: {
     host: string;
     port: number;
@@ -99,7 +121,7 @@ export interface AppConfig {
   /** База бота pyruleaks-bot: users, tokens, подписки (только чтение). */
   botDb: DbConfig;
   /** dsstalker-api-gate. */
-  api: { enabled: boolean; baseUrl: string; timeoutMs: number; minIntervalMs: number; pollIntervalMs: number; jobTimeoutMs: number };
+  api: { enabled: boolean; baseUrl: string; token: string; timeoutMs: number; minIntervalMs: number; pollIntervalMs: number; jobTimeoutMs: number };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
 }
@@ -173,6 +195,11 @@ export function loadConfig(): AppConfig {
   const loopback = ['127.0.0.1', '::1', 'localhost'].includes(c.server.host);
   const cfg: AppConfig = {
     file,
+    auth: {
+      mode: c.config.auth,
+      passwordSha256: c.config['password-sha256'].toLowerCase(),
+      user: { tgId: c.config['user-tg-id'], displayName: c.config['user-name'] || 'Следопыт' },
+    },
     server: {
       host: c.server.host,
       port: c.server.port,
@@ -187,6 +214,7 @@ export function loadConfig(): AppConfig {
     api: {
       enabled: c.api.enabled,
       baseUrl: c.api['base-url'].replace(/\/+$/, ''),
+      token: c.api.token,
       timeoutMs: c.api['timeout-sec'] * 1000,
       minIntervalMs: c.api['min-interval-ms'],
       pollIntervalMs: c.api['poll-interval-ms'],
@@ -194,6 +222,15 @@ export function loadConfig(): AppConfig {
     },
     warnings,
   };
+
+  // Без бота его база и dev-вход не нужны, а токен API задаётся в конфиге.
+  if (cfg.auth.mode === 'bot-db') {
+    if (cfg.api.token) warnings.push('[api] token не используется при [config] auth = bot-db — токен берётся из базы бота');
+  } else {
+    if (cfg.botDb.enabled) warnings.push(`[bot-db] не используется при [config] auth = ${cfg.auth.mode}`);
+    cfg.botDb.enabled = false;
+    cfg.server.devLogin = false;
+  }
 
   validate(cfg);
   return cfg;
@@ -207,7 +244,16 @@ function validate(cfg: AppConfig) {
     for (const k of ['host', 'database', 'user', 'password'] as const) if (!d[k]) missing.push(`[${name}] ${k}`);
   }
   if (cfg.api.enabled && !/^https?:\/\//.test(cfg.api.baseUrl)) missing.push('[api] base-url');
+  const { mode } = cfg.auth;
+  if (mode !== 'bot-db') {
+    if (!/^\d{1,19}$/.test(cfg.auth.user.tgId)) missing.push('[config] user-tg-id (только цифры)');
+    if (cfg.api.enabled && !cfg.api.token) missing.push(`[api] token (без бота токен API задаётся в конфиге: auth = ${mode})`);
+  }
+  if (mode === 'password-sha256' && !/^[0-9a-f]{64}$/.test(cfg.auth.passwordSha256)) {
+    missing.push('[config] password-sha256 (64 hex-символа: npm run password-hash)');
+  }
   if (!cfg.server.loopback) {
+    if (mode === 'none') missing.push('[config] auth (none — только при host = 127.0.0.1 / localhost: сайт открыт без входа)');
     if (cfg.server.cookieSecret === DEV_COOKIE_SECRET || cfg.server.cookieSecret.length < 32) missing.push('[server] cookie-secret (не короче 32 символов — сервер слушает не только localhost)');
     if (cfg.server.devLogin) missing.push('[server] dev-login = false (вход без бота допустим только на localhost)');
   }
@@ -224,10 +270,16 @@ export function pgUrl(d: DbConfig): string {
 export function describeConfig(cfg: AppConfig): string[] {
   const dbLine = (d: DbConfig) =>
     d.enabled ? `${d.user}@${d.host}:${d.port}/${d.database} (ssl ${d.sslmode}, pool ${d.poolMax})` : 'выключено — демо-данные в памяти';
+  const auth = {
+    'bot-db': 'через Telegram-бота',
+    none: `без входа, соло-пользователь ${cfg.auth.user.displayName} (tg ${cfg.auth.user.tgId})`,
+    'password-sha256': `по паролю, соло-пользователь ${cfg.auth.user.displayName} (tg ${cfg.auth.user.tgId})`,
+  }[cfg.auth.mode];
   return [
     `конфиг: ${cfg.file ?? 'по умолчанию'}; слушает ${cfg.server.host}:${cfg.server.port}`,
+    `вход:      ${auth}`,
     `БД сайта:  ${dbLine(cfg.projectDb)}`,
-    `БД бота:   ${dbLine(cfg.botDb)}`,
+    `БД бота:   ${cfg.auth.mode === 'bot-db' ? dbLine(cfg.botDb) : 'не используется (вход без бота)'}`,
     `API:       ${cfg.api.enabled ? `${cfg.api.baseUrl} (таймаут ${cfg.api.timeoutMs / 1000} с, интервал ${cfg.api.minIntervalMs} мс)` : 'выключено — имитация шлюза'}`,
   ];
 }

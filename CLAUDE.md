@@ -46,7 +46,18 @@ One `config.ini` at the repo root (template with comments: `config.example.ini`)
 (`loadConfig()`), which both the server and `vite.config.ts` use. It walks up from cwd to find the file; `FT_CONFIG`
 overrides the path, and any key can be overridden by `FT_<SECTION>_<KEY>` env vars (`[bot-db] password` →
 `FT_BOT_DB_PASSWORD`). Values are Zod-validated (ini turns `true/false` into booleans — `str()`/`bool()` coerce);
-unknown keys are logged as warnings. Each data source is switched independently by its `enabled` flag:
+unknown keys are logged as warnings.
+
+`[config] auth` picks the login mode: `bot-db` (default — login via the bot, subscription and API token from `[bot-db]`),
+`none` (solo, no login — every request runs as the single solo user; loopback only) or `password-sha256` (one user,
+`auth.password` checks sha256 against `password-sha256`, per-IP fail limit; the hash is mixed into the cookie-signing
+secret so a password change ends all sessions, and only the solo user's sessions are accepted). In both solo modes
+`SoloBridge` (`adapters/solo.ts`) replaces the bot: access is always active/unlimited, the API token is `[api] token`,
+`[bot-db]`/`dev-login` are forced off, and `deps.soloUserId` is upserted at startup from `user-tg-id`/`user-name`.
+Bot-only procedures (`start`/`status`/`devConfirm`) answer `NOT_FOUND`; the web reads `auth.mode`.
+`npm run password-hash` prints the hash line.
+
+Each data source is switched independently by its `enabled` flag:
 
 | Section | `enabled = true` | `enabled = false` |
 |---|---|---|
@@ -54,7 +65,7 @@ unknown keys are logged as warnings. Each data source is switched independently 
 | `[bot-db]` | `BotDbBridge`: subscription + API token read from the bot's DB (read-only pool) | `MemoryBotBridge` with three demo profiles |
 | `[api]` | `HttpGateway`: real dsstalker-api-gate | `MemoryGateway`: fake deterministic results |
 
-`[server] dev-login` (allowed only when `host` is loopback) enables login without the bot: demo-profile buttons, or a
+`[server] dev-login` (allowed only when `host` is loopback; bot-db mode only) enables login without the bot: demo-profile buttons, or a
 Telegram-ID field when `[bot-db]` is real. `LoginPage.tsx` also has a temporary quick-login button for one fixed ID
 (`QUICK_LOGIN_TG_ID`, marked TODO).
 

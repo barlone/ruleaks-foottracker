@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Fact, GraphEdge, GraphNode, Hypothesis, Investigation, InvestigationSummary, Share, Tag } from '@ft/shared';
 import { isUuid } from '@ft/shared';
-import type { InvestigationPatch, InvestigationRepo, ListFilter, Scope } from '../../ports.ts';
+import type { InvestigationContent, InvestigationPatch, InvestigationRepo, ListFilter, Scope, UidMatch } from '../../ports.ts';
 import { iso, json, likePattern, lockAndBump, replaceTags, tagsJsonSql, tagsFilterSql, newObjectId, notFound, tx, type Db, type Tx } from './db.ts';
 
 // Расследования в PostgreSQL: investigations, investigation_shares, graph_nodes, graph_edges (+ edge_facts),
@@ -48,10 +48,10 @@ export class PgInvestigations implements InvestigationRepo {
     if (!isUuid(id)) return null;
     const inv = (
       await this.db.query<{
-        id: string; owner_id: string; title: string; description_md: string; tags: Tag[];
+        id: string; uid: string; owner_id: string; title: string; description_md: string; tags: Tag[];
         visibility: Investigation['visibility']; version: number; updated_at: Date;
       }>(
-        `SELECT id, owner_id, title, description_md, ${tagsJsonSql('investigation', 'investigations.id')} AS tags, visibility, version, updated_at
+        `SELECT id, uid, owner_id, title, description_md, ${tagsJsonSql('investigation', 'investigations.id')} AS tags, visibility, version, updated_at
          FROM investigations WHERE id = $1 AND deleted_at IS NULL`,
         [id],
       )
@@ -96,6 +96,7 @@ export class PgInvestigations implements InvestigationRepo {
 
     return {
       id: inv.id,
+      uid: inv.uid,
       ownerId: inv.owner_id,
       title: inv.title,
       descriptionMd: inv.description_md,
@@ -125,12 +126,38 @@ export class PgInvestigations implements InvestigationRepo {
     return (await this.get(id)) ?? notFound();
   }
 
-  async create(input: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd'>) {
+  async create(input: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd'> & { uid?: string }) {
     const r = await this.db.query<{ id: string }>(
-      `INSERT INTO investigations (owner_id, title, description_md) VALUES ($1, $2, $3) RETURNING id`,
-      [input.ownerId, input.title, input.descriptionMd],
+      `INSERT INTO investigations (owner_id, title, description_md, uid) VALUES ($1, $2, $3, coalesce($4::uuid, gen_random_uuid())) RETURNING id`,
+      [input.ownerId, input.title, input.descriptionMd, isUuid(input.uid) ? input.uid : null],
     );
     return this.reload(r.rows[0]!.id);
+  }
+
+  async findByUid(ownerId: string, uids: string[]): Promise<UidMatch[]> {
+    const r = await this.db.query<UidMatch>(
+      `SELECT id, uid, title FROM investigations WHERE owner_id = $1 AND uid = ANY($2::uuid[]) AND deleted_at IS NULL`,
+      [ownerId, uids.filter(isUuid)],
+    );
+    return r.rows;
+  }
+
+  async replaceContent(id: string, content: InvestigationContent, actorId: string) {
+    await tx(this.db, async (c) => {
+      await lockAndBump(c, 'investigations', id);
+      await c.query(`UPDATE investigations SET title = $2, description_md = $3 WHERE id = $1`, [id, content.title, content.descriptionMd]);
+      await replaceTags(c, 'investigation', id, content.tagIds);
+      // Узлы уносят связи и привязки фактов, факты — доказательства гипотез (ON DELETE CASCADE).
+      await c.query(`DELETE FROM hypotheses WHERE investigation_id = $1`, [id]);
+      await c.query(`DELETE FROM facts WHERE investigation_id = $1`, [id]);
+      await c.query(`DELETE FROM graph_nodes WHERE investigation_id = $1`, [id]);
+      // Факты ссылаются на узлы, связи — на факты: узлы → факты → связи с фактами → гипотезы.
+      await writeGraph(c, id, content.nodes, []);
+      for (const f of content.facts) await writeFact(c, id, f, actorId);
+      await writeGraph(c, id, content.nodes, content.edges);
+      for (const h of content.hypotheses) await writeHypothesis(c, id, h, actorId);
+    });
+    return this.reload(id);
   }
 
   async update(id: string, version: number, patch: InvestigationPatch) {
@@ -161,59 +188,7 @@ export class PgInvestigations implements InvestigationRepo {
   async saveGraph(id: string, version: number, nodes: GraphNode[], edges: GraphEdge[]) {
     await tx(this.db, async (c) => {
       await lockAndBump(c, 'investigations', id, version);
-
-      const nodeRows = nodes.map((n) => ({
-        id: newObjectId(n.id), type: n.type, label: n.label, dossier_id: isUuid(n.dossierId) ? n.dossierId : null,
-        props: n.props ?? {}, x: n.position.x, y: n.position.y,
-      }));
-      // Узел с тем же id из другого расследования не перезаписывается (WHERE в ON CONFLICT).
-      await c.query(
-        `INSERT INTO graph_nodes (id, investigation_id, type, label, dossier_id, props, x, y)
-         SELECT n.id, $1, n.type, n.label,
-                (SELECT d.id FROM dossiers d WHERE d.id = n.dossier_id AND d.deleted_at IS NULL),
-                coalesce(n.props, '{}'), n.x, n.y
-         FROM jsonb_to_recordset($2::jsonb) AS n(id uuid, type node_type, label text, dossier_id uuid, props jsonb, x float8, y float8)
-         ON CONFLICT (id) DO UPDATE
-           SET type = EXCLUDED.type, label = EXCLUDED.label, dossier_id = EXCLUDED.dossier_id,
-               props = EXCLUDED.props, x = EXCLUDED.x, y = EXCLUDED.y
-           WHERE graph_nodes.investigation_id = EXCLUDED.investigation_id`,
-        [id, json(nodeRows)],
-      );
-      await c.query(`DELETE FROM graph_nodes WHERE investigation_id = $1 AND NOT (id = ANY($2::uuid[]))`, [id, nodeRows.map((n) => n.id)]);
-
-      const edgeRows = edges.map((e) => ({
-        id: newObjectId(e.id), source: e.source, target: e.target, relation: e.relation, label: e.label ?? null,
-        credibility: e.credibility ?? '6',
-      }));
-      // Связь — только между узлами этого расследования.
-      await c.query(
-        `INSERT INTO graph_edges (id, investigation_id, source_node_id, target_node_id, relation, label, credibility)
-         SELECT e.id, $1, e.source, e.target, e.relation, e.label, e.credibility
-         FROM jsonb_to_recordset($2::jsonb) AS e(id uuid, source uuid, target uuid, relation text, label text, credibility text)
-         WHERE e.source <> e.target
-           AND EXISTS (SELECT 1 FROM graph_nodes n WHERE n.id = e.source AND n.investigation_id = $1)
-           AND EXISTS (SELECT 1 FROM graph_nodes n WHERE n.id = e.target AND n.investigation_id = $1)
-         ON CONFLICT (id) DO UPDATE
-           SET source_node_id = EXCLUDED.source_node_id, target_node_id = EXCLUDED.target_node_id,
-               relation = EXCLUDED.relation, label = EXCLUDED.label, credibility = EXCLUDED.credibility
-           WHERE graph_edges.investigation_id = EXCLUDED.investigation_id`,
-        [id, json(edgeRows.filter((e) => isUuid(e.source) && isUuid(e.target)))],
-      );
-      await c.query(`DELETE FROM graph_edges WHERE investigation_id = $1 AND NOT (id = ANY($2::uuid[]))`, [id, edgeRows.map((e) => e.id)]);
-
-      // Факты, подтверждающие связи.
-      await c.query(`DELETE FROM edge_facts ef USING graph_edges e WHERE e.id = ef.edge_id AND e.investigation_id = $1`, [id]);
-      const links = edges.flatMap((e) => (e.factIds ?? []).filter(isUuid).map((f) => ({ edge_id: e.id, fact_id: f })));
-      if (links.length) {
-        await c.query(
-          `INSERT INTO edge_facts (edge_id, fact_id)
-           SELECT l.edge_id, l.fact_id FROM jsonb_to_recordset($2::jsonb) AS l(edge_id uuid, fact_id uuid)
-           JOIN graph_edges e ON e.id = l.edge_id AND e.investigation_id = $1
-           JOIN facts f ON f.id = l.fact_id AND f.investigation_id = $1
-           ON CONFLICT DO NOTHING`,
-          [id, json(links)],
-        );
-      }
+      await writeGraph(c, id, nodes, edges);
     });
     return this.reload(id);
   }
@@ -221,15 +196,7 @@ export class PgInvestigations implements InvestigationRepo {
   async upsertFact(id: string, fact: Fact, actorId: string) {
     await tx(this.db, async (c) => {
       await lockAndBump(c, 'investigations', id);
-      const r = await c.query(
-        `INSERT INTO facts (id, investigation_id, text_md, occurred_at, sources, created_by, created_at)
-         VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-         ON CONFLICT (id) DO UPDATE SET text_md = EXCLUDED.text_md, occurred_at = EXCLUDED.occurred_at, sources = EXCLUDED.sources
-           WHERE facts.investigation_id = EXCLUDED.investigation_id`,
-        [newObjectId(fact.id), id, fact.textMd, fact.occurredAt, json(fact.sources ?? []), actorId, fact.createdAt],
-      );
-      if (!r.rowCount) notFound();
-      await replaceLinks(c, 'fact_nodes', 'fact_id', 'node_id', fact.id, fact.nodeIds, 'graph_nodes', id);
+      await writeFact(c, id, fact, actorId);
     });
     return this.reload(id);
   }
@@ -245,25 +212,7 @@ export class PgInvestigations implements InvestigationRepo {
   async upsertHypothesis(id: string, h: Hypothesis, actorId: string) {
     await tx(this.db, async (c) => {
       await lockAndBump(c, 'investigations', id);
-      const r = await c.query(
-        `INSERT INTO hypotheses (id, investigation_id, title, text_md, status, created_by, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, text_md = EXCLUDED.text_md, status = EXCLUDED.status
-           WHERE hypotheses.investigation_id = EXCLUDED.investigation_id`,
-        [newObjectId(h.id), id, h.title, h.textMd, h.status, actorId, h.createdAt],
-      );
-      if (!r.rowCount) notFound();
-      await c.query(`DELETE FROM hypothesis_evidence WHERE hypothesis_id = $1`, [h.id]);
-      const ev = h.evidence.filter((e) => isUuid(e.factId)).map((e) => ({ fact_id: e.factId, stance: e.stance }));
-      if (ev.length) {
-        await c.query(
-          `INSERT INTO hypothesis_evidence (hypothesis_id, fact_id, stance)
-           SELECT $1, e.fact_id, e.stance FROM jsonb_to_recordset($2::jsonb) AS e(fact_id uuid, stance evidence_stance)
-           JOIN facts f ON f.id = e.fact_id AND f.investigation_id = $3
-           ON CONFLICT (hypothesis_id, fact_id) DO UPDATE SET stance = EXCLUDED.stance`,
-          [h.id, json(ev), id],
-        );
-      }
+      await writeHypothesis(c, id, h, actorId);
     });
     return this.reload(id);
   }
@@ -296,6 +245,96 @@ export class PgInvestigations implements InvestigationRepo {
   async remove(id: string) {
     if (!isUuid(id)) return;
     await this.db.query(`UPDATE investigations SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`, [id]);
+  }
+}
+
+/** Граф целиком: узлы и связи из списка (upsert по id), остальные удаляются; связи ↔ факты — заново. */
+async function writeGraph(c: Tx, id: string, nodes: GraphNode[], edges: GraphEdge[]) {
+  const nodeRows = nodes.map((n) => ({
+    id: newObjectId(n.id), type: n.type, label: n.label, dossier_id: isUuid(n.dossierId) ? n.dossierId : null,
+    props: n.props ?? {}, x: n.position.x, y: n.position.y,
+  }));
+  // Узел с тем же id из другого расследования не перезаписывается (WHERE в ON CONFLICT).
+  await c.query(
+    `INSERT INTO graph_nodes (id, investigation_id, type, label, dossier_id, props, x, y)
+     SELECT n.id, $1, n.type, n.label,
+            (SELECT d.id FROM dossiers d WHERE d.id = n.dossier_id AND d.deleted_at IS NULL),
+            coalesce(n.props, '{}'), n.x, n.y
+     FROM jsonb_to_recordset($2::jsonb) AS n(id uuid, type node_type, label text, dossier_id uuid, props jsonb, x float8, y float8)
+     ON CONFLICT (id) DO UPDATE
+       SET type = EXCLUDED.type, label = EXCLUDED.label, dossier_id = EXCLUDED.dossier_id,
+           props = EXCLUDED.props, x = EXCLUDED.x, y = EXCLUDED.y
+       WHERE graph_nodes.investigation_id = EXCLUDED.investigation_id`,
+    [id, json(nodeRows)],
+  );
+  await c.query(`DELETE FROM graph_nodes WHERE investigation_id = $1 AND NOT (id = ANY($2::uuid[]))`, [id, nodeRows.map((n) => n.id)]);
+
+  const edgeRows = edges.map((e) => ({
+    id: newObjectId(e.id), source: e.source, target: e.target, relation: e.relation, label: e.label ?? null,
+    credibility: e.credibility ?? '6',
+  }));
+  // Связь — только между узлами этого расследования.
+  await c.query(
+    `INSERT INTO graph_edges (id, investigation_id, source_node_id, target_node_id, relation, label, credibility)
+     SELECT e.id, $1, e.source, e.target, e.relation, e.label, e.credibility
+     FROM jsonb_to_recordset($2::jsonb) AS e(id uuid, source uuid, target uuid, relation text, label text, credibility text)
+     WHERE e.source <> e.target
+       AND EXISTS (SELECT 1 FROM graph_nodes n WHERE n.id = e.source AND n.investigation_id = $1)
+       AND EXISTS (SELECT 1 FROM graph_nodes n WHERE n.id = e.target AND n.investigation_id = $1)
+     ON CONFLICT (id) DO UPDATE
+       SET source_node_id = EXCLUDED.source_node_id, target_node_id = EXCLUDED.target_node_id,
+           relation = EXCLUDED.relation, label = EXCLUDED.label, credibility = EXCLUDED.credibility
+       WHERE graph_edges.investigation_id = EXCLUDED.investigation_id`,
+    [id, json(edgeRows.filter((e) => isUuid(e.source) && isUuid(e.target)))],
+  );
+  await c.query(`DELETE FROM graph_edges WHERE investigation_id = $1 AND NOT (id = ANY($2::uuid[]))`, [id, edgeRows.map((e) => e.id)]);
+
+  // Факты, подтверждающие связи.
+  await c.query(`DELETE FROM edge_facts ef USING graph_edges e WHERE e.id = ef.edge_id AND e.investigation_id = $1`, [id]);
+  const links = edges.flatMap((e) => (e.factIds ?? []).filter(isUuid).map((f) => ({ edge_id: e.id, fact_id: f })));
+  if (links.length) {
+    await c.query(
+      `INSERT INTO edge_facts (edge_id, fact_id)
+       SELECT l.edge_id, l.fact_id FROM jsonb_to_recordset($2::jsonb) AS l(edge_id uuid, fact_id uuid)
+       JOIN graph_edges e ON e.id = l.edge_id AND e.investigation_id = $1
+       JOIN facts f ON f.id = l.fact_id AND f.investigation_id = $1
+       ON CONFLICT DO NOTHING`,
+      [id, json(links)],
+    );
+  }
+}
+
+async function writeFact(c: Tx, id: string, fact: Fact, actorId: string) {
+  const r = await c.query(
+    `INSERT INTO facts (id, investigation_id, text_md, occurred_at, sources, created_by, created_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+     ON CONFLICT (id) DO UPDATE SET text_md = EXCLUDED.text_md, occurred_at = EXCLUDED.occurred_at, sources = EXCLUDED.sources
+       WHERE facts.investigation_id = EXCLUDED.investigation_id`,
+    [newObjectId(fact.id), id, fact.textMd, fact.occurredAt, json(fact.sources ?? []), actorId, fact.createdAt],
+  );
+  if (!r.rowCount) notFound();
+  await replaceLinks(c, 'fact_nodes', 'fact_id', 'node_id', fact.id, fact.nodeIds, 'graph_nodes', id);
+}
+
+async function writeHypothesis(c: Tx, id: string, h: Hypothesis, actorId: string) {
+  const r = await c.query(
+    `INSERT INTO hypotheses (id, investigation_id, title, text_md, status, created_by, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, text_md = EXCLUDED.text_md, status = EXCLUDED.status
+       WHERE hypotheses.investigation_id = EXCLUDED.investigation_id`,
+    [newObjectId(h.id), id, h.title, h.textMd, h.status, actorId, h.createdAt],
+  );
+  if (!r.rowCount) notFound();
+  await c.query(`DELETE FROM hypothesis_evidence WHERE hypothesis_id = $1`, [h.id]);
+  const ev = h.evidence.filter((e) => isUuid(e.factId)).map((e) => ({ fact_id: e.factId, stance: e.stance }));
+  if (ev.length) {
+    await c.query(
+      `INSERT INTO hypothesis_evidence (hypothesis_id, fact_id, stance)
+       SELECT $1, e.fact_id, e.stance FROM jsonb_to_recordset($2::jsonb) AS e(fact_id uuid, stance evidence_stance)
+       JOIN facts f ON f.id = e.fact_id AND f.investigation_id = $3
+       ON CONFLICT (hypothesis_id, fact_id) DO UPDATE SET stance = EXCLUDED.stance`,
+      [h.id, json(ev), id],
+    );
   }
 }
 

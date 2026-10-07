@@ -16,14 +16,24 @@ const MESSAGES: Record<string, string> = {
   NO_API_TOKEN: 'У аккаунта нет токена API — получите его в боте',
   BAD_PASSWORD: 'Неверный пароль',
   TOO_MANY_ATTEMPTS: 'Слишком много неудачных попыток — подождите минуту',
+  BAD_FILE: 'Файл повреждён или это не файл экспорта Следопыта',
+  UNSUPPORTED_VERSION: 'Файл сделан более новой версией Следопыта — обновите сайт',
+  NEED_PASSWORD: 'Файл защищён паролем — введите пароль, заданный при экспорте',
+  FILE_TOO_LARGE: 'Файл слишком большой',
+  UPLOAD_EXPIRED: 'Загруженный файл устарел — выберите его снова',
 };
 
 export function errorText(e: unknown): string {
-  if (e instanceof TRPCClientError) return MESSAGES[e.message] ?? e.message;
+  if (e instanceof TRPCClientError) {
+    // «КОД: подробность» (BAD_FILE: нет meta.info).
+    const [code, detail] = e.message.split(/: (.*)/s);
+    if (detail && MESSAGES[code!]) return `${MESSAGES[code!]} (${detail})`;
+    return MESSAGES[e.message] ?? e.message;
+  }
   if (e instanceof Error) return e.message;
   return String(e);
 }
 
 export function errorCode(e: unknown): string | null {
-  return e instanceof TRPCClientError ? e.message : null;
+  return e instanceof TRPCClientError ? e.message.split(':')[0]! : null;
 }

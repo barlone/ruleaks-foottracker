@@ -221,6 +221,8 @@ export const DossierItem = z.discriminatedUnion('type', [AttributeItem, LinkItem
 
 export const Dossier = z.object({
   id: Id,
+  /** Сквозной id для экспорта/импорта: у импортированной копии — тот же, что у исходного объекта. */
+  uid: Id,
   ownerId: Id,
   kind: DossierKind,
   title: z.string().min(1).max(256),
@@ -297,6 +299,8 @@ export const Hypothesis = z.object({
 
 export const Investigation = z.object({
   id: Id,
+  /** Сквозной id для экспорта/импорта (как у досье). */
+  uid: Id,
   ownerId: Id,
   title: z.string().min(1).max(256),
   descriptionMd: z.string().max(100_000),

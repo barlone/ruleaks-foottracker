@@ -146,6 +146,7 @@ class Builder {
   dossier(d: Dossier): ExportDossier {
     return {
       key: this.dossierKeys.get(d.id)!,
+      uid: d.uid,
       kind: d.kind,
       title: d.title,
       summaryMd: this.markdown(d.summaryMd),
@@ -164,6 +165,7 @@ class Builder {
     const pick = (map: Map<string, string>, ids: string[]) => ids.flatMap((id) => map.get(id) ?? []);
     return {
       key: 'i1',
+      uid: inv.uid,
       title: inv.title,
       descriptionMd: this.markdown(inv.descriptionMd),
       tags: inv.tags.map((t) => ({ text: t.text, color: t.color })),

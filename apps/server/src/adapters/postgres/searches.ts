@@ -97,6 +97,29 @@ export class PgSearches implements SearchRepo {
     return r.rows.map(toJob);
   }
 
+  async importSnapshot(userId: string, job: Omit<SearchJob, 'id'>) {
+    // Время в файле — с точностью до миллисекунд (toISOString), в базе — до микросекунд.
+    const same = await this.db.query<{ id: string }>(
+      `UPDATE search_jobs SET pinned = true
+       WHERE id = (SELECT id FROM search_jobs WHERE user_id = $1 AND section = $2 AND kind = $3 AND query = $4 AND deep = $5
+                     AND date_trunc('milliseconds', started_at) = $6::timestamptz LIMIT 1)
+       RETURNING id`,
+      [userId, job.section, job.kind, job.query, job.deep, job.startedAt],
+    );
+    if (same.rows[0]) return same.rows[0].id;
+    const r = await this.db.query<{ id: string }>(
+      `INSERT INTO search_jobs (user_id, section, kind, query, deep, params, state, error, candidates, result,
+                                gateway_service, started_at, finished_at, pinned, hidden_at)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10::jsonb, $11, $12, now(), true, now())
+       RETURNING id`,
+      [
+        userId, job.section, job.kind, job.query, job.deep, json(job.params), job.state, job.error, job.candidates,
+        job.result === null || job.result === undefined ? null : json(job.result), job.section === 'tg' ? 'tgcmnts' : 'ruleaks', job.startedAt,
+      ],
+    );
+    return r.rows[0]!.id;
+  }
+
   async clear(userId: string, section: SearchSection) {
     const r = await this.db.query(`UPDATE search_jobs SET hidden_at = now() WHERE user_id = $1 AND section = $2 AND hidden_at IS NULL`, [
       userId, section,

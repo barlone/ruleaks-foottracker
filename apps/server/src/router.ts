@@ -5,6 +5,7 @@ import { dossiersRouter } from './routers/dossiers.ts';
 import { investigationsRouter } from './routers/investigations.ts';
 import { tagsRouter } from './routers/tags.ts';
 import { relationsRouter } from './routers/relations.ts';
+import { importsRouter } from './routers/imports.ts';
 
 export const appRouter = router({
   auth: authRouter,
@@ -13,6 +14,7 @@ export const appRouter = router({
   investigations: investigationsRouter,
   tags: tagsRouter,
   relations: relationsRouter,
+  imports: importsRouter,
 });
 
 /** Тип импортирует фронтенд (только тип — код сервера в бандл не попадает). */

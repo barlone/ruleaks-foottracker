@@ -80,6 +80,11 @@ export interface SearchRepo {
   listRecent(userId: string, section: SearchSection, limit: number): Promise<SearchJob[]>;
   /** Очистка истории раздела. Снимки, прикреплённые к досье, в PostgreSQL-адаптере остаются (pinned). */
   clear(userId: string, section: SearchSection): Promise<number>;
+  /**
+   * Снимок из файла импорта: закреплён и не виден в истории. Такой же снимок пользователя (раздел, вид, запрос,
+   * время запуска) уже есть — возвращается его id, второй не заводится (повторный импорт того же файла).
+   */
+  importSnapshot(userId: string, job: Omit<SearchJob, 'id'>): Promise<string>;
 }
 
 /** all — всё, что пользователь может открыть: свои, расшаренные ему и (для расследований) публичные. */
@@ -131,10 +136,28 @@ export interface RelationRepo {
 export type DossierPatch = Partial<Pick<Dossier, 'title' | 'summaryMd' | 'visibility' | 'memberIds' | 'coverMediaUrl'> & { tagIds: string[] }>;
 export type InvestigationPatch = Partial<Pick<Investigation, 'title' | 'descriptionMd' | 'visibility'> & { tagIds: string[] }>;
 
+/** Объект по сквозному uid среди живых объектов владельца (импорт: есть ли уже копия). */
+export interface UidMatch {
+  id: string;
+  uid: string;
+  title: string;
+}
+
+/** Содержимое досье при импорте: заменяет всё, кроме владельца, uid, видимости и доступов. */
+export type DossierContent = Pick<Dossier, 'kind' | 'title' | 'summaryMd' | 'memberIds' | 'items' | 'coverMediaUrl'> & { tagIds: string[] };
+/** Содержимое расследования при импорте (как у досье). */
+export type InvestigationContent = Pick<Investigation, 'title' | 'descriptionMd' | 'nodes' | 'edges' | 'facts' | 'hypotheses'> & {
+  tagIds: string[];
+};
+
 export interface DossierRepo {
   list(userId: string, scope: Exclude<Scope, 'public'>, filter?: ListFilter): Promise<DossierSummary[]>;
   get(id: string): Promise<Dossier | null>;
-  create(d: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'>): Promise<Dossier>;
+  /** uid не задан — новый. */
+  create(d: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'> & { uid?: string }): Promise<Dossier>;
+  findByUid(ownerId: string, uids: string[]): Promise<UidMatch[]>;
+  /** Полная замена содержимого (импорт поверх прежней копии); элементы приходят с новыми id. */
+  replaceContent(id: string, content: DossierContent, actorId: string): Promise<Dossier>;
   update(id: string, version: number, patch: DossierPatch): Promise<Dossier>;
   addItem(id: string, item: DossierItem, actorId: string): Promise<Dossier>;
   updateItem(id: string, item: DossierItem): Promise<Dossier>;
@@ -147,7 +170,10 @@ export interface DossierRepo {
 export interface InvestigationRepo {
   list(userId: string, scope: Scope, filter?: ListFilter): Promise<InvestigationSummary[]>;
   get(id: string): Promise<Investigation | null>;
-  create(i: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd'>): Promise<Investigation>;
+  create(i: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd'> & { uid?: string }): Promise<Investigation>;
+  findByUid(ownerId: string, uids: string[]): Promise<UidMatch[]>;
+  /** Полная замена графа, фактов и гипотез (импорт); все id — новые. */
+  replaceContent(id: string, content: InvestigationContent, actorId: string): Promise<Investigation>;
   update(id: string, version: number, patch: InvestigationPatch): Promise<Investigation>;
   /** Граф сохраняется целиком (редактор шлёт состояние после серии правок). */
   saveGraph(id: string, version: number, nodes: GraphNode[], edges: GraphEdge[]): Promise<Investigation>;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Plus, User, Users } from 'lucide-react';
+import { FileUp, Plus, User, Users } from 'lucide-react';
+import { ImportDialog } from '../../components/ImportDialog.tsx';
 import { VisibilityTag } from '../../components/Sharing.tsx';
 import { ViewToggle, tableCls, useListView } from '../../components/ListView.tsx';
 import { TagFilter, TagList } from '../../components/Tags.tsx';
@@ -20,6 +21,7 @@ export function DossiersPage() {
     { placeholderData: (p) => p },
   );
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [view, setView] = useListView('dossiers');
   // Сервер отдаёт список по названию — в обоих видах порядок один.
 
@@ -30,8 +32,12 @@ export function DossiersPage() {
           <h1 className="text-2xl font-extrabold">Досье</h1>
           <p className="mt-1 text-sm text-dim">Личности и группы: атрибуты, ссылки на соцсети, медиа, заметки и снимки поиска.</p>
         </div>
-        <Button variant="primary" onClick={() => setCreating(true)}><Plus size={16} /> Новое досье</Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setImporting(true)} title="Досье или расследование из файла экспорта"><FileUp size={16} /> Импорт</Button>
+          <Button variant="primary" onClick={() => setCreating(true)}><Plus size={16} /> Новое досье</Button>
+        </div>
       </header>
+      <ImportDialog open={importing} onOpenChange={setImporting} />
 
       <div className="flex flex-wrap items-center gap-3">
         <Segmented

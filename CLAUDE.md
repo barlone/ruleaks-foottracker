@@ -133,7 +133,7 @@ obvious from the schema:
   edits its own note). Own router `routers/relations.ts`, not part of
   `Dossier`; `Conflict(code)` from `ports.ts` maps to tRPC `CONFLICT` with that code.
 
-### Export to file
+### Export / import file
 
 `dossiers.exportFile` / `investigations.exportFile` (authed, read access) → `apps/server/src/export/build.ts` builds an
 encrypted ZIP (`.ftx`, returned as base64; the web downloads it from `components/ExportDialog.tsx`). The format is the
@@ -141,7 +141,11 @@ Zod schemas in `packages/shared/src/export.ts`: unencrypted `version.v1`, everyt
 derived from the user's export password (empty if none) by `export/password.ts`. No DB ids in the file — local keys
 (`d1`, `n1`, `s1`…), tags/relation types as text, data-URL images as `media/` files, Markdown dossier links as `ft:d1`.
 The salt/iterations and the JSON shape are part of the format: changing them means a new `version.vN`, not an edit
-of v1. Import is not written yet. Details: ARCHITECTURE.md §7.1.
+of v1. Dossiers/investigations carry a cross-database `uid` (column, not the PK) written to the file.
+Import (`routers/imports.ts`: `upload` chunks → `inspect` → `commit`; files wait in server memory, `export/uploads.ts`)
+matches objects by `uid` among the importer's own live objects and fully overwrites them (`replaceContent` in the
+repos; the dialog lists them first), otherwise creates private copies with that `uid`. tRPC reserves procedure names
+like `apply`/`call`. Details: ARCHITECTURE.md §7.1.
 
 ### Search (bot parity)
 

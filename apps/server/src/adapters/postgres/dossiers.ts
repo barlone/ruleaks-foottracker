@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Dossier, DossierItem, DossierSummary, Share, Tag } from '@ft/shared';
 import { isUuid } from '@ft/shared';
-import type { DossierPatch, DossierRepo, ListFilter, Scope } from '../../ports.ts';
+import type { DossierContent, DossierPatch, DossierRepo, ListFilter, Scope, UidMatch } from '../../ports.ts';
 import { json, likePattern, lockAndBump, replaceTags, tagsJsonSql, tagsFilterSql, mustUuid, newObjectId, notFound, tx, type Db, type Tx } from './db.ts';
 
 // Досье в PostgreSQL: dossiers + dossier_items (тело элемента — jsonb data по типу), dossier_members,
@@ -58,6 +58,38 @@ async function upsertMedia(c: Tx, ownerId: string, url: string, name?: string): 
   return r.rows[0]!.id;
 }
 
+/** Вставка элемента досье (с записью media для изображения); возвращает media_id или null. */
+async function insertItem(c: Tx, ownerId: string, dossierId: string, item: DossierItem, actorId: string): Promise<string | null> {
+  const data = itemData(item);
+  let mediaId: string | null = null;
+  if (item.type === 'media') {
+    mediaId = await upsertMedia(c, ownerId, item.url, item.caption);
+    data.mediaId = mediaId;
+  }
+  await c.query(
+    `INSERT INTO dossier_items (id, dossier_id, type, data, source, position, media_id, created_by)
+     VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8)`,
+    [newObjectId(item.id), dossierId, item.type, json(data), item.source ? json(item.source) : null, item.position, mediaId, actorId],
+  );
+  // Снимок поиска в досье больше не удаляется при чистке истории.
+  if (item.type === 'snapshot' && isUuid(item.searchId)) {
+    await c.query(`UPDATE search_jobs SET pinned = true WHERE id = $1`, [item.searchId]);
+  }
+  return mediaId;
+}
+
+/** Участники группы: только существующие досье и не сама группа; порядок — как пришёл. */
+async function replaceMembers(c: Tx, groupId: string, memberIds: string[]) {
+  await c.query(`DELETE FROM dossier_members WHERE group_id = $1`, [groupId]);
+  await c.query(
+    `INSERT INTO dossier_members (group_id, member_id, position)
+     SELECT $1, d.id, m.ord FROM unnest($2::text[]) WITH ORDINALITY AS m(member_id, ord)
+     JOIN dossiers d ON d.id::text = m.member_id AND d.deleted_at IS NULL AND d.id <> $1
+     ON CONFLICT DO NOTHING`,
+    [groupId, memberIds],
+  );
+}
+
 export class PgDossiers implements DossierRepo {
   constructor(private db: Db) {}
 
@@ -94,10 +126,10 @@ export class PgDossiers implements DossierRepo {
     if (!isUuid(id)) return null;
     const d = (
       await this.db.query<{
-        id: string; owner_id: string; kind: Dossier['kind']; title: string; summary_md: string; tags: Tag[];
+        id: string; uid: string; owner_id: string; kind: Dossier['kind']; title: string; summary_md: string; tags: Tag[];
         visibility: Dossier['visibility']; cover_media_id: string | null; version: number; updated_at: Date;
       }>(
-        `SELECT id, owner_id, kind, title, summary_md, ${tagsJsonSql('dossier', 'dossiers.id')} AS tags, visibility, cover_media_id, version, updated_at
+        `SELECT id, uid, owner_id, kind, title, summary_md, ${tagsJsonSql('dossier', 'dossiers.id')} AS tags, visibility, cover_media_id, version, updated_at
          FROM dossiers WHERE id = $1 AND deleted_at IS NULL`,
         [id],
       )
@@ -123,6 +155,7 @@ export class PgDossiers implements DossierRepo {
     const cover = d.cover_media_id ? items.rows.find((i) => i.media_id === d.cover_media_id) : undefined;
     return {
       id: d.id,
+      uid: d.uid,
       ownerId: d.owner_id,
       kind: d.kind,
       title: d.title,
@@ -142,12 +175,39 @@ export class PgDossiers implements DossierRepo {
     return (await this.get(id)) ?? notFound();
   }
 
-  async create(input: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'>) {
+  async create(input: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'> & { uid?: string }) {
     const r = await this.db.query<{ id: string }>(
-      `INSERT INTO dossiers (owner_id, kind, title, summary_md) VALUES ($1, $2, $3, $4) RETURNING id`,
-      [input.ownerId, input.kind, input.title, input.summaryMd],
+      `INSERT INTO dossiers (owner_id, kind, title, summary_md, uid) VALUES ($1, $2, $3, $4, coalesce($5::uuid, gen_random_uuid())) RETURNING id`,
+      [input.ownerId, input.kind, input.title, input.summaryMd, isUuid(input.uid) ? input.uid : null],
     );
     return this.reload(r.rows[0]!.id);
+  }
+
+  async findByUid(ownerId: string, uids: string[]): Promise<UidMatch[]> {
+    const r = await this.db.query<UidMatch>(
+      `SELECT id, uid, title FROM dossiers WHERE owner_id = $1 AND uid = ANY($2::uuid[]) AND deleted_at IS NULL`,
+      [ownerId, uids.filter(isUuid)],
+    );
+    return r.rows;
+  }
+
+  async replaceContent(id: string, content: DossierContent, actorId: string) {
+    await tx(this.db, async (c) => {
+      const { ownerId } = await lockAndBump(c, 'dossiers', id);
+      await c.query(`UPDATE dossiers SET kind = $2, title = $3, summary_md = $4, cover_media_id = NULL WHERE id = $1`, [
+        id, content.kind, content.title, content.summaryMd,
+      ]);
+      await replaceTags(c, 'dossier', id, content.tagIds);
+      await replaceMembers(c, id, content.memberIds);
+      await c.query(`DELETE FROM dossier_items WHERE dossier_id = $1`, [id]);
+      let cover: string | null = null;
+      for (const item of content.items) {
+        const mediaId = await insertItem(c, ownerId, id, item, actorId);
+        if (!cover && mediaId && item.type === 'media' && item.url === content.coverMediaUrl) cover = mediaId;
+      }
+      if (cover) await c.query(`UPDATE dossiers SET cover_media_id = $2 WHERE id = $1`, [id, cover]);
+    });
+    return this.reload(id);
   }
 
   async update(
@@ -178,17 +238,7 @@ export class PgDossiers implements DossierRepo {
       }
       if (sets.length) await c.query(`UPDATE dossiers SET ${sets.join(', ')} WHERE id = $1`, vals);
       if (patch.tagIds !== undefined) await replaceTags(c, 'dossier', id, patch.tagIds);
-      if (patch.memberIds !== undefined) {
-        await c.query(`DELETE FROM dossier_members WHERE group_id = $1`, [id]);
-        // Только существующие досье и не само себя; порядок — как пришёл.
-        await c.query(
-          `INSERT INTO dossier_members (group_id, member_id, position)
-           SELECT $1, d.id, m.ord FROM unnest($2::text[]) WITH ORDINALITY AS m(member_id, ord)
-           JOIN dossiers d ON d.id::text = m.member_id AND d.deleted_at IS NULL AND d.id <> $1
-           ON CONFLICT DO NOTHING`,
-          [id, patch.memberIds],
-        );
-      }
+      if (patch.memberIds !== undefined) await replaceMembers(c, id, patch.memberIds);
     });
     return this.reload(id);
   }
@@ -196,21 +246,7 @@ export class PgDossiers implements DossierRepo {
   async addItem(id: string, item: DossierItem, actorId: string) {
     await tx(this.db, async (c) => {
       const { ownerId } = await lockAndBump(c, 'dossiers', id);
-      const data = itemData(item);
-      let mediaId: string | null = null;
-      if (item.type === 'media') {
-        mediaId = await upsertMedia(c, ownerId, item.url, item.caption);
-        data.mediaId = mediaId;
-      }
-      await c.query(
-        `INSERT INTO dossier_items (id, dossier_id, type, data, source, position, media_id, created_by)
-         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8)`,
-        [newObjectId(item.id), id, item.type, json(data), item.source ? json(item.source) : null, item.position, mediaId, actorId],
-      );
-      // Снимок поиска в досье больше не удаляется при чистке истории.
-      if (item.type === 'snapshot' && isUuid(item.searchId)) {
-        await c.query(`UPDATE search_jobs SET pinned = true WHERE id = $1`, [item.searchId]);
-      }
+      await insertItem(c, ownerId, id, item, actorId);
     });
     return this.reload(id);
   }

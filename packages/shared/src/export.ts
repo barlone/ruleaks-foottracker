@@ -19,6 +19,8 @@ import {
 // Идентификаторов базы в файле нет: объекты ссылаются друг на друга локальными ключами (d1, n1, f1, s1…),
 // теги — текстом и цветом, типы связей — текстом, изображения — путём файла в архиве. В Markdown ссылки
 // [@Имя](/dossiers/<id>) заменяются на [@Имя](ft:d1), ссылки на досье вне файла — на текст.
+// У досье и расследования есть сквозной uid (не id базы): импорт по нему узнаёт уже импортированный объект
+// и перезаписывает прежнюю копию. Файлы без uid импортируются всегда как новые.
 
 export const EXPORT_FORMAT = 'ruleaks-foottracker-export';
 export const EXPORT_VERSION = 1;
@@ -28,6 +30,8 @@ export const EXPORT_EXTENSION = 'ftx';
 export const EXPORT_LINK_PREFIX = 'ft:';
 
 const Key = z.string().regex(/^[a-z]+\d+$/);
+/** Сквозной id объекта (Dossier.uid / Investigation.uid). */
+const Uid = z.uuid().optional();
 const FilePath = z.string().max(256);
 
 export const ExportTag = z.object({ text: z.string(), color: z.string() });
@@ -84,6 +88,7 @@ export const ExportDossierItem = z.discriminatedUnion('type', [
 
 export const ExportDossier = z.object({
   key: Key,
+  uid: Uid,
   kind: DossierKind,
   title: z.string(),
   summaryMd: z.string(),
@@ -109,6 +114,7 @@ export const ExportRelation = z.object({
 
 export const ExportInvestigation = z.object({
   key: Key,
+  uid: Uid,
   title: z.string(),
   descriptionMd: z.string(),
   tags: z.array(ExportTag),

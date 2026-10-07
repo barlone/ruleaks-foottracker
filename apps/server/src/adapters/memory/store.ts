@@ -6,7 +6,8 @@ import {
 import { roleOf } from '../../authz.ts';
 import {
   Conflict, TagExists, VersionConflict,
-  type DossierPatch, type DossierRepo, type InvestigationPatch, type InvestigationRepo, type ListFilter, type Scope, type SearchJobInternals,
+  type DossierContent, type DossierPatch, type DossierRepo, type InvestigationContent, type InvestigationPatch, type InvestigationRepo,
+  type ListFilter, type Scope, type SearchJobInternals, type UidMatch,
   type RelationRepo, type SearchRepo, type SessionRepo, type TagRepo, type UserRepo,
 } from '../../ports.ts';
 import { seedDossiers, seedInvestigations, seedRelations, seedTagColors, seedUsers } from './seed.ts';
@@ -61,7 +62,8 @@ export class MemorySessions implements SessionRepo {
   }
 }
 
-type StoredSearch = SearchJob & SearchJobInternals;
+/** hidden — снимок из файла импорта: в истории не показывается. */
+type StoredSearch = SearchJob & SearchJobInternals & { hidden?: boolean };
 
 export class MemorySearches implements SearchRepo {
   private map = new Map<string, StoredSearch>();
@@ -69,6 +71,18 @@ export class MemorySearches implements SearchRepo {
     const s: StoredSearch = { ...job, id: newId() };
     this.map.set(s.id, s);
     return strip(s);
+  }
+  async importSnapshot(userId: string, job: Omit<SearchJob, 'id'>) {
+    const same = [...this.map.values()].find(
+      (s) => s.userId === userId && s.section === job.section && s.kind === job.kind && s.query === job.query && s.deep === job.deep
+        && s.startedAt === job.startedAt,
+    );
+    if (same) return same.id;
+    const s: StoredSearch = {
+      ...clone(job), id: newId(), userId, gatewayJobId: null, gatewayService: job.section === 'tg' ? 'tgcmnts' : 'ruleaks', hidden: true,
+    };
+    this.map.set(s.id, s);
+    return s.id;
   }
   async get(id: string, userId: string) {
     const s = this.map.get(id);
@@ -80,7 +94,7 @@ export class MemorySearches implements SearchRepo {
   }
   async listRecent(userId: string, section: SearchSection, limit: number) {
     return [...this.map.values()]
-      .filter((s) => s.userId === userId && s.section === section)
+      .filter((s) => s.userId === userId && s.section === section && !s.hidden)
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
       .slice(0, limit)
       .map(strip);
@@ -97,7 +111,7 @@ export class MemorySearches implements SearchRepo {
   }
 }
 
-function strip({ userId: _u, gatewayJobId: _g, gatewayService: _s, ...rest }: StoredSearch): SearchJob {
+function strip({ userId: _u, gatewayJobId: _g, gatewayService: _s, hidden: _h, ...rest }: StoredSearch): SearchJob {
   return rest;
 }
 
@@ -170,7 +184,7 @@ export class MemoryDossiers implements DossierRepo {
   private map: Map<string, StoredDossier>;
 
   constructor(private tags: MemoryTags) {
-    this.map = new Map(seedDossiers.map(({ tags: texts, ...d }) => [d.id, { ...d, tagIds: texts.map((x) => tags.ensure(d.ownerId, x)) }]));
+    this.map = new Map(seedDossiers.map(({ tags: texts, ...d }) => [d.id, { ...d, uid: newId(), tagIds: texts.map((x) => tags.ensure(d.ownerId, x)) }]));
   }
 
   private out({ tagIds, ...d }: StoredDossier): Dossier {
@@ -203,12 +217,21 @@ export class MemoryDossiers implements DossierRepo {
     const d = this.map.get(id);
     return d ? this.out(d) : null;
   }
-  async create(input: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'>) {
+  async create({ uid, ...input }: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'> & { uid?: string }) {
     const d: StoredDossier = {
-      ...input, id: newId(), tagIds: [], visibility: 'private', shares: [], memberIds: [], coverMediaUrl: null,
+      ...input, id: newId(), uid: uid ?? newId(), tagIds: [], visibility: 'private', shares: [], memberIds: [], coverMediaUrl: null,
       items: [], version: 1, updatedAt: now(),
     };
     this.map.set(d.id, d);
+    return this.out(d);
+  }
+  async findByUid(ownerId: string, uids: string[]): Promise<UidMatch[]> {
+    return [...this.map.values()].filter((d) => d.ownerId === ownerId && uids.includes(d.uid)).map((d) => ({ id: d.id, uid: d.uid, title: d.title }));
+  }
+  async replaceContent(id: string, { tagIds, ...content }: DossierContent) {
+    const d = this.must(id);
+    Object.assign(d, clone(content), { tagIds: [...tagIds] });
+    bump(d);
     return this.out(d);
   }
   async update(id: string, version: number, patch: DossierPatch) {
@@ -261,7 +284,7 @@ export class MemoryInvestigations implements InvestigationRepo {
   private map: Map<string, StoredInvestigation>;
 
   constructor(private tags: MemoryTags) {
-    this.map = new Map(seedInvestigations.map(({ tags: texts, ...i }) => [i.id, { ...i, tagIds: texts.map((x) => tags.ensure(i.ownerId, x)) }]));
+    this.map = new Map(seedInvestigations.map(({ tags: texts, ...i }) => [i.id, { ...i, uid: newId(), tagIds: texts.map((x) => tags.ensure(i.ownerId, x)) }]));
   }
 
   private out({ tagIds, ...i }: StoredInvestigation): Investigation {
@@ -295,12 +318,21 @@ export class MemoryInvestigations implements InvestigationRepo {
     const i = this.map.get(id);
     return i ? this.out(i) : null;
   }
-  async create(input: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd'>) {
+  async create({ uid, ...input }: Pick<Investigation, 'ownerId' | 'title' | 'descriptionMd'> & { uid?: string }) {
     const i: StoredInvestigation = {
-      ...input, id: newId(), tagIds: [], visibility: 'private', shares: [], nodes: [], edges: [], facts: [],
+      ...input, id: newId(), uid: uid ?? newId(), tagIds: [], visibility: 'private', shares: [], nodes: [], edges: [], facts: [],
       hypotheses: [], version: 1, updatedAt: now(),
     };
     this.map.set(i.id, i);
+    return this.out(i);
+  }
+  async findByUid(ownerId: string, uids: string[]): Promise<UidMatch[]> {
+    return [...this.map.values()].filter((i) => i.ownerId === ownerId && uids.includes(i.uid)).map((i) => ({ id: i.id, uid: i.uid, title: i.title }));
+  }
+  async replaceContent(id: string, { tagIds, ...content }: InvestigationContent) {
+    const i = this.must(id);
+    Object.assign(i, clone(content), { tagIds: [...tagIds] });
+    bump(i);
     return this.out(i);
   }
   async update(id: string, version: number, patch: InvestigationPatch) {

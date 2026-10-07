@@ -28,8 +28,8 @@ const src = (kind: 'search' | 'url' | 'manual' | 'humint', ref: string | undefin
 });
 
 /** Теги в демо-данных — тексты; хранилище заводит их в словарь владельца объекта. */
-export type SeedDossier = Omit<Dossier, 'tags'> & { tags: string[] };
-export type SeedInvestigation = Omit<Investigation, 'tags'> & { tags: string[] };
+export type SeedDossier = Omit<Dossier, 'tags' | 'uid'> & { tags: string[] };
+export type SeedInvestigation = Omit<Investigation, 'tags' | 'uid'> & { tags: string[] };
 
 /** Цвета демо-тегов (остальные — по умолчанию). */
 export const seedTagColors: Record<string, string> = {

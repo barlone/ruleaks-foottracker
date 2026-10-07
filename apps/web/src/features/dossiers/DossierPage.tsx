@@ -8,6 +8,7 @@ import { LEAK_FIELDS, FIELD_TO_KIND, POST_KIND_LABELS, newId, type DossierItem, 
 import { kindLabel } from '../search/common.tsx';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
+import { ExportDialog } from '../../components/ExportDialog.tsx';
 import { ObjectActions } from '../../components/ObjectActions.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
@@ -80,6 +81,7 @@ export function DossierPage() {
   const [editTitle, setEditTitle] = useState<string | null>(null);
   const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'media' | 'note' | 'post'>(null);
   const [sharing, setSharing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   if (q.isLoading) return <div className="grid h-64 place-items-center"><Spinner /></div>;
   if (q.error || !q.data) return <div className="p-6"><Empty>{errorText(q.error)}</Empty></div>;
@@ -104,6 +106,7 @@ export function DossierPage() {
           isOwner={d.role === 'owner'}
           onShare={() => setSharing(true)}
           onDelete={() => remove.mutate({ id })}
+          onExportFile={() => setExporting(true)}
         />
       </div>
 
@@ -313,6 +316,8 @@ export function DossierPage() {
       </div>
 
       <AddItemDialog kind={adding} onClose={() => setAdding(null)} onAdd={add} />
+
+      <ExportDialog kind="dossier" id={id} open={exporting} onOpenChange={setExporting} />
 
       <ShareDialog
         open={sharing}

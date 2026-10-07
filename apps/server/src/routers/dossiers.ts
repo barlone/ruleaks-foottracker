@@ -1,10 +1,11 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  AttributeItem, DossierItem, DossierKind, DossierVisibility, LinkItem, MediaItem, NoteItem, PostItem, ShareRole, SnapshotItem,
-  newId, type Dossier,
+  AttributeItem, DossierItem, DossierKind, DossierVisibility, ExportRequest, LinkItem, MediaItem, NoteItem, PostItem, ShareRole,
+  SnapshotItem, newId, type Dossier,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
+import { exportDossier } from '../export/build.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 import { TagIds, checkTagIds } from './tags.ts';
 
@@ -132,6 +133,12 @@ export const dossiersRouter = router({
   unshare: activeProcedure.input(z.object({ id: z.string(), userId: z.string() })).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'manage');
     return withRole(ctx, await ctx.deps.dossiers.setShares(input.id, d.shares.filter((s) => s.userId !== input.userId), ctx.user.id));
+  }),
+
+  /** Файл экспорта (ZIP, base64) — всем, кто может читать досье; мутация, чтобы пароль не попал в URL. */
+  exportFile: authedProcedure.input(ExportRequest).mutation(async ({ ctx, input }) => {
+    const d = await load(ctx, input.id, 'read');
+    return exportDossier(ctx.deps, ctx.user.id, d, input);
   }),
 
   remove: activeProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {

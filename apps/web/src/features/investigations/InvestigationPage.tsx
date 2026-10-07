@@ -3,6 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { ArrowLeft, Lightbulb, ListChecks, Network, Pencil } from 'lucide-react';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
+import { ExportDialog } from '../../components/ExportDialog.tsx';
 import { ObjectActions } from '../../components/ObjectActions.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { TagsBar } from '../../components/Tags.tsx';
@@ -43,6 +44,7 @@ export function InvestigationPage() {
   const unshare = trpc.investigations.unshare.useMutation(onDone);
   const remove = trpc.investigations.remove.useMutation({ onSuccess: () => navigate({ to: '/investigations' }) });
   const [sharing, setSharing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [editDesc, setEditDesc] = useState<string | null>(null);
   const [showDesc, setShowDesc] = useState(false);
 
@@ -68,6 +70,8 @@ export function InvestigationPage() {
             isOwner={inv.role === 'owner'}
             onShare={() => setSharing(true)}
             onDelete={() => remove.mutate({ id })}
+            // Публичное расследование без входа экспортировать нельзя.
+            onExportFile={me.data ? () => setExporting(true) : undefined}
           />
         </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -151,6 +155,7 @@ export function InvestigationPage() {
         onUnshare={(userId) => unshare.mutate({ id, userId })}
         error={share.error ? errorText(share.error) : null}
       />
+      {me.data && <ExportDialog kind="investigation" id={id} open={exporting} onOpenChange={setExporting} />}
     </div>
   );
 }

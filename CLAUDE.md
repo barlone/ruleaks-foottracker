@@ -133,6 +133,16 @@ obvious from the schema:
   edits its own note). Own router `routers/relations.ts`, not part of
   `Dossier`; `Conflict(code)` from `ports.ts` maps to tRPC `CONFLICT` with that code.
 
+### Export to file
+
+`dossiers.exportFile` / `investigations.exportFile` (authed, read access) → `apps/server/src/export/build.ts` builds an
+encrypted ZIP (`.ftx`, returned as base64; the web downloads it from `components/ExportDialog.tsx`). The format is the
+Zod schemas in `packages/shared/src/export.ts`: unencrypted `version.v1`, everything else AES-256 with a password
+derived from the user's export password (empty if none) by `export/password.ts`. No DB ids in the file — local keys
+(`d1`, `n1`, `s1`…), tags/relation types as text, data-URL images as `media/` files, Markdown dossier links as `ft:d1`.
+The salt/iterations and the JSON shape are part of the format: changing them means a new `version.vN`, not an edit
+of v1. Import is not written yet. Details: ARCHITECTURE.md §7.1.
+
 ### Search (bot parity)
 
 Three sections mirror the bot's menu: `attr` (`/search`, `/deepsearch`), `tg` (`/tgsearch`, Telegram comments

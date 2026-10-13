@@ -18,7 +18,7 @@ Related projects (separate repos, read them when integrating):
 
 ```bash
 npm install
-npm run dev            # server (tsx watch, :3001) + web (Vite, :5173, proxies /trpc → server); same as run-devel.cmd
+npm run dev            # server (tsx watch, :3001) + web (Vite, :5173, proxies /trpc and /geo → server); same as run-devel.cmd
 npm run typecheck      # tsc --noEmit in every workspace — the only automated check; there are no tests or linter yet
 npm run build          # web production build (apps/web/dist)
 npm run typecheck -w @ft/server   # one workspace
@@ -65,6 +65,9 @@ Each data source is switched independently by its `enabled` flag:
 | `[project-db]` | `adapters/postgres/*`: users, sessions, search history, dossiers, investigations in PostgreSQL; startup fails if any migration is unapplied | in-memory store with demo seed data |
 | `[bot-db]` | `BotDbBridge`: subscription + API token read from the bot's DB (read-only pool) | `MemoryBotBridge` with three demo profiles |
 | `[api]` | `HttpGateway`: real dsstalker-api-gate | `MemoryGateway`: fake deterministic results |
+
+`[config] geo-search` (default `false`) switches the «Поиск по геоданным» section; `[geo-search]` configures its map
+(see «Geo search» below).
 
 `[server] dev-login` (allowed only when `host` is loopback; bot-db mode only) enables login without the bot: demo-profile buttons, or a
 Telegram-ID field when `[bot-db]` is real. `LoginPage.tsx` also has a temporary quick-login button for one fixed ID
@@ -176,6 +179,19 @@ the client queues requests per token and skips polls that are too early instead 
 
 Job progress is advanced only when the browser polls `search.job` (TanStack Query, also in background tabs); a job
 nobody polls stays `running` until `[api] job-timeout-sec`. A server-side poller is planned.
+
+### Geo search (prototype)
+
+`/search/geo` (`features/search/GeoSearchPage.tsx` + `GeoPicker.tsx`): MapLibre GL map with a draggable marker
+(Latitude/Longitude fields) and a radius circle in km; the gateway has no geo API yet, so nothing is searched.
+`geo.config` (`routers/geo.ts`) returns the map settings or `null` when `[config] geo-search` is off (the nav item
+and the page hide). `[geo-search] tiles`: `raster` — public raster tiles (dev only), `pmtiles` — own Protomaps vector
+tiles (`tools/geo/` builds the Europe+Russia extract, zoom ≤ 14). Local `pmtiles`/`assets` paths are served by the
+server itself at `/geo/tiles.pmtiles` and `/geo/assets/*` behind the session (`geo-files.ts`; the browser reads the file
+with Range requests); https URLs are fetched by the browser directly (dev). Vite proxies `/geo` like `/trpc`; the
+production proxy must too. The MapLibre worker is wired via `?worker&url` + `setWorkerUrl` (its own `import.meta.url`
+lookup breaks after Vite bundling). Map controls are restyled in `styles.css` under `.ft-map.maplibregl-map` (the
+lazy chunk's CSS loads later, so equal-specificity selectors would lose).
 
 ### Bot DB access
 

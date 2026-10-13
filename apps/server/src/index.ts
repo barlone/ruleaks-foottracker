@@ -4,6 +4,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { describeConfig } from '@ft/config';
 import { appConfig, config } from './config.ts';
 import { createDeps } from './deps.ts';
+import { registerGeoFiles } from './geo-files.ts';
 import { appRouter, type AppRouter } from './router.ts';
 import { makeCreateContext } from './trpc.ts';
 
@@ -36,6 +37,8 @@ await app.register(fastifyTRPCPlugin, {
     },
   } satisfies FastifyTRPCPluginOptions<AppRouter>['trpcOptions'],
 });
+
+await registerGeoFiles(app, deps);
 
 app.get('/health', async () => ({ ok: true }));
 

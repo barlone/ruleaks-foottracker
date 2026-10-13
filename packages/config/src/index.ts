@@ -35,6 +35,9 @@ const DbSection = z.object({
 export const AUTH_MODES = ['none', 'password-sha256', 'bot-db'] as const;
 export type AuthMode = (typeof AUTH_MODES)[number];
 
+/** Подложка карты поиска по геоданным. */
+export const GEO_TILES = ['raster', 'pmtiles'] as const;
+
 /** Секции файла. Отдельно от Schema — по ним проверяются неизвестные ключи и env-переопределения. */
 const SECTIONS = {
   config: z.object({
@@ -44,6 +47,8 @@ const SECTIONS = {
     /** Соло-режим (none / password-sha256): Telegram ID и имя единственного пользователя сайта. */
     'user-tg-id': str('0'),
     'user-name': str('Следопыт'),
+    /** Раздел «Поиск по геоданным» (карта — секция [geo-search]). */
+    'geo-search': bool(false),
   }),
   server: z.object({
     host: str('127.0.0.1'),
@@ -70,6 +75,19 @@ const SECTIONS = {
     /** UUID-токен шлюза для соло-режима (auth = none / password-sha256); при bot-db токен берётся из базы бота. */
     token: str(),
   }),
+  'geo-search': z.object({
+    /** raster — публичные растровые тайлы (только для разработки); pmtiles — свои векторные тайлы Protomaps. */
+    tiles: z.preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.enum(GEO_TILES).default('raster')),
+    'raster-url': str('https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+    'raster-attribution': str('© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'),
+    /** Путь к файлу .pmtiles (сервер раздаёт его по /geo/tiles.pmtiles) или https-адрес (браузер ходит туда сам). */
+    pmtiles: str(),
+    /** Каталог basemaps-assets (fonts/, sprites/) — раздаётся по /geo/assets/ — или https-адрес. */
+    assets: str(),
+    /** Язык подписей на векторной карте. */
+    lang: str('ru'),
+    'max-zoom': int(17, 1, 22),
+  }),
 };
 
 const Schema = z.object({
@@ -79,6 +97,7 @@ const Schema = z.object({
   'project-db': SECTIONS['project-db'].prefault({}),
   'bot-db': SECTIONS['bot-db'].prefault({}),
   api: SECTIONS.api.prefault({}),
+  'geo-search': SECTIONS['geo-search'].prefault({}),
 });
 
 type Raw = z.infer<typeof Schema>;
@@ -122,6 +141,17 @@ export interface AppConfig {
   botDb: DbConfig;
   /** dsstalker-api-gate. */
   api: { enabled: boolean; baseUrl: string; token: string; timeoutMs: number; minIntervalMs: number; pollIntervalMs: number; jobTimeoutMs: number };
+  /** Поиск по геоданным и подложка его карты. pmtiles / assets — путь на сервере или https-адрес. */
+  geo: {
+    enabled: boolean;
+    tiles: (typeof GEO_TILES)[number];
+    rasterUrl: string;
+    rasterAttribution: string;
+    pmtiles: string;
+    assets: string;
+    lang: string;
+    maxZoom: number;
+  };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
 }
@@ -220,8 +250,27 @@ export function loadConfig(): AppConfig {
       pollIntervalMs: c.api['poll-interval-ms'],
       jobTimeoutMs: c.api['job-timeout-sec'] * 1000,
     },
+    geo: {
+      enabled: c.config['geo-search'],
+      tiles: c['geo-search'].tiles,
+      rasterUrl: c['geo-search']['raster-url'],
+      rasterAttribution: c['geo-search']['raster-attribution'],
+      pmtiles: c['geo-search'].pmtiles,
+      assets: c['geo-search'].assets.replace(/\/+$/, ''),
+      lang: c['geo-search'].lang || 'ru',
+      maxZoom: c['geo-search']['max-zoom'],
+    },
     warnings,
   };
+
+  if (cfg.geo.enabled && cfg.geo.tiles === 'raster' && !loopback) {
+    warnings.push('[geo-search] tiles = raster на сервере не на localhost: публичный сервер тайлов не рассчитан на продакшен и видит, какие районы смотрят пользователи — используйте tiles = pmtiles');
+  }
+  for (const k of ['pmtiles', 'assets'] as const) {
+    if (cfg.geo.enabled && cfg.geo.tiles === 'pmtiles' && isUrl(cfg.geo[k]) && !loopback) {
+      warnings.push(`[geo-search] ${k} — внешний адрес: браузеры пользователей ходят туда напрямую; в продакшене укажите путь к файлу на этом сервере`);
+    }
+  }
 
   // Без бота его база и dev-вход не нужны, а токен API задаётся в конфиге.
   if (cfg.auth.mode === 'bot-db') {
@@ -244,6 +293,12 @@ function validate(cfg: AppConfig) {
     for (const k of ['host', 'database', 'user', 'password'] as const) if (!d[k]) missing.push(`[${name}] ${k}`);
   }
   if (cfg.api.enabled && !/^https?:\/\//.test(cfg.api.baseUrl)) missing.push('[api] base-url');
+  if (cfg.geo.enabled && cfg.geo.tiles === 'raster' && !/^https?:\/\/.*\{z\}.*\{x\}.*\{y\}/.test(cfg.geo.rasterUrl)) {
+    missing.push('[geo-search] raster-url (https-адрес с {z}, {x}, {y})');
+  }
+  if (cfg.geo.enabled && cfg.geo.tiles === 'pmtiles') {
+    for (const k of ['pmtiles', 'assets'] as const) if (!cfg.geo[k]) missing.push(`[geo-search] ${k} (tiles = pmtiles)`);
+  }
   const { mode } = cfg.auth;
   if (mode !== 'bot-db') {
     if (!/^\d{1,19}$/.test(cfg.auth.user.tgId)) missing.push('[config] user-tg-id (только цифры)');
@@ -259,6 +314,9 @@ function validate(cfg: AppConfig) {
   }
   if (missing.length) throw new ConfigError(`Не заданы или недопустимы: ${missing.join(', ')}`);
 }
+
+/** Внешний адрес (а не путь к файлу на сервере). */
+export const isUrl = (s: string) => /^https?:\/\//i.test(s);
 
 /** Строка подключения в формате libpq (для node-postgres / drizzle). */
 export function pgUrl(d: DbConfig): string {
@@ -281,5 +339,6 @@ export function describeConfig(cfg: AppConfig): string[] {
     `БД сайта:  ${dbLine(cfg.projectDb)}`,
     `БД бота:   ${cfg.auth.mode === 'bot-db' ? dbLine(cfg.botDb) : 'не используется (вход без бота)'}`,
     `API:       ${cfg.api.enabled ? `${cfg.api.baseUrl} (таймаут ${cfg.api.timeoutMs / 1000} с, интервал ${cfg.api.minIntervalMs} мс)` : 'выключено — имитация шлюза'}`,
+    `геопоиск:  ${!cfg.geo.enabled ? 'выключен' : cfg.geo.tiles === 'raster' ? `растровые тайлы ${new URL(cfg.geo.rasterUrl.replace(/[{}]/g, '')).host}` : `PMTiles ${cfg.geo.pmtiles}`}`,
   ];
 }

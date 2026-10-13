@@ -1,7 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowUp, Asterisk, FolderSearch, LogOut, Network, RefreshCw, Search, Send, ShieldAlert } from 'lucide-react';
+import { ArrowUp, Asterisk, FolderSearch, LogOut, MapPin, Network, RefreshCw, Search, Send, ShieldAlert } from 'lucide-react';
 import { trpc } from '../lib/trpc.ts';
 import { toasts } from '../lib/toast.ts';
 import { useStore } from '../lib/store.ts';
@@ -12,6 +12,7 @@ import { Button, Spinner } from './ui.tsx';
 const NAV = [
   { to: '/search', label: 'Поиск по атрибутам', icon: Search, hint: 'телефон · фио · документы' },
   { to: '/search/telegram', label: 'Поиск в Telegram', icon: Send, hint: 'комментарии · активность' },
+  { to: '/search/geo', label: 'Поиск по геоданным', icon: MapPin, hint: 'точка · радиус', geo: true },
   { to: '/search/fuzzy', label: 'Нечёткий поиск', icon: Asterisk, hint: 'маски email и номеров' },
   { to: '/dossiers', label: 'Досье', icon: FolderSearch, hint: 'личности и группы' },
   { to: '/investigations', label: 'Расследования', icon: Network, hint: 'связи · факты · гипотезы' },
@@ -97,6 +98,9 @@ function Sidebar() {
   // Без бота (auth = none | password-sha256) пользователь один и подписки нет.
   const mode = trpc.auth.mode.useQuery();
   const solo = mode.data !== undefined && mode.data !== 'bot-db';
+  // Раздел геопоиска — только если включён в config.ini ([config] geo-search).
+  const geo = trpc.geo.config.useQuery(undefined, { staleTime: Infinity });
+  const nav = NAV.filter((n) => !('geo' in n) || geo.data);
   const user = me.data!;
 
   return (
@@ -106,7 +110,7 @@ function Sidebar() {
         <div className="lg:hidden"><Brand compact /></div>
       </div>
       <nav className="flex-1 space-y-1 p-3">
-        {NAV.map(({ to, label, icon: Icon, hint }) => (
+        {nav.map(({ to, label, icon: Icon, hint }) => (
           <Link
             key={to}
             to={to}

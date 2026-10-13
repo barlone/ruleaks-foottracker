@@ -25,19 +25,25 @@ export async function loadAccess(deps: Deps, tgId: string, fresh = false): Promi
   return access;
 }
 
+/** Сессия запроса по cookie: sid и пользователь (или null). Нужна и вне tRPC — например, для раздачи тайлов карты. */
+export async function sessionOf(deps: Deps, req: CreateFastifyContextOptions['req']): Promise<{ sid: string | null; userId: string | null }> {
+  const raw = req.cookies[config.sessionCookie];
+  const unsigned = raw ? req.unsignCookie(raw) : null;
+  let sid = unsigned?.valid ? unsigned.value : null;
+  // auth = none: входить не нужно, каждый запрос — от имени соло-пользователя.
+  let userId = config.authMode === 'none' ? deps.soloUserId : null;
+  if (sid && !userId) {
+    const session = await deps.sessions.get(sid);
+    // Вход по паролю: сессии других пользователей (оставшиеся от входа через бота) не принимаются.
+    if (session && (config.authMode !== 'password-sha256' || session.userId === deps.soloUserId)) userId = session.userId;
+    else sid = null;
+  }
+  return { sid, userId };
+}
+
 export function makeCreateContext(deps: Deps) {
   return async ({ req, res }: CreateFastifyContextOptions): Promise<Ctx> => {
-    const raw = req.cookies[config.sessionCookie];
-    const unsigned = raw ? req.unsignCookie(raw) : null;
-    let sid = unsigned?.valid ? unsigned.value : null;
-    // auth = none: входить не нужно, каждый запрос — от имени соло-пользователя.
-    let userId = config.authMode === 'none' ? deps.soloUserId : null;
-    if (sid && !userId) {
-      const session = await deps.sessions.get(sid);
-      // Вход по паролю: сессии других пользователей (оставшиеся от входа через бота) не принимаются.
-      if (session && (config.authMode !== 'password-sha256' || session.userId === deps.soloUserId)) userId = session.userId;
-      else sid = null;
-    }
+    const { sid, userId } = await sessionOf(deps, req);
     const u = userId ? await deps.users.get(userId) : null;
     const user: User | null = u ? { ...u, access: await loadAccess(deps, u.tgId) } : null;
     return { deps, req, res, sid, user };

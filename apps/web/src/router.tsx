@@ -38,6 +38,13 @@ export const tgSearchRoute = createRoute({
   component: TgSearchPage,
 });
 
+// MapLibre — отдельным чанком.
+export const geoSearchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/search/geo',
+  component: lazyRouteComponent(() => import('./features/search/GeoSearchPage.tsx'), 'GeoSearchPage'),
+});
+
 export const fuzzySearchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search/fuzzy',
@@ -73,7 +80,7 @@ export const investigationRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  indexRoute, searchRoute, tgSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
+  indexRoute, searchRoute, tgSearchRoute, geoSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });

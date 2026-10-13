@@ -61,11 +61,11 @@ function PasswordLogin() {
           if (password) login.mutate({ password });
         }}
       >
-        <h2 className="label-mono mb-4 flex items-center gap-2.5">
+        <h2 className="label-mono mb-4 flex items-center justify-center gap-2.5">
           <span className="size-1.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />
           Вход по паролю
         </h2>
-        <div className="flex gap-2">
+        <div className="flex justify-center gap-2">
           <Input
             type="password"
             autoFocus
@@ -79,7 +79,7 @@ function PasswordLogin() {
             {login.isPending ? <Spinner /> : <KeyRound size={16} />} Войти
           </Button>
         </div>
-        {login.error && <div className="mt-3 font-mono text-xs text-danger">{errorText(login.error)}</div>}
+        {login.error && <div className="mt-3 text-center font-mono text-xs text-danger">{errorText(login.error)}</div>}
       </form>
     </LoginFrame>
   );

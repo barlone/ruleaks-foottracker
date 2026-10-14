@@ -8,6 +8,7 @@ import { registerGeoFiles } from './geo-files.ts';
 import { appRouter, type AppRouter } from './router.ts';
 import { registerScanFiles } from './scan-files.ts';
 import { makeCreateContext } from './trpc.ts';
+import { appVersion, versionLine } from './version.ts';
 
 const app = Fastify({
   bodyLimit: 15 * 1024 * 1024,
@@ -16,6 +17,7 @@ const app = Fastify({
   routerOptions: { maxParamLength: 5000 },
 });
 
+app.log.info(`версия:    ${versionLine}`);
 for (const line of describeConfig(appConfig)) app.log.info(line);
 for (const w of appConfig.warnings) app.log.warn(`config: ${w}`);
 
@@ -42,7 +44,7 @@ await app.register(fastifyTRPCPlugin, {
 await registerGeoFiles(app, deps);
 registerScanFiles(app, deps);
 
-app.get('/health', async () => ({ ok: true }));
+app.get('/health', async () => ({ ok: true, ...appVersion }));
 
 try {
   await app.listen({ port: config.port, host: config.host });

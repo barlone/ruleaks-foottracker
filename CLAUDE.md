@@ -23,6 +23,7 @@ npm run typecheck      # tsc --noEmit in every workspace — the only automated 
 npm run build          # web production build (apps/web/dist)
 npm run typecheck -w @ft/server   # one workspace
 npm run db -- status | up [N] | down [N] | create <name> | manual <file>   # DB migrations against [project-db]
+npm run scans-check -- <uuid>   # scanstore → app chain without browser/nginx (meta, image, sha256, /scans route)
                        # db-upgrade.cmd = `up` + `status` (like `alembic upgrade head`)
 ```
 
@@ -202,7 +203,8 @@ box (`features/search/ScansBox.tsx`, thumbnails + full-screen viewer with ←/�
 field filter. The browser never talks to scanstore: `scan-files.ts` proxies `GET /scans/<uuid>` with the site's
 `[scanstore-api] token` (session required, subscription not checked; ETag/304 passed through), `scans.config` /
 `scans.meta` (`routers/scans.ts`, metadata without `metainfo`, cached forever — scans are immutable) give captions.
-Vite proxies `/scans`; the production proxy must too.
+Vite proxies `/scans`; the production proxy must too. Every `/scans` request is logged as `scans <uuid> → <status> …` (401 reason, upstream error, bytes sent); a failed
+thumbnail re-fetches its URL and shows the HTTP status/type. The startup log and `/health` carry the version and commit (`version.ts`).
 
 ### Bot DB access
 

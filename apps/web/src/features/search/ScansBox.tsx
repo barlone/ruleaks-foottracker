@@ -137,16 +137,38 @@ export function ScansBox({ scans }: { scans: FoundScans }) {
   );
 }
 
+/**
+ * Почему картинка не загрузилась: тот же адрес запрашивается заново и описывается ответ (статус, тип, размер).
+ * Браузер не сообщает причину ошибки <img>, а без неё не отличить 401, 502 хранилища и index.html от прокси.
+ */
+async function probeImage(src: string): Promise<string> {
+  try {
+    const r = await fetch(src, { cache: 'no-store' });
+    const size = (await r.arrayBuffer()).byteLength;
+    return `HTTP ${r.status}, ${r.headers.get('content-type') ?? 'без типа'}, ${size} байт`;
+  } catch (e) {
+    return `сеть: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
 function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | undefined; missing: boolean; onOpen: () => void }) {
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [reason, setReason] = useState<string | null>(null);
   const failed = missing || state === 'error';
+  const onError = () => {
+    setState('error');
+    void probeImage(src).then((r) => {
+      setReason(r);
+      console.warn(`скан ${src} не загрузился: ${r}`);
+    });
+  };
   return (
     <button
       type="button"
       onClick={onOpen}
       disabled={failed}
       // Описание есть, а картинка не загрузилась — это не «нет скана», а сбой выдачи картинки (/scans не проксируется, хранилище недоступно).
-      title={missing ? 'Скан не найден в хранилище' : failed ? 'Не удалось загрузить изображение скана' : 'Открыть скан'}
+      title={missing ? 'Скан не найден в хранилище' : failed ? `Не удалось загрузить изображение скана${reason ? `: ${reason}` : ''}` : 'Открыть скан'}
       className={clsx(
         'group flex flex-col overflow-hidden rounded-lg border border-line bg-bg-soft text-left transition',
         failed ? 'cursor-default opacity-60' : 'cursor-zoom-in hover:border-mint/60 hover:shadow-glow-sm',
@@ -164,7 +186,7 @@ function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | u
               loading="lazy"
               decoding="async"
               onLoad={() => setState('ok')}
-              onError={() => setState('error')}
+              onError={onError}
               className={clsx('max-h-full max-w-full object-contain transition', state === 'ok' ? 'opacity-100' : 'opacity-0')}
             />
           </>
@@ -173,6 +195,7 @@ function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | u
       <div className="space-y-0.5 border-t border-line-soft px-2 py-1.5">
         <div className="truncate font-mono text-[10px] uppercase tracking-wide text-mint">{meta ? doctypeLabel(meta.doctype) : failed ? 'Нет файла' : 'Скан'}</div>
         {meta?.docnum && <div className="truncate font-mono text-[11px] text-dim">{meta.docnum}</div>}
+        {reason && <div className="font-mono text-[10px] leading-tight break-words text-danger">{reason}</div>}
       </div>
     </button>
   );

@@ -202,3 +202,9 @@ body {
   border: 3px solid var(--color-mint-ink);
   box-shadow: 0 0 0 2px var(--color-mint), 0 0 16px var(--color-mint);
 }
+.ft-geo-popup .maplibregl-popup-content { background: #0a0f0d; border: 1px solid var(--color-line); border-radius: 3px; padding: 8px 10px; color: var(--color-dim); font-family: var(--font-mono); font-size: 11px; line-height: 1.5; box-shadow: none; }
+.ft-geo-popup .ft-geo-popup-title { color: var(--color-mint); font-size: 12px; margin-bottom: 2px; }
+.ft-geo-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--color-line); }
+.ft-geo-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: var(--color-line); }
+.ft-geo-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--color-line); }
+.ft-geo-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--color-line); }

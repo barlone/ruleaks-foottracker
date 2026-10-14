@@ -4,7 +4,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
-import { LEAK_FIELDS, FIELD_TO_KIND, POST_KIND_LABELS, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
+import { LEAK_FIELDS, attrCopyValue, attrDisplayValue, FIELD_TO_KIND, POST_KIND_LABELS, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/common.tsx';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
@@ -50,9 +50,6 @@ const attrRank = (key: string) => {
 };
 /** Стабильная сортировка: внутри одного типа атрибуты остаются в порядке добавления. */
 const sortAttributes = (list: Of<'attribute'>[]) => list.map((a, i) => ({ a, i })).sort((x, y) => attrRank(x.a.key) - attrRank(y.a.key) || x.i - y.i).map((x) => x.a);
-
-/** Телефон показывается с «+», как в отчётах бота; копируется значение как есть. */
-const attrDisplay = (key: string, value: string) => (key === 'phones' && /^\d/.test(value.trim()) ? `+${value.trim()}` : value);
 
 export function DossierPage() {
   const { id } = dossierRoute.useParams();
@@ -256,11 +253,11 @@ export function DossierPage() {
                   // Сетка 2×2: подпись | значение, под ними оценка источника | кнопки действий.
                   <div key={a.id} className="group grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 py-2">
                     <span className="pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
-                    <div className="break-words font-mono text-sm">{attrDisplay(a.key, a.value)}</div>
+                    <div className="break-words font-mono text-sm">{attrDisplayValue(a.key, a.value)}</div>
                     <div className="flex items-center"><SourceBadge source={a.source} /></div>
                     <div className="flex flex-wrap items-center gap-2">
                       <ValueActions field={a.key} value={a.value} />
-                      <CopyButton value={a.value} title={`Скопировать: ${a.label}`} />
+                      <CopyButton value={attrCopyValue(a.key, a.value)} title={`Скопировать: ${a.label}`} />
                       {kind && (
                         <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
                           <FileSearch size={14} />

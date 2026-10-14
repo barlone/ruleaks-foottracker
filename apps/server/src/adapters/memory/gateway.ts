@@ -106,7 +106,7 @@ function fakeLeaks(query: string): LeakCard[] {
       },
       // У первой утечки — вторая запись (в реальных ответах записей в утечке обычно несколько).
       ...(i === 0
-        ? [{ tuple: (h % 100000) * 10 + 9, names: [name], phones: [phone], addrs: ['г. Энск, пр. Мира, д. 3, кв. 41'], geolocs: ['55.7558, 37.6173'], weblinks: ['https://example.com/u/' + (h % 1000)], ips: ['203.0.113.' + (h % 250)], regdates: ['14.06.2019'] }]
+        ? [{ tuple: (h % 100000) * 10 + 9, names: [name], phones: [phone], addrs: ['г. Энск, пр. Мира, д. 3, кв. 41'], geolocs: ['55.7558, 37.6173', '55.7512, 37.6184 @500'], weblinks: ['https://example.com/u/' + (h % 1000)], ips: ['203.0.113.' + (h % 250)], regdates: ['14.06.2019'] }]
         : []),
     ],
   }));

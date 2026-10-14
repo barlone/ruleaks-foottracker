@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { parseGeoloc } from '@ft/shared';
 import { ExternalLink, Globe, MailCheck, MapPin, MapPinned, MessageCircle, Phone, Send, type LucideIcon } from 'lucide-react';
 
 // Быстрые переходы по значению атрибута — как кнопки в HTML-отчётах бота
@@ -50,7 +51,8 @@ function actionsFor(field: string, value: string): ValueAction[] {
     case 'email':
       return [{ title: 'Проверить email (mailmeteor)', href: `https://mailmeteor.com/email-checker?${new URLSearchParams({ email: v })}`, icon: MailCheck, hover: 'hover:text-mint' }];
     case 'geolocs': {
-      const coords = v.replace(/\s+/g, '');
+      // Радиус после @ («55.75, 37.61 @500») в ссылку не идёт — Google Maps его не понимает.
+      const coords = parseGeoloc(v).coords.replace(/\s+/g, '');
       return [{ title: 'Открыть геолокацию в Google Maps', href: `https://www.google.com/maps/place/${encodeURIComponent(coords)}`, icon: MapPinned, hover: 'hover:text-mint' }];
     }
     case 'addrs':

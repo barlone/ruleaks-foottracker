@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Check, CornerDownRight, Filter, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
-import { FIELD_TO_KIND, LEAK_FIELDS, SEARCH_KINDS, detectKinds, isUkrainianPhone, type DeepRow, type LeakCard, type LeakField } from '@ft/shared';
+import { FIELD_TO_KIND, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds, isUkrainianPhone, type DeepRow, type LeakCard, type LeakField } from '@ft/shared';
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
@@ -10,6 +10,7 @@ import { searchRoute } from '../../router.tsx';
 import { AddToDossierDialog, type PendingValue } from './AddToDossierDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
 import { ValueActions } from './ValueActions.tsx';
+import type { FoundGeoPoint } from './GeoPointsMap.tsx';
 
 type Job = RouterOutputs['search']['job'];
 
@@ -214,6 +215,8 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
         <FieldFilter found={found} counts={counts} active={active} onToggle={toggleField} onReset={() => setFields(new Set())} />
       )}
 
+      {!job.deep && shown('geolocs') && counts.has('geolocs') && <FoundGeoMap leaks={leaks} />}
+
       {job.deep ? (
         <DeepResult rows={rows.filter((r) => shown(r.prm))} selected={selected} onToggle={toggle} onPivot={onPivot} />
       ) : (
@@ -252,6 +255,105 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
     </>
   );
 }
+
+// MapLibre тяжёлый — грузится, только когда в результатах есть геолокации.
+const GeoPointsMap = lazy(() => import('./GeoPointsMap.tsx').then((m) => ({ default: m.GeoPointsMap })));
+
+/** «широта, долгота» → числа; null — не координаты. */
+function latLon(coords: string): { lat: number; lon: number } | null {
+  const m = coords.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lon = Number(m[2]);
+  return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+}
+
+/**
+ * Бокс с картой найденных геолокаций (простой поиск). Одинаковые точки объединяются, в подписи —
+ * утечка и «Прочее» каждой записи. Карта есть, только если раздел геопоиска включён: от него — настройки тайлов.
+ */
+function FoundGeoMap({ leaks }: { leaks: LeakCard[] }) {
+  const geo = trpc.geo.config.useQuery(undefined, { staleTime: Infinity });
+  // Выбранная дата геосканирования; null — «Все».
+  const [date, setDate] = useState<string | null>(null);
+  useEffect(() => setDate(null), [leaks]);
+
+  // Каждая геолокация каждой записи — отдельно: при выборе даты точка и её подпись собираются только из записей этой даты.
+  const records = useMemo(() => {
+    const out: { key: string; lat: number; lon: number; radiusM: number | null; value: string; line: string; date: string | null }[] = [];
+    for (const card of leaks) for (const t of card.tuples ?? []) {
+      const date = scanDate(t.infos ?? []);
+      for (const v of t.geolocs ?? []) {
+        const g = parseGeoloc(v);
+        const ll = latLon(g.coords);
+        if (!ll) continue;
+        out.push({ key: `${ll.lat},${ll.lon},${g.radiusM ?? ''}`, ...ll, radiusM: g.radiusM, value: attrDisplayValue('geolocs', v), line: [card.leak, ...(t.infos ?? [])].join(' · '), date });
+      }
+    }
+    return out;
+  }, [leaks]);
+
+  // Даты по возрастанию и сколько точек у каждой.
+  const dates = useMemo(() => {
+    const n = new Map<string, Set<string>>();
+    for (const r of records) if (r.date) (n.get(r.date) ?? n.set(r.date, new Set()).get(r.date)!).add(r.key);
+    return [...n].map(([d, keys]) => ({ d, count: keys.size })).sort((x, y) => dateKey(x.d).localeCompare(dateKey(y.d)));
+  }, [records]);
+
+  const points = useMemo(() => {
+    const byKey = new Map<string, FoundGeoPoint>();
+    for (const r of records) {
+      if (date && r.date !== date) continue;
+      let p = byKey.get(r.key);
+      if (!p) byKey.set(r.key, (p = { lat: r.lat, lon: r.lon, radiusM: r.radiusM, lines: [r.value] }));
+      p.lines.push(r.line);
+    }
+    return [...byKey.values()];
+  }, [records, date]);
+  const total = useMemo(() => new Set(records.map((r) => r.key)).size, [records]);
+
+  if (!geo.data || !records.length) return null;
+  const chip = (on: boolean) =>
+    clsx(
+      'inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wide transition',
+      on ? 'border-mint bg-mint/15 text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
+    );
+  return (
+    <Card title="Геолокации на карте" actions={<Tag tone="dim">{points.length}</Tag>}>
+      {/* isolate — z-index элементов управления карты не выходят за её пределы. */}
+      <div className="isolate overflow-hidden rounded-xl border border-line">
+        <Suspense fallback={<div className="grid h-[560px] place-items-center"><Spinner className="size-6" /></div>}>
+          <GeoPointsMap config={geo.data} points={points} className="ft-map h-[560px] w-full" />
+        </Suspense>
+      </div>
+      {dates.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 font-mono text-[11px] text-dim">Геосканирование:</span>
+          <button type="button" onClick={() => setDate(null)} className={chip(date === null)}>
+            Все <span className={date === null ? 'text-mint/70' : 'text-mute'}>{total}</span>
+          </button>
+          {dates.map(({ d, count }) => (
+            <button key={d} type="button" onClick={() => setDate(d)} className={chip(date === d)}>
+              {d} <span className={date === d ? 'text-mint/70' : 'text-mute'}>{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Дата из примечания «геосканирование от 17.01.2023»; null — нет такого примечания. */
+function scanDate(infos: string[]): string | null {
+  for (const s of infos) {
+    const m = s.match(/геосканирован\S*\s+от\s+(\d{2})\.(\d{2})\.(\d{4})/i);
+    if (m) return `${m[1]}.${m[2]}.${m[3]}`;
+  }
+  return null;
+}
+
+/** ДД.ММ.ГГГГ → ГГГГММДД для сортировки. */
+const dateKey = (d: string) => d.split('.').reverse().join('');
 
 /** Бокс фильтра: только атрибуты, найденные в результатах; клик включает/выключает атрибут. */
 function FieldFilter({
@@ -316,7 +418,7 @@ export function ValueRow({
         {checked && <Check size={11} strokeWidth={3} />}
       </button>
       <span className="w-32 shrink-0 font-mono text-[11px] uppercase tracking-wide text-mute">{label}</span>
-      <span className="min-w-[7rem] flex-1 break-words font-mono text-sm">{value}</span>
+      <span className="min-w-[7rem] flex-1 break-words font-mono text-sm">{field === 'geolocs' ? attrDisplayValue(field, value) : value}</span>
       {via && <span className="hidden truncate font-mono text-[10px] text-mute md:inline">через {via}</span>}
       {/* Иконки держатся вместе: в узкой колонке они переносятся под значение, а не ломают его по символам. */}
       <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -330,7 +432,7 @@ export function ValueRow({
           </button>
         )}
         <ValueActions field={field} value={value} />
-        <CopyButton value={value} title={`Скопировать: ${label}`} />
+        <CopyButton value={attrCopyValue(field, value)} title={`Скопировать: ${label}`} />
       </div>
     </div>
   );

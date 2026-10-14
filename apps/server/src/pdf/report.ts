@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import type { Content, TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
 import {
-  CREDIBILITY_LABELS, NODE_TYPE_LABELS, POST_KIND_LABELS,
+  CREDIBILITY_LABELS, attrDisplayValue, NODE_TYPE_LABELS, POST_KIND_LABELS,
   type Dossier, type DossierItem, type Investigation, type PdfRequest, type Source,
 } from '@ft/shared';
 import { can } from '../authz.ts';
@@ -161,8 +161,7 @@ export class Report {
           this.req.options.sources ? [90, '*', 90] : [100, '*'],
           this.req.options.sources ? ['Поле', 'Значение', 'Источник'] : ['Поле', 'Значение'],
           attrs.map((a) => {
-            const value = a.key === 'phones' && /^\d/.test(a.value.trim()) ? `+${a.value.trim()}` : a.value;
-            const row: Content[] = [{ text: clean(a.label), color: '#555' }, { text: clean(value) }];
+            const row: Content[] = [{ text: clean(a.label), color: '#555' }, { text: clean(attrDisplayValue(a.key, a.value)) }];
             if (this.req.options.sources) row.push({ text: this.sourceText(a.source), style: 'small' });
             return row;
           }),

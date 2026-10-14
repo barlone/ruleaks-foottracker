@@ -331,6 +331,31 @@ export const LEAK_FIELDS = {
 
 export type LeakField = keyof typeof LEAK_FIELDS;
 
+/**
+ * Значение geolocs: «широта, долгота» и необязательный радиус точности в метрах после @
+ * («52.703019, 47.735252 @1000»). Без @ — как раньше, radiusM = null.
+ */
+export function parseGeoloc(raw: string): { coords: string; radiusM: number | null } {
+  const m = raw.match(/^(.*?)\s*@\s*(\d+(?:[.,]\d+)?)\s*$/);
+  if (!m) return { coords: raw.trim(), radiusM: null };
+  return { coords: m[1]!.trim(), radiusM: Number(m[2]!.replace(',', '.')) };
+}
+
+/** Значение атрибута для показа: телефон с «+», геолокация с радиусом в скобках. */
+export function attrDisplayValue(field: string, value: string): string {
+  if ((field === 'phones' || field === 'phone') && /^\d/.test(value.trim())) return `+${value.trim()}`;
+  if (field === 'geolocs') {
+    const g = parseGeoloc(value);
+    return g.radiusM === null ? g.coords : `${g.coords} (радиус ${g.radiusM}м)`;
+  }
+  return value;
+}
+
+/** Значение атрибута для буфера обмена: у геолокации — только координаты, без радиуса. */
+export function attrCopyValue(field: string, value: string): string {
+  return field === 'geolocs' ? parseGeoloc(value).coords : value;
+}
+
 /** По какому виду поиска можно «провалиться» из поля результата. */
 export const FIELD_TO_KIND: Partial<Record<LeakField, SearchKindId>> = {
   phones: 'phone',

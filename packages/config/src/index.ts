@@ -88,6 +88,14 @@ const SECTIONS = {
     lang: str('ru'),
     'max-zoom': int(17, 1, 22),
   }),
+  'scanstore-api': z.object({
+    /** false — сканы документов из результатов поиска не показываются. */
+    enabled: bool(false),
+    url: str(),
+    /** api_token хранилища (Authorization: Bearer); в браузер не уходит. */
+    token: str(),
+    'timeout-sec': int(30, 1, 600),
+  }),
 };
 
 const Schema = z.object({
@@ -98,6 +106,7 @@ const Schema = z.object({
   'bot-db': SECTIONS['bot-db'].prefault({}),
   api: SECTIONS.api.prefault({}),
   'geo-search': SECTIONS['geo-search'].prefault({}),
+  'scanstore-api': SECTIONS['scanstore-api'].prefault({}),
 });
 
 type Raw = z.infer<typeof Schema>;
@@ -152,6 +161,8 @@ export interface AppConfig {
     lang: string;
     maxZoom: number;
   };
+  /** scanstore-api-gate: картинки сканов документов (ключ scans в записях утечек). */
+  scanstore: { enabled: boolean; url: string; token: string; timeoutMs: number };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
 }
@@ -260,6 +271,12 @@ export function loadConfig(): AppConfig {
       lang: c['geo-search'].lang || 'ru',
       maxZoom: c['geo-search']['max-zoom'],
     },
+    scanstore: {
+      enabled: c['scanstore-api'].enabled,
+      url: c['scanstore-api'].url.replace(/\/+$/, ''),
+      token: c['scanstore-api'].token,
+      timeoutMs: c['scanstore-api']['timeout-sec'] * 1000,
+    },
     warnings,
   };
 
@@ -298,6 +315,10 @@ function validate(cfg: AppConfig) {
   }
   if (cfg.geo.enabled && cfg.geo.tiles === 'pmtiles') {
     for (const k of ['pmtiles', 'assets'] as const) if (!cfg.geo[k]) missing.push(`[geo-search] ${k} (tiles = pmtiles)`);
+  }
+  if (cfg.scanstore.enabled) {
+    if (!isUrl(cfg.scanstore.url)) missing.push('[scanstore-api] url');
+    if (!cfg.scanstore.token) missing.push('[scanstore-api] token');
   }
   const { mode } = cfg.auth;
   if (mode !== 'bot-db') {
@@ -339,6 +360,7 @@ export function describeConfig(cfg: AppConfig): string[] {
     `БД сайта:  ${dbLine(cfg.projectDb)}`,
     `БД бота:   ${cfg.auth.mode === 'bot-db' ? dbLine(cfg.botDb) : 'не используется (вход без бота)'}`,
     `API:       ${cfg.api.enabled ? `${cfg.api.baseUrl} (таймаут ${cfg.api.timeoutMs / 1000} с, интервал ${cfg.api.minIntervalMs} мс)` : 'выключено — имитация шлюза'}`,
+    `сканы:     ${cfg.scanstore.enabled ? `${cfg.scanstore.url} (таймаут ${cfg.scanstore.timeoutMs / 1000} с)` : 'выключены'}`,
     `геопоиск:  ${!cfg.geo.enabled ? 'выключен' : cfg.geo.tiles === 'raster' ? `растровые тайлы ${new URL(cfg.geo.rasterUrl.replace(/[{}]/g, '')).host}` : `PMTiles ${cfg.geo.pmtiles}`}`,
   ];
 }

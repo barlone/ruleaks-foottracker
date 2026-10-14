@@ -18,7 +18,7 @@ Related projects (separate repos, read them when integrating):
 
 ```bash
 npm install
-npm run dev            # server (tsx watch, :3001) + web (Vite, :5173, proxies /trpc and /geo → server); same as run-devel.cmd
+npm run dev            # server (tsx watch, :3001) + web (Vite, :5173, proxies /trpc, /geo and /scans → server); same as run-devel.cmd
 npm run typecheck      # tsc --noEmit in every workspace — the only automated check; there are no tests or linter yet
 npm run build          # web production build (apps/web/dist)
 npm run typecheck -w @ft/server   # one workspace
@@ -65,6 +65,7 @@ Each data source is switched independently by its `enabled` flag:
 | `[project-db]` | `adapters/postgres/*`: users, sessions, search history, dossiers, investigations in PostgreSQL; startup fails if any migration is unapplied | in-memory store with demo seed data |
 | `[bot-db]` | `BotDbBridge`: subscription + API token read from the bot's DB (read-only pool) | `MemoryBotBridge` with three demo profiles |
 | `[api]` | `HttpGateway`: real dsstalker-api-gate | `MemoryGateway`: fake deterministic results |
+| `[scanstore-api]` | `HttpScanStore`: document scans from scanstore-api-gate | `deps.scans = null`, scans are not shown |
 
 `[config] geo-search` (default `false`) switches the «Поиск по геоданным» section; `[geo-search]` configures its map
 (see «Geo search» below).
@@ -192,6 +193,16 @@ with Range requests); https URLs are fetched by the browser directly (dev). Vite
 production proxy must too. The MapLibre worker is wired via `?worker&url` + `setWorkerUrl` (its own `import.meta.url`
 lookup breaks after Vite bundling). Map controls are restyled in `styles.css` under `.ft-map.maplibregl-map` (the
 lazy chunk's CSS loads later, so equal-specificity selectors would lose).
+
+### Document scans
+
+Leak tuples carry `scans` — uuids in scanstore-api-gate (`D:\GoProjs\scanstore-api-gate`, API in its README; the
+gateway answers them as `prm = 'scan'`). Not a `LEAK_FIELDS` attribute: «Поиск по атрибутам» shows them in a separate
+box (`features/search/ScansBox.tsx`, thumbnails + full-screen viewer with ←/→, rotate, save to file, copy as PNG, save to a dossier's media via `SaveScanDialog.tsx` — data URL, album «Сканы документов», source `document` `scanstore:<uuid>`) and as a «Сканы документов» chip in the
+field filter. The browser never talks to scanstore: `scan-files.ts` proxies `GET /scans/<uuid>` with the site's
+`[scanstore-api] token` (session required, subscription not checked; ETag/304 passed through), `scans.config` /
+`scans.meta` (`routers/scans.ts`, metadata without `metainfo`, cached forever — scans are immutable) give captions.
+Vite proxies `/scans`; the production proxy must too.
 
 ### Bot DB access
 

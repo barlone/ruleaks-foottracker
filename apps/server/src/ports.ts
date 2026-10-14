@@ -51,6 +51,34 @@ export interface SearchGateway {
   tgIdsByNik(token: string, nik: string): Promise<string[]>;
 }
 
+// ---------- Хранилище сканов документов ----------
+
+/** Метаданные скана без metainfo (OCR-текст — самая тяжёлая часть, браузеру не нужен). */
+export interface ScanMeta {
+  id: string;
+  doctype: string;
+  docnum: string | null;
+  personName: string | null;
+  personBday: string | null;
+  /** sha256 файла: одна и та же картинка бывает загружена в хранилище несколько раз (под разными uuid). */
+  sha256: string | null;
+  width: number;
+  height: number;
+}
+
+/** Картинка скана: тело потоком и заголовки для кэша браузера. notModified — ответ на If-None-Match. */
+export type ScanImage =
+  | { status: 'ok'; body: ReadableStream<Uint8Array>; contentType: string; length: string | null; etag: string | null; lastModified: string | null }
+  | { status: 'not-modified'; etag: string | null }
+  | { status: 'not-found' };
+
+/** scanstore-api-gate: uuid сканов приходят в записях утечек (ключ scans). */
+export interface ScanStore {
+  /** null — скана нет. */
+  meta(id: string): Promise<ScanMeta | null>;
+  image(id: string, cond: { ifNoneMatch?: string; ifModifiedSince?: string }): Promise<ScanImage>;
+}
+
 // ---------- Хранилище сайта ----------
 
 export interface UserRepo {
@@ -191,6 +219,8 @@ export interface Deps {
   /** Единственный пользователь соло-режима ([config] user-tg-id); при входе через бота — null. */
   soloUserId: string | null;
   gateway: SearchGateway;
+  /** [scanstore-api] enabled = false — null: сканы не показываются. */
+  scans: ScanStore | null;
   users: UserRepo;
   sessions: SessionRepo;
   searches: SearchRepo;

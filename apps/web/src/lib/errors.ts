@@ -21,6 +21,7 @@ const MESSAGES: Record<string, string> = {
   NEED_PASSWORD: 'Файл защищён паролем — введите пароль, заданный при экспорте',
   FILE_TOO_LARGE: 'Файл слишком большой',
   UPLOAD_EXPIRED: 'Загруженный файл устарел — выберите его снова',
+  SCANSTORE_UNAVAILABLE: 'Хранилище сканов документов недоступно',
 };
 
 export function errorText(e: unknown): string {

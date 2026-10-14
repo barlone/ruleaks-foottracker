@@ -278,7 +278,11 @@ export function isUkrainianPhone(raw: string): boolean {
 // --- Форма ответа шлюза (service/ruleaks/model.go) ---
 
 /** TLeakTuple: одна запись утечки, все поля — массивы строк. */
-export type LeakTuple = { tuple: number } & Partial<Record<LeakField, string[]>>;
+export type LeakTuple = {
+  tuple: number;
+  /** uuid сканов документов человека в хранилище scanstore (не атрибут: показываются картинками). */
+  scans?: string[];
+} & Partial<Record<LeakField, string[]>>;
 
 export interface LeakCard {
   leak: string;

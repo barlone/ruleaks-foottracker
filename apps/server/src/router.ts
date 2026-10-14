@@ -7,6 +7,7 @@ import { tagsRouter } from './routers/tags.ts';
 import { relationsRouter } from './routers/relations.ts';
 import { importsRouter } from './routers/imports.ts';
 import { geoRouter } from './routers/geo.ts';
+import { scansRouter } from './routers/scans.ts';
 
 export const appRouter = router({
   auth: authRouter,
@@ -17,6 +18,7 @@ export const appRouter = router({
   relations: relationsRouter,
   imports: importsRouter,
   geo: geoRouter,
+  scans: scansRouter,
 });
 
 /** Тип импортирует фронтенд (только тип — код сервера в бандл не попадает). */

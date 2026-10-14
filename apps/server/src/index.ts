@@ -6,6 +6,7 @@ import { appConfig, config } from './config.ts';
 import { createDeps } from './deps.ts';
 import { registerGeoFiles } from './geo-files.ts';
 import { appRouter, type AppRouter } from './router.ts';
+import { registerScanFiles } from './scan-files.ts';
 import { makeCreateContext } from './trpc.ts';
 
 const app = Fastify({
@@ -39,6 +40,7 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await registerGeoFiles(app, deps);
+registerScanFiles(app, deps);
 
 app.get('/health', async () => ({ ok: true }));
 

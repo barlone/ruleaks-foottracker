@@ -11,6 +11,7 @@ import { AddToDossierDialog, type PendingValue } from './AddToDossierDialog.tsx'
 import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
 import { ValueActions } from './ValueActions.tsx';
 import type { FoundGeoPoint } from './GeoPointsMap.tsx';
+import { ScansBox, useFoundScans } from './ScansBox.tsx';
 
 type Job = RouterOutputs['search']['job'];
 
@@ -148,6 +149,9 @@ export function AttrSearchPage() {
 function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boolean; onPivot: (kind: string, value: string) => void }) {
   const [selected, setSelected] = useState<Map<string, PendingValue>>(new Map());
   const [dialog, setDialog] = useState(false);
+  // Сканы — до ранних return: хуки. Ссылка на leaks стабильна между опросами (structural sharing react-query).
+  const scanLeaks = job?.state === 'done' && !job.deep ? ((job.result as { job?: { leaks?: LeakCard[] } } | null)?.job?.leaks ?? null) : null;
+  const scans = useFoundScans(scanLeaks);
   // Фильтр по найденным атрибутам: пусто — показывать всё.
   const [fields, setFields] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -182,6 +186,8 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
     const n = t[f]?.length ?? 0;
     if (n) counts.set(f, (counts.get(f) ?? 0) + n);
   }
+  // Сканы документов — не атрибут, а картинки (отдельный бокс), но в фильтре включаются так же.
+  if (scans.count) counts.set(SCANS_FIELD, scans.count);
   const fieldOrder = Object.keys(LEAK_FIELDS);
   const found = [...counts.keys()].sort((a, b) => (fieldOrder.indexOf(a) + 1 || 999) - (fieldOrder.indexOf(b) + 1 || 999));
   const active = new Set([...fields].filter((f) => counts.has(f)));
@@ -216,6 +222,8 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
       )}
 
       {!job.deep && shown('geolocs') && counts.has('geolocs') && <FoundGeoMap leaks={leaks} />}
+
+      {scans.count > 0 && shown(SCANS_FIELD) && <ScansBox key={job.id} scans={scans} />}
 
       {job.deep ? (
         <DeepResult rows={rows.filter((r) => shown(r.prm))} selected={selected} onToggle={toggle} onPivot={onPivot} />
@@ -355,6 +363,10 @@ function scanDate(infos: string[]): string | null {
 /** ДД.ММ.ГГГГ → ГГГГММДД для сортировки. */
 const dateKey = (d: string) => d.split('.').reverse().join('');
 
+/** Ключ сканов документов в фильтре атрибутов. */
+const SCANS_FIELD = 'scans';
+const fieldLabel = (f: string) => (f === SCANS_FIELD ? 'Сканы документов' : LEAK_FIELDS[f as LeakField] ?? f);
+
 /** Бокс фильтра: только атрибуты, найденные в результатах; клик включает/выключает атрибут. */
 function FieldFilter({
   found, counts, active, onToggle, onReset,
@@ -382,7 +394,7 @@ function FieldFilter({
               on ? 'border-mint bg-mint/15 text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
             )}
           >
-            {LEAK_FIELDS[f as LeakField] ?? f}
+            {fieldLabel(f)}
             <span className={on ? 'text-mint/70' : 'text-mute'}>{counts.get(f)}</span>
           </button>
         );

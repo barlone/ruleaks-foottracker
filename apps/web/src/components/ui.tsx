@@ -107,7 +107,7 @@ export function Tag({ children, tone = 'mint', className }: { children: ReactNod
 }
 
 export function Dialog({
-  open, onOpenChange, title, children, wide, width,
+  open, onOpenChange, title, children, wide, width, stacked,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -116,12 +116,14 @@ export function Dialog({
   wide?: boolean;
   /** Своя максимальная ширина (класс max-w-…) вместо max-w-lg / max-w-3xl. */
   width?: string;
+  /** Поверх другого полноэкранного окна (просмотр скана — z-50). */
+  stacked?: boolean;
 }) {
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <RDialog.Portal>
         {/* Центрирование без transform: иначе position:fixed внутри диалога (подсказки редактора) считается от него. */}
-        <RDialog.Overlay className="fixed inset-0 z-40 grid place-items-center overflow-auto bg-black/70 p-4 backdrop-blur-sm">
+        <RDialog.Overlay className={clsx('fixed inset-0 grid place-items-center overflow-auto bg-black/70 p-4 backdrop-blur-sm', stacked ? 'z-[60]' : 'z-40')}>
           <RDialog.Content
             // Фокус ставят сами поля (autoFocus), а не первая кнопка диалога.
             onOpenAutoFocus={(e) => e.preventDefault()}

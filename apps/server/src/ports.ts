@@ -76,7 +76,11 @@ export type ScanImage =
 export interface ScanStore {
   /** null — скана нет. */
   meta(id: string): Promise<ScanMeta | null>;
-  image(id: string, cond: { ifNoneMatch?: string; ifModifiedSince?: string }): Promise<ScanImage>;
+  /**
+   * ifNoneMatch — ETag (sha256) из кэша браузера. If-Modified-Since не передаётся: в кэше под этим адресом может
+   * лежать чужой ответ (index.html от прокси, пока /scans не проксировался), и по дате хранилище ответило бы 304 на него.
+   */
+  image(id: string, cond: { ifNoneMatch?: string }): Promise<ScanImage>;
 }
 
 // ---------- Хранилище сайта ----------

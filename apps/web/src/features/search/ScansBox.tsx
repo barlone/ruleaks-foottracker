@@ -145,7 +145,8 @@ function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | u
       type="button"
       onClick={onOpen}
       disabled={failed}
-      title={failed ? 'Скан не найден в хранилище' : 'Открыть скан'}
+      // Описание есть, а картинка не загрузилась — это не «нет скана», а сбой выдачи картинки (/scans не проксируется, хранилище недоступно).
+      title={missing ? 'Скан не найден в хранилище' : failed ? 'Не удалось загрузить изображение скана' : 'Открыть скан'}
       className={clsx(
         'group flex flex-col overflow-hidden rounded-lg border border-line bg-bg-soft text-left transition',
         failed ? 'cursor-default opacity-60' : 'cursor-zoom-in hover:border-mint/60 hover:shadow-glow-sm',

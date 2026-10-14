@@ -75,10 +75,9 @@ export class HttpScanStore implements ScanStore {
     return meta;
   }
 
-  async image(id: string, cond: { ifNoneMatch?: string; ifModifiedSince?: string }): Promise<ScanImage> {
+  async image(id: string, cond: { ifNoneMatch?: string }): Promise<ScanImage> {
     const headers: Record<string, string> = { Accept: 'image/jpeg' };
     if (cond.ifNoneMatch) headers['If-None-Match'] = cond.ifNoneMatch;
-    if (cond.ifModifiedSince) headers['If-Modified-Since'] = cond.ifModifiedSince;
     const res = await this.get(`/scans/${id}`, headers);
     if (res.status === 304) return { status: 'not-modified', etag: res.headers.get('etag') };
     if (res.status === 404 || res.status === 422) {

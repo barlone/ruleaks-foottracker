@@ -22,10 +22,8 @@ export function registerScanFiles(app: FastifyInstance, deps: Deps) {
 
     let img;
     try {
-      img = await store.image(id, {
-        ifNoneMatch: req.headers['if-none-match'],
-        ifModifiedSince: req.headers['if-modified-since'],
-      });
+      // Только ETag (sha256 скана): условный запрос по дате мог бы подтвердить чужой закэшированный ответ (ports.ts).
+      img = await store.image(id, { ifNoneMatch: req.headers['if-none-match'] });
     } catch (e) {
       if (!(e instanceof ScanStoreError)) throw e;
       req.log.warn(`scans: ${e.message}`);

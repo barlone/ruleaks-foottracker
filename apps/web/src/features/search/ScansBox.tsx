@@ -88,6 +88,13 @@ export function useFoundScans(leaks: LeakCard[] | null): FoundScans {
   return { path, groups, count: groups.reduce((n, g) => n + g.ids.length, 0), meta: meta.data, metaError: meta.isError };
 }
 
+/**
+ * Версия адреса картинок (?v=): сервер параметр не читает, он только делает адрес новым для кэшей.
+ * 2 — пока /scans не проксировался, браузеры (и Cloudflare с его Browser Cache TTL) закэшировали под старыми
+ * адресами index.html и подставляли его в <img>. Увеличить, если в кэшах снова окажется не то.
+ */
+const SCAN_URL_REV = 2;
+
 /** Бокс с превью сканов документов; клик открывает скан целиком. */
 export function ScansBox({ scans }: { scans: FoundScans }) {
   const { groups, meta: metaData, path } = scans;
@@ -96,7 +103,7 @@ export function ScansBox({ scans }: { scans: FoundScans }) {
   const [open, setOpen] = useState<number | null>(null);
 
   if (!all.length || !path) return null;
-  const src = (id: string) => `${path}/${id}`;
+  const src = (id: string) => `${path}/${id}?v=${SCAN_URL_REV}`;
   const index = new Map(all.map((s, i) => [s.id, i]));
   // Подпись группы нужна, только когда записей несколько.
   const titled = groups.length > 1;
@@ -142,13 +149,19 @@ export function ScansBox({ scans }: { scans: FoundScans }) {
  * Браузер не сообщает причину ошибки <img>, а без неё не отличить 401, 502 хранилища и index.html от прокси.
  */
 async function probeImage(src: string): Promise<string> {
-  try {
-    const r = await fetch(src, { cache: 'no-store' });
-    const size = (await r.arrayBuffer()).byteLength;
-    return `HTTP ${r.status}, ${r.headers.get('content-type') ?? 'без типа'}, ${size} байт`;
-  } catch (e) {
-    return `сеть: ${e instanceof Error ? e.message : String(e)}`;
-  }
+  const describe = async (cache: RequestCache) => {
+    try {
+      const r = await fetch(src, { cache });
+      const size = (await r.arrayBuffer()).byteLength;
+      return `HTTP ${r.status}, ${r.headers.get('content-type') ?? 'без типа'}, ${size} байт`;
+    } catch (e) {
+      return `сеть: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  };
+  // <img> берёт ответ и из кэша браузера: если там не то же, что отдаёт сервер, — виноват кэш.
+  const server = await describe('no-store');
+  const cached = await describe('force-cache');
+  return cached === server ? server : `сервер: ${server}; кэш браузера: ${cached}`;
 }
 
 function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | undefined; missing: boolean; onOpen: () => void }) {

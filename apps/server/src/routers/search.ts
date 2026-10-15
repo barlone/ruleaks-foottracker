@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  FUZZY_MODE_IDS, SEARCH_KINDS, SearchSectionSchema, TG_MODE_IDS,
-  checkFulltext, checkMask, detectKind, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
+  FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, SearchSectionSchema, TG_MODE_IDS,
+  checkFulltext, checkMask, detectKind, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
   TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import type { GatewayAnswer } from '../ports.ts';
@@ -12,7 +12,8 @@ import { tgSearchPdf } from '../pdf/tgReport.ts';
 
 // Сайт — посредник между браузером и шлюзом: токен пользователя не покидает сервер,
 // опрос job.results ведёт сервер, а результат сохраняется снимком (у шлюза он живёт минуты).
-// Три раздела повторяют меню бота: attr — /search и /deepsearch, tg — /tgsearch, fuzzy — /regsearch.
+// Три раздела повторяют меню бота: attr — /search и /deepsearch, tg — /tgsearch, fuzzy — /regsearch;
+// geo — точка и радиус на карте (raw_search.byloc_radius, ответ как у raw-поиска по атрибутам).
 
 const StartInput = z.discriminatedUnion('section', [
   z.object({
@@ -31,6 +32,13 @@ const StartInput = z.discriminatedUnion('section', [
     mode: z.enum(FUZZY_MODE_IDS),
     value: z.string().trim().min(1).max(256),
     vehicpart: z.string().trim().max(64).optional(),
+  }),
+  z.object({
+    section: z.literal('geo'),
+    lat: z.number().min(-90).max(90),
+    lon: z.number().min(-180).max(180),
+    /** Метры. */
+    radius: z.number().int().min(1).max(GEO_RADIUS_MAX_M),
   }),
 ]);
 type StartInput = z.infer<typeof StartInput>;
@@ -138,7 +146,7 @@ export const searchRouter = router({
     const base = {
       userId: ctx.user.id,
       section: input.section as SearchSection,
-      query: input.value,
+      query: input.section === 'geo' ? geoQuery(input.lat, input.lon, input.radius) : input.value,
       startedAt: new Date().toISOString(),
       candidates: null,
       result: null,
@@ -161,7 +169,11 @@ export const searchRouter = router({
         plan = { ...plan, params: { [kind.param]: ids[0]! }, extra: { ...plan.extra, tgid: ids[0]!, via: `@${nik.value}` } };
       }
     } else if (input.section === 'fuzzy') plan = planFuzzy(input);
-    else {
+    else if (input.section === 'geo') {
+      // Шлюз округляет координаты до 1e-6° (точность locs) — так же и в запросе, и в истории.
+      const params = { lat: input.lat.toFixed(6), lon: input.lon.toFixed(6), radius: String(input.radius) };
+      plan = { path: GEO_RADIUS_PATH, params, service: 'ruleaks', kind: 'radius', deep: false, extra: params };
+    } else {
       const mode = findTgMode(input.mode)!;
       const params: Record<string, string> = {};
       const extra: Record<string, string> = {};

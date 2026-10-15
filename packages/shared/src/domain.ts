@@ -177,7 +177,7 @@ export const SnapshotItem = z.object({
   ...itemBase,
   type: z.literal('snapshot'),
   searchId: Id,
-  section: z.enum(['attr', 'tg', 'fuzzy']).default('attr'),
+  section: z.enum(['attr', 'tg', 'fuzzy', 'geo']).default('attr'),
   kind: z.string(),
   query: z.string(),
   deep: z.boolean(),
@@ -327,12 +327,12 @@ export const InvestigationSummary = Investigation.pick({
 
 /** choose — по @нику нашлось несколько Telegram ID, пользователь выбирает один (как кнопки в боте). */
 export const SearchJobState = z.enum(['running', 'done', 'failed', 'choose']);
-export const SearchSectionSchema = z.enum(['attr', 'tg', 'fuzzy']);
+export const SearchSectionSchema = z.enum(['attr', 'tg', 'fuzzy', 'geo']);
 
 export const SearchJob = z.object({
   id: Id,
   section: SearchSectionSchema,
-  /** attr: вид поиска (phone, email…); tg: режим (comments, likes…); fuzzy: email | plate. */
+  /** attr: вид поиска (phone, email…); tg: режим (comments, likes…); fuzzy: email | plate; geo: radius. */
   kind: z.string(),
   query: z.string(),
   deep: z.boolean(),

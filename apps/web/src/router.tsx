@@ -42,6 +42,7 @@ export const tgSearchRoute = createRoute({
 export const geoSearchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search/geo',
+  validateSearch: z.object({ q: text }),
   component: lazyRouteComponent(() => import('./features/search/GeoSearchPage.tsx'), 'GeoSearchPage'),
 });
 

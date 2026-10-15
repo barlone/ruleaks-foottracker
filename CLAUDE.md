@@ -182,10 +182,13 @@ the client queues requests per token and skips polls that are too early instead 
 Job progress is advanced only when the browser polls `search.job` (TanStack Query, also in background tabs); a job
 nobody polls stays `running` until `[api] job-timeout-sec`. A server-side poller is planned.
 
-### Geo search (prototype)
+### Geo search
 
 `/search/geo` (`features/search/GeoSearchPage.tsx` + `GeoPicker.tsx`): MapLibre GL map with a draggable marker
-(Latitude/Longitude fields) and a radius circle in km; the gateway has no geo API yet, so nothing is searched.
+(Latitude/Longitude fields) and a radius circle in km. Search is its own history section `geo` (DB enum value added
+by a migration) → `raw_search.byloc_radius` (`lat`, `lon`, `radius` in whole metres ≤ 50 000); the answer has the raw
+attribute-search shape and is rendered by `AttrSearchPage`'s exported `JobView`. Query text / `?q=` is
+`lat, lon @metres` (the `geolocs` format, `geoQuery`/`parseGeoloc`).
 `geo.config` (`routers/geo.ts`) returns the map settings or `null` when `[config] geo-search` is off (the nav item
 and the page hide). `[geo-search] tiles`: `raster` — public raster tiles (dev only), `pmtiles` — own Protomaps vector
 tiles (`tools/geo/` builds the Europe+Russia extract, zoom ≤ 14). Local `pmtiles`/`assets` paths are served by the

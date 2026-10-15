@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { FolderPlus, History, Trash2 } from 'lucide-react';
-import { FUZZY_MODES, SEARCH_KINDS, TG_MODES, type SearchSection } from '@ft/shared';
+import { FUZZY_MODES, GEO_MODES, SEARCH_KINDS, TG_MODES, type SearchSection } from '@ft/shared';
 import { Button, Card, Empty, Spinner } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { ago } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
 
-// Общее для трёх разделов поиска: раскладка «поиск + история», опрос задачи, панель действий.
+// Общее для разделов поиска: раскладка «поиск + история», опрос задачи, панель действий.
 
 export function kindLabel(section: SearchSection, kind: string): string {
-  const list: readonly { id: string; label: string }[] = section === 'attr' ? SEARCH_KINDS : section === 'tg' ? TG_MODES : FUZZY_MODES;
+  const list: readonly { id: string; label: string }[] =
+    section === 'attr' ? SEARCH_KINDS : section === 'tg' ? TG_MODES : section === 'geo' ? GEO_MODES : FUZZY_MODES;
   return list.find((k) => k.id === kind)?.label ?? kind;
 }
 

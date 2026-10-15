@@ -1,10 +1,15 @@
-import { useCallback, useState, type ClipboardEvent } from 'react';
+import { useCallback, useEffect, useState, type ClipboardEvent } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Crosshair, Eraser, MapPin } from 'lucide-react';
+import { GEO_RADIUS_MAX_M, geoQuery, parseGeoloc } from '@ft/shared';
 import { Button, Card, Empty, Field, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
+import { errorText } from '../../lib/errors.ts';
+import { JobView } from './AttrSearchPage.tsx';
+import { SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
 import { GeoPicker, type GeoConfig, type GeoPoint } from './GeoPicker.tsx';
 
-const MAX_RADIUS_KM = 1000;
+const MAX_RADIUS_KM = GEO_RADIUS_MAX_M / 1000;
 
 /** Число с точкой или запятой в дробной части; null — пусто или не число. */
 function num(s: string): number | null {
@@ -22,7 +27,22 @@ function pair(s: string): [string, string] | null {
 
 const fmt = (v: number) => v.toFixed(6);
 
-/** «Поиск по геоданным» — прототип: точка на карте и радиус. API геопоиска пока нет, поиск не запускается. */
+/** Метры → текст поля «Радиус, км» без хвостовых нулей (500 → «0.5»). */
+const kmText = (m: number) => String(Number((m / 1000).toFixed(3)));
+
+/** «широта, долгота @метры» (geoQuery) → точка и радиус; null — не такой запрос. */
+function parseQuery(q: string): { lat: number; lon: number; radiusM: number } | null {
+  const g = parseGeoloc(q);
+  const p = pair(g.coords);
+  if (!p || g.radiusM === null) return null;
+  const lat = Number(p[0]);
+  const lon = Number(p[1]);
+  const radiusM = Math.round(g.radiusM);
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180 || radiusM < 1 || radiusM > GEO_RADIUS_MAX_M) return null;
+  return { lat, lon, radiusM };
+}
+
+/** «Поиск по геоданным»: точка на карте и радиус → записи утечек с геолокациями в этом круге (raw_search.byloc_radius). */
 export function GeoSearchPage() {
   // null — раздел выключен в config.ini ([config] geo-search).
   const geo = trpc.geo.config.useQuery(undefined, { staleTime: Infinity });
@@ -44,11 +64,25 @@ export function GeoSearchPage() {
 }
 
 function GeoSearch({ config }: { config: GeoConfig }) {
-  const [latText, setLatText] = useState('');
-  const [lonText, setLonText] = useState('');
-  const [radiusText, setRadiusText] = useState('1');
+  const params = useSearch({ from: '/search/geo' });
+  const navigate = useNavigate({ from: '/search/geo' });
+  const me = trpc.auth.me.useQuery();
+  const utils = trpc.useUtils();
+  const fromUrl = params.q ? parseQuery(params.q) : null;
+  const [latText, setLatText] = useState(fromUrl ? fmt(fromUrl.lat) : '');
+  const [lonText, setLonText] = useState(fromUrl ? fmt(fromUrl.lon) : '');
+  const [radiusText, setRadiusText] = useState(fromUrl ? kmText(fromUrl.radiusM) : '1');
   // Счётчик для GeoPicker: изменился — карта показывает круг целиком.
   const [focus, setFocus] = useState(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+
+  const start = trpc.search.start.useMutation({
+    onSuccess: (j) => {
+      setJobId(j.id);
+      void utils.search.recent.invalidate({ section: 'geo' });
+    },
+  });
+  const job = useSearchJob(jobId);
 
   const lat = num(latText);
   const lon = num(lonText);
@@ -58,6 +92,38 @@ function GeoSearch({ config }: { config: GeoConfig }) {
   const radiusBad = radiusText.trim() !== '' && (radiusKm === null || radiusKm <= 0 || radiusKm > MAX_RADIUS_KM);
   const point: GeoPoint | null = lat !== null && lon !== null && !latBad && !lonBad ? { lat, lon } : null;
   const radiusM = radiusKm !== null && !radiusBad ? radiusKm * 1000 : null;
+  // Шлюз принимает радиус целыми метрами, от 1.
+  const searchRadius = radiusM !== null ? Math.max(1, Math.round(radiusM)) : null;
+  const disabled = !me.data?.access.active;
+
+  function run(p = point, r = searchRadius) {
+    if (!p || !r) return;
+    void navigate({ search: { q: geoQuery(p.lat, p.lon, r) } });
+    start.mutate({ section: 'geo', lat: p.lat, lon: p.lon, radius: r });
+  }
+
+  // Ссылка /search/geo?q=… (повтор снимка из досье) запускает поиск.
+  useRunOnMount(() => {
+    run({ lat: fromUrl!.lat, lon: fromUrl!.lon }, fromUrl!.radiusM);
+    setFocus((f) => f + 1);
+  }, !!(fromUrl && me.data?.access.active));
+
+  // Открыт поиск из истории — точка и радиус на карте те же, что у него.
+  const opened = job.data?.section === 'geo' ? job.data : null;
+  useEffect(() => {
+    if (!opened) return;
+    const lat = num(opened.params.lat ?? '');
+    const lon = num(opened.params.lon ?? '');
+    const r = num(opened.params.radius ?? '');
+    if (lat === null || lon === null || r === null) return;
+    setLatText(fmt(lat));
+    setLonText(fmt(lon));
+    setRadiusText(kmText(r));
+    setFocus((f) => f + 1);
+  }, [opened?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // «Провалиться» в найденное значение — поиск по атрибутам.
+  const pivot = (kind: string, value: string) => void navigate({ to: '/search', search: { kind, q: value } });
 
   const pick = useCallback((p: GeoPoint) => {
     setLatText(fmt(p.lat));
@@ -81,21 +147,22 @@ function GeoSearch({ config }: { config: GeoConfig }) {
   }
 
   return (
-    <div className="space-y-6 py-6 pl-6 pr-[30px]">
-      <header className="animate-fade-up">
-        <h1 className="text-2xl font-extrabold">Поиск по геоданным</h1>
-        <p className="mt-1 text-sm text-dim">Выберите точку на карте или введите координаты и задайте радиус области поиска.</p>
-      </header>
-
+    <SearchLayout
+      section="geo"
+      title="Поиск по геоданным"
+      subtitle="Выберите точку на карте или введите координаты и задайте радиус области поиска."
+      activeId={jobId}
+      onOpen={setJobId}
+    >
       <Card className="animate-fade-up">
         <form
           className="space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            setFocus((f) => f + 1);
+            run();
           }}
         >
-          <div className="grid items-end gap-3 md:grid-cols-[1fr_1fr_160px_auto]">
+          <div className="grid items-end gap-3 lg:grid-cols-[1fr_1fr_120px_auto]">
             <Field label="Latitude">
               <Input
                 value={latText}
@@ -129,7 +196,7 @@ function GeoSearch({ config }: { config: GeoConfig }) {
               />
             </Field>
             <div className="flex gap-2">
-              <Button type="submit" className="h-12" disabled={!point} title="Показать область на карте">
+              <Button type="button" className="h-12" disabled={!point} title="Показать область на карте" onClick={() => setFocus((f) => f + 1)}>
                 <Crosshair size={16} /> Показать
               </Button>
               <Button
@@ -145,8 +212,8 @@ function GeoSearch({ config }: { config: GeoConfig }) {
               >
                 <Eraser size={16} />
               </Button>
-              <Button type="button" variant="primary" className="h-12 px-6" disabled title="API поиска по геоданным пока не подключено">
-                Искать
+              <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !point || !searchRadius || start.isPending}>
+                {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
               </Button>
             </div>
           </div>
@@ -155,15 +222,17 @@ function GeoSearch({ config }: { config: GeoConfig }) {
             {latBad && <Tag tone="warn">широта — число от −90 до 90</Tag>}
             {lonBad && <Tag tone="warn">долгота — число от −180 до 180</Tag>}
             {radiusBad && <Tag tone="warn">радиус — от 0 до {MAX_RADIUS_KM} км</Tag>}
-            <Tag tone="dim">прототип: поиск пока не подключён</Tag>
+            {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
           </div>
         </form>
       </Card>
 
       {/* isolate — z-index элементов управления карты не выходят за её пределы и не перекрывают кнопку «наверх». */}
       <div className="isolate animate-fade-up overflow-hidden rounded-2xl border border-line">
-        <GeoPicker config={config} point={point} radiusM={radiusM} onPick={pick} focus={focus} className="ft-map h-[560px] w-full" />
+        <GeoPicker config={config} point={point} radiusM={radiusM} onPick={pick} focus={focus} className="ft-map h-[480px] w-full" />
       </div>
-    </div>
+
+      {jobId && <JobView job={job.data} loading={job.isLoading} onPivot={pivot} />}
+    </SearchLayout>
   );
 }

@@ -382,9 +382,21 @@ export const FIELD_TO_KIND: Partial<Record<LeakField, SearchKindId>> = {
 // Разделы поиска (как разделы меню бота)
 // ======================================================================
 
-/** attr — /search и /deepsearch, tg — /tgsearch, fuzzy — /regsearch. */
-export type SearchSection = 'attr' | 'tg' | 'fuzzy';
-export const SEARCH_SECTIONS: SearchSection[] = ['attr', 'tg', 'fuzzy'];
+/** attr — /search и /deepsearch, tg — /tgsearch, fuzzy — /regsearch, geo — точка и радиус (в боте нет). */
+export type SearchSection = 'attr' | 'tg' | 'fuzzy' | 'geo';
+export const SEARCH_SECTIONS: SearchSection[] = ['attr', 'tg', 'fuzzy', 'geo'];
+
+// ---------- Поиск по геоданным ----------
+
+/** Записи утечек с геолокациями в круге: lat, lon — градусы, radius — целые метры (шлюз: до 50 км). */
+export const GEO_RADIUS_PATH = rl('raw_search.byloc_radius');
+export const GEO_RADIUS_MAX_M = 50_000;
+export const GEO_MODES = [{ id: 'radius', label: 'Точка и радиус' }] as const;
+
+/** Запрос геопоиска в истории: «широта, долгота @радиус» — как значение geolocs (parseGeoloc). */
+export function geoQuery(lat: number, lon: number, radiusM: number): string {
+  return `${lat.toFixed(6)}, ${lon.toFixed(6)} @${radiusM}`;
+}
 
 // ---------- Поиск в Telegram (app/bot/handlers/tg_search.py) ----------
 

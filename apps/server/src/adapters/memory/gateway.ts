@@ -24,7 +24,8 @@ export class MemoryGateway implements SearchGateway {
 
     if (path.includes('raw_search')) {
       await sleep(400 + Math.random() * 600);
-      return { state: 'done', jobId, result: job({ leaks: fakeLeaks(query) }) };
+      const leaks = params.lat && params.lon ? fakeLocLeaks(Number(params.lat), Number(params.lon), Number(params.radius)) : fakeLeaks(query);
+      return { state: 'done', jobId, result: job({ leaks }) };
     }
 
     let result: unknown;
@@ -110,6 +111,18 @@ function fakeLeaks(query: string): LeakCard[] {
         : []),
     ],
   }));
+}
+
+/** raw_search.byloc_radius: те же записи, но геолокации — внутри круга. */
+function fakeLocLeaks(lat: number, lon: number, radiusM: number): LeakCard[] {
+  const leaks = fakeLeaks(`${lat},${lon}`);
+  let k = 0;
+  for (const card of leaks) for (const t of card.tuples ?? []) {
+    const r = (radiusM * ((k * 37) % 90 + 5)) / 100 / 111_320;
+    const a = k++ * 2.4;
+    t.geolocs = [`${(lat + r * Math.sin(a)).toFixed(6)}, ${(lon + (r * Math.cos(a)) / Math.cos((lat * Math.PI) / 180)).toFixed(6)} @${50 + (k % 4) * 100}`];
+  }
+  return leaks;
 }
 
 function fakeDeep(query: string): DeepRow[] {

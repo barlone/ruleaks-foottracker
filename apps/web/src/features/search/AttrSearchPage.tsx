@@ -146,7 +146,8 @@ export function AttrSearchPage() {
   );
 }
 
-function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boolean; onPivot: (kind: string, value: string) => void }) {
+/** Результат raw/deep-поиска по утечкам: и «Поиск по атрибутам», и «Поиск по геоданным» (у шлюза ответ того же вида). */
+export function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boolean; onPivot: (kind: string, value: string) => void }) {
   const [selected, setSelected] = useState<Map<string, PendingValue>>(new Map());
   const [dialog, setDialog] = useState(false);
   // Сканы — до ранних return: хуки. Ссылка на leaks стабильна между опросами (structural sharing react-query).
@@ -258,7 +259,7 @@ function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boo
         open={dialog}
         onOpenChange={setDialog}
         values={[...selected.values()]}
-        search={{ id: job.id, section: 'attr', kind: job.kind, query: job.query, deep: job.deep, summary }}
+        search={{ id: job.id, section: job.section, kind: job.kind, query: job.query, deep: job.deep, summary }}
       />
     </>
   );

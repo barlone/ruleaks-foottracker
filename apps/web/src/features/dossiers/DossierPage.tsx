@@ -338,6 +338,7 @@ function RepeatSearchLink({ section, kind, query, deep }: { section: SearchSecti
   const icon = <FileSearch size={14} />;
   if (section === 'tg') return <Link to="/search/telegram" search={{ mode: kind, q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
   if (section === 'fuzzy') return <Link to="/search/fuzzy" search={{ mode: kind, q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
+  if (section === 'geo') return <Link to="/search/geo" search={{ q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
   return <Link to="/search" search={{ kind, q: query, deep }} title="Повторить поиск" className={cls}>{icon}</Link>;
 }
 

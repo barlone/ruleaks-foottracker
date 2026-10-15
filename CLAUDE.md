@@ -188,7 +188,9 @@ nobody polls stays `running` until `[api] job-timeout-sec`. A server-side poller
 (Latitude/Longitude fields) and a radius circle in km. Search is its own history section `geo` (DB enum value added
 by a migration) → `raw_search.byloc_radius` (`lat`, `lon`, `radius` in whole metres ≤ 50 000); the answer has the raw
 attribute-search shape and is rendered by `AttrSearchPage`'s exported `JobView`. Query text / `?q=` is
-`lat, lon @metres` (the `geolocs` format, `geoQuery`/`parseGeoloc`).
+`lat, lon @metres` (the `geolocs` format, `geoQuery`/`parseGeoloc`). «Из ссылки» / pasting a map URL into a coordinate field
+takes the point from a Google Maps (`!3d…!4d…` place, else `/@lat,lon` view centre), Yandex (`pt`/`ll`, lon first) or
+OSM link (`features/search/mapLinks.ts`); short `maps.app.goo.gl` links carry no coordinates.
 `geo.config` (`routers/geo.ts`) returns the map settings or `null` when `[config] geo-search` is off (the nav item
 and the page hide). `[geo-search] tiles`: `raster` — public raster tiles (dev only), `pmtiles` — own Protomaps vector
 tiles (`tools/geo/` builds the Europe+Russia extract, zoom ≤ 14). Local `pmtiles`/`assets` paths are served by the

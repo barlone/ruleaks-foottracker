@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState, type ClipboardEvent } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Crosshair, Eraser, MapPin } from 'lucide-react';
+import { Crosshair, Eraser, Link2, MapPin } from 'lucide-react';
 import { GEO_RADIUS_MAX_M, geoQuery, parseGeoloc } from '@ft/shared';
-import { Button, Card, Empty, Field, Input, Spinner, Tag } from '../../components/ui.tsx';
+import { Button, Card, Dialog, Empty, Field, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { JobView } from './AttrSearchPage.tsx';
 import { SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
 import { GeoPicker, type GeoConfig, type GeoPoint } from './GeoPicker.tsx';
+import { isShortMapLink, parseMapLink } from './mapLinks.ts';
 
 const MAX_RADIUS_KM = GEO_RADIUS_MAX_M / 1000;
 
@@ -75,6 +76,7 @@ function GeoSearch({ config }: { config: GeoConfig }) {
   // Счётчик для GeoPicker: изменился — карта показывает круг целиком.
   const [focus, setFocus] = useState(0);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const start = trpc.search.start.useMutation({
     onSuccess: (j) => {
@@ -136,14 +138,31 @@ function GeoSearch({ config }: { config: GeoConfig }) {
     setFocus((f) => f + 1);
   }
 
-  /** Вставленная в любое из полей пара «lat, lon» раскладывается по обоим (только при вставке — не мешает набору). */
-  function pastePair(e: ClipboardEvent<HTMLInputElement>) {
-    const p = pair(e.clipboardData.getData('text'));
-    if (!p) return;
-    e.preventDefault();
-    setLatText(p[0]);
-    setLonText(p[1]);
+  function setPoint(p: GeoPoint) {
+    setLatText(fmt(p.lat));
+    setLonText(fmt(p.lon));
     setFocus((f) => f + 1);
+  }
+
+  /**
+   * Вставленная в любое из полей пара «lat, lon» или ссылка на карту раскладывается по обоим
+   * (только при вставке — не мешает набору).
+   */
+  function pastePair(e: ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData('text');
+    const p = pair(text);
+    if (p) {
+      e.preventDefault();
+      setLatText(p[0]);
+      setLonText(p[1]);
+      setFocus((f) => f + 1);
+      return;
+    }
+    const link = parseMapLink(text);
+    if (link) {
+      e.preventDefault();
+      setPoint(link);
+    }
   }
 
   return (
@@ -162,63 +181,69 @@ function GeoSearch({ config }: { config: GeoConfig }) {
             run();
           }}
         >
-          <div className="grid items-end gap-3 lg:grid-cols-[1fr_1fr_120px_auto]">
-            <Field label="Latitude">
-              <Input
-                value={latText}
-                onChange={(e) => typeCoord('lat', e.target.value)}
-                onPaste={pastePair}
-                placeholder="55.755800"
-                className={latBad ? 'h-12 font-mono !border-danger/60' : 'h-12 font-mono'}
-                inputMode="decimal"
-              />
-            </Field>
-            <Field label="Longitude">
-              <Input
-                value={lonText}
-                onChange={(e) => typeCoord('lon', e.target.value)}
-                onPaste={pastePair}
-                placeholder="37.617300"
-                className={lonBad ? 'h-12 font-mono !border-danger/60' : 'h-12 font-mono'}
-                inputMode="decimal"
-              />
-            </Field>
-            <Field label="Радиус, км">
-              <Input
-                value={radiusText}
-                onChange={(e) => {
-                  setRadiusText(e.target.value);
-                  setFocus((f) => f + 1);
-                }}
-                placeholder="1"
-                className={radiusBad ? 'h-12 font-mono !border-danger/60' : 'h-12 font-mono'}
-                inputMode="decimal"
-              />
-            </Field>
-            <div className="flex gap-2">
-              <Button type="button" className="h-12" disabled={!point} title="Показать область на карте" onClick={() => setFocus((f) => f + 1)}>
-                <Crosshair size={16} /> Показать
+          {/* Колонки — по ширине самой формы (рядом может быть история), а не окна. */}
+          <div className="@container">
+            <div className="grid items-end gap-3 @xl:grid-cols-2 @4xl:grid-cols-[1fr_1fr_auto_120px_auto]">
+              <Field label="Latitude">
+                <Input
+                  value={latText}
+                  onChange={(e) => typeCoord('lat', e.target.value)}
+                  onPaste={pastePair}
+                  placeholder="55.755800"
+                  className={latBad ? 'h-12 font-mono !border-danger/60' : 'h-12 font-mono'}
+                  inputMode="decimal"
+                />
+              </Field>
+              <Field label="Longitude">
+                <Input
+                  value={lonText}
+                  onChange={(e) => typeCoord('lon', e.target.value)}
+                  onPaste={pastePair}
+                  placeholder="37.617300"
+                  className={lonBad ? 'h-12 font-mono !border-danger/60' : 'h-12 font-mono'}
+                  inputMode="decimal"
+                />
+              </Field>
+              <Button type="button" className="h-12" onClick={() => setLinkOpen(true)} title="Координаты из ссылки Google Maps, Яндекс Карт или OpenStreetMap">
+                <Link2 size={16} /> Из ссылки
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-12"
-                disabled={!latText && !lonText}
-                title="Убрать точку"
-                onClick={() => {
-                  setLatText('');
-                  setLonText('');
-                }}
-              >
-                <Eraser size={16} />
-              </Button>
-              <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !point || !searchRadius || start.isPending}>
-                {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
-              </Button>
+              <Field label="Радиус, км">
+                <Input
+                  value={radiusText}
+                  onChange={(e) => {
+                    setRadiusText(e.target.value);
+                    setFocus((f) => f + 1);
+                  }}
+                  placeholder="1"
+                  className={radiusBad ? 'h-12 font-mono !border-danger/60' : 'h-12 font-mono'}
+                  inputMode="decimal"
+                />
+              </Field>
+              <div className="flex gap-2">
+                <Button type="button" className="h-12" disabled={!point} title="Показать область на карте" onClick={() => setFocus((f) => f + 1)}>
+                  <Crosshair size={16} /> Показать
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-12"
+                  disabled={!latText && !lonText}
+                  title="Убрать точку"
+                  onClick={() => {
+                    setLatText('');
+                    setLonText('');
+                  }}
+                >
+                  <Eraser size={16} />
+                </Button>
+                <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !point || !searchRadius || start.isPending}>
+                  {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
+                </Button>
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
-            <span className="flex items-center gap-1.5"><MapPin size={14} className="text-mint/70" /> Щёлкните по карте или перетащите маркер; пару «широта, долгота» можно вставить в любое поле.</span>
+            <span className="flex items-center gap-1.5"><MapPin size={14} className="text-mint/70" /> Щёлкните по карте или перетащите маркер; пару «широта, долгота» или ссылку на карту можно вставить в любое поле.</span>
             {latBad && <Tag tone="warn">широта — число от −90 до 90</Tag>}
             {lonBad && <Tag tone="warn">долгота — число от −180 до 180</Tag>}
             {radiusBad && <Tag tone="warn">радиус — от 0 до {MAX_RADIUS_KM} км</Tag>}
@@ -233,6 +258,58 @@ function GeoSearch({ config }: { config: GeoConfig }) {
       </div>
 
       {jobId && <JobView job={job.data} loading={job.isLoading} onPivot={pivot} />}
+
+      <MapLinkDialog
+        open={linkOpen}
+        onOpenChange={setLinkOpen}
+        onPick={(p) => {
+          setPoint(p);
+          setLinkOpen(false);
+        }}
+      />
     </SearchLayout>
+  );
+}
+
+/** Ввод ссылки на карту: сразу видно, какие координаты из неё возьмутся. */
+function MapLinkDialog({ open, onOpenChange, onPick }: { open: boolean; onOpenChange: (v: boolean) => void; onPick: (p: GeoPoint) => void }) {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    if (open) setText('');
+  }, [open]);
+  const found = text.trim() ? parseMapLink(text) : null;
+  const short = !found && isShortMapLink(text);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Координаты из ссылки" wide>
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (found) onPick(found);
+        }}
+      >
+        <Input
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="https://www.google.com/maps/place/…/@55.7558,37.6173,17z/…"
+          className="h-12 font-mono"
+        />
+        <div className="min-h-6 text-sm">
+          {found && (
+            <span className="font-mono text-mint">
+              {fmt(found.lat)}, {fmt(found.lon)} <span className="text-dim">· {found.what}</span>
+            </span>
+          )}
+          {short && <Tag tone="warn">короткая ссылка без координат — откройте её в браузере и скопируйте полный адрес</Tag>}
+          {text.trim() && !found && !short && <Tag tone="warn">в ссылке нет координат</Tag>}
+          {!text.trim() && <span className="text-dim">Google Maps, Яндекс Карты или OpenStreetMap. Для ссылки на место берутся координаты места, иначе — центр карты.</span>}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button type="submit" variant="primary" disabled={!found}>Подставить</Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

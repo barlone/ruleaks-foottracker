@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Check, CornerDownRight, Filter, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, CornerDownRight, Filter, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
 import { FIELD_TO_KIND, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds, isUkrainianPhone, type DeepRow, type LeakCard, type LeakField } from '@ft/shared';
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
@@ -155,10 +155,19 @@ export function JobView({ job, loading, onPivot }: { job: Job | undefined; loadi
   const scans = useFoundScans(scanLeaks);
   // Фильтр по найденным атрибутам: пусто — показывать всё.
   const [fields, setFields] = useState<Set<string>>(new Set());
+  // Свёрнутые карточки утечек — по индексу в leaks.
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   useEffect(() => {
     setSelected(new Map());
     setFields(new Set());
+    setCollapsed(new Set());
   }, [job?.id]);
+  const toggleCollapsed = (i: number) => {
+    const next = new Set(collapsed);
+    if (next.has(i)) next.delete(i);
+    else next.add(i);
+    setCollapsed(next);
+  };
 
   if (job?.state === 'choose') {
     return (
@@ -231,27 +240,46 @@ export function JobView({ job, loading, onPivot }: { job: Job | undefined; loadi
       ) : (
         <div className="space-y-4">
           {leaks.length === 0 && <Empty>Ничего не найдено</Empty>}
-          {visibleLeaks.map((card, i) => (
-            <Card
-              key={i}
-              title={<>{card.leak} {card.trusted && <ShieldCheck size={13} className="text-mint" />}</>}
-              actions={<Tag tone="dim">{card.tuples?.length ?? 0} зап.</Tag>}
-            >
-              {/* Записи одной утечки разделены тонкой серой чертой. Две колонки — только когда сам бокс
-                  достаточно широк (container query), иначе значения с иконками действий не помещаются. */}
-              <div className="@container divide-y divide-white/10">
-                {card.tuples?.filter((t) => fieldOrder.some((f) => shown(f) && t[f as LeakField]?.length)).map((t) => (
-                  <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 py-3 first:pt-0 last:pb-0 @4xl:grid-cols-2">
-                    {(Object.keys(LEAK_FIELDS) as LeakField[]).filter(shown).flatMap((f) =>
-                      (t[f] ?? []).map((v) => (
-                        <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
-                      )),
-                    )}
+          {visibleLeaks.map((card) => {
+            const i = leaks.indexOf(card);
+            const folded = collapsed.has(i);
+            return (
+              <Card
+                key={i}
+                className={folded ? '[&>header]:mb-0' : undefined}
+                title={<>{card.leak} {card.trusted && <ShieldCheck size={13} className="text-mint" />}</>}
+                actions={
+                  <>
+                    <Tag tone="dim">{card.tuples?.length ?? 0} зап.</Tag>
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapsed(i)}
+                      title={folded ? 'Развернуть' : 'Свернуть'}
+                      className="cursor-pointer rounded-md p-1 text-mute transition hover:bg-mint/10 hover:text-mint"
+                    >
+                      {folded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                    </button>
+                  </>
+                }
+              >
+                {/* Записи одной утечки разделены тонкой серой чертой. Две колонки — только когда сам бокс
+                    достаточно широк (container query), иначе значения с иконками действий не помещаются. */}
+                {!folded && (
+                  <div className="@container divide-y divide-white/10">
+                    {card.tuples?.filter((t) => fieldOrder.some((f) => shown(f) && t[f as LeakField]?.length)).map((t) => (
+                      <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 py-3 first:pt-0 last:pb-0 @4xl:grid-cols-2">
+                        {(Object.keys(LEAK_FIELDS) as LeakField[]).filter(shown).flatMap((f) =>
+                          (t[f] ?? []).map((v) => (
+                            <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
+                          )),
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </Card>
-          ))}
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
 

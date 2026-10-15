@@ -313,41 +313,66 @@ function FoundGeoMap({ leaks }: { leaks: LeakCard[] }) {
   const geo = trpc.geo.config.useQuery(undefined, { staleTime: Infinity });
   // Выбранная дата геосканирования; null — «Все».
   const [date, setDate] = useState<string | null>(null);
-  useEffect(() => setDate(null), [leaks]);
+  // Выключенные базы (утечки); пусто — на карте точки всех баз.
+  const [off, setOff] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setDate(null);
+    setOff(new Set());
+  }, [leaks]);
+  const toggleLeak = (leak: string) => {
+    const next = new Set(off);
+    if (next.has(leak)) next.delete(leak);
+    else next.add(leak);
+    setOff(next);
+  };
 
   // Каждая геолокация каждой записи — отдельно: при выборе даты точка и её подпись собираются только из записей этой даты.
   const records = useMemo(() => {
-    const out: { key: string; lat: number; lon: number; radiusM: number | null; value: string; line: string; date: string | null }[] = [];
+    const out: { key: string; leak: string; lat: number; lon: number; radiusM: number | null; value: string; line: string; date: string | null }[] = [];
     for (const card of leaks) for (const t of card.tuples ?? []) {
       const date = scanDate(t.infos ?? []);
       for (const v of t.geolocs ?? []) {
         const g = parseGeoloc(v);
         const ll = latLon(g.coords);
         if (!ll) continue;
-        out.push({ key: `${ll.lat},${ll.lon},${g.radiusM ?? ''}`, ...ll, radiusM: g.radiusM, value: attrDisplayValue('geolocs', v), line: [card.leak, ...(t.infos ?? [])].join(' · '), date });
+        out.push({ key: `${ll.lat},${ll.lon},${g.radiusM ?? ''}`, leak: card.leak, ...ll, radiusM: g.radiusM, value: attrDisplayValue('geolocs', v), line: [card.leak, ...(t.infos ?? [])].join(' · '), date });
       }
     }
     return out;
   }, [leaks]);
 
+  // Фильтры перекрёстные: счётчики дат — по включённым базам, счётчики баз — по выбранной дате.
+  const byLeak = useMemo(() => records.filter((r) => !off.has(r.leak)), [records, off]);
+  const byDate = useMemo(() => (date ? records.filter((r) => r.date === date) : records), [records, date]);
+
   // Даты по возрастанию и сколько точек у каждой.
   const dates = useMemo(() => {
     const n = new Map<string, Set<string>>();
-    for (const r of records) if (r.date) (n.get(r.date) ?? n.set(r.date, new Set()).get(r.date)!).add(r.key);
+    for (const r of records) if (r.date) n.set(r.date, n.get(r.date) ?? new Set());
+    for (const r of byLeak) if (r.date) n.get(r.date)!.add(r.key);
     return [...n].map(([d, keys]) => ({ d, count: keys.size })).sort((x, y) => dateKey(x.d).localeCompare(dateKey(y.d)));
-  }, [records]);
+  }, [records, byLeak]);
+
+  // Базы с геолокациями — в порядке карточек результата, у каждой — число точек.
+  const bases = useMemo(() => {
+    const n = new Map<string, Set<string>>();
+    for (const r of records) n.set(r.leak, n.get(r.leak) ?? new Set());
+    for (const r of byDate) n.get(r.leak)!.add(r.key);
+    return [...n].map(([leak, keys]) => ({ leak, count: keys.size }));
+  }, [records, byDate]);
 
   const points = useMemo(() => {
     const byKey = new Map<string, FoundGeoPoint>();
-    for (const r of records) {
+    for (const r of byLeak) {
       if (date && r.date !== date) continue;
       let p = byKey.get(r.key);
       if (!p) byKey.set(r.key, (p = { lat: r.lat, lon: r.lon, radiusM: r.radiusM, lines: [r.value] }));
       p.lines.push(r.line);
     }
     return [...byKey.values()];
-  }, [records, date]);
-  const total = useMemo(() => new Set(records.map((r) => r.key)).size, [records]);
+  }, [byLeak, date]);
+  const total = useMemo(() => new Set(byLeak.map((r) => r.key)).size, [byLeak]);
+  const totalBases = useMemo(() => new Set(byDate.map((r) => r.key)).size, [byDate]);
 
   if (!geo.data || !records.length) return null;
   const chip = (on: boolean) =>
@@ -363,8 +388,22 @@ function FoundGeoMap({ leaks }: { leaks: LeakCard[] }) {
           <GeoPointsMap config={geo.data} points={points} className="ft-map h-[560px] w-full" />
         </Suspense>
       </div>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 font-mono text-[11px] text-dim">Базы:</span>
+        <button type="button" onClick={() => setOff(new Set())} className={chip(off.size === 0)} title="Показать точки всех баз">
+          Все <span className={off.size === 0 ? 'text-mint/70' : 'text-mute'}>{totalBases}</span>
+        </button>
+        {bases.map(({ leak, count }) => {
+          const on = !off.has(leak);
+          return (
+            <button key={leak} type="button" onClick={() => toggleLeak(leak)} className={chip(on)} title={on ? 'Скрыть точки этой базы' : 'Показать точки этой базы'}>
+              {leak} <span className={on ? 'text-mint/70' : 'text-mute'}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
       {dates.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="mr-1 font-mono text-[11px] text-dim">Геосканирование:</span>
           <button type="button" onClick={() => setDate(null)} className={chip(date === null)}>
             Все <span className={date === null ? 'text-mint/70' : 'text-mute'}>{total}</span>

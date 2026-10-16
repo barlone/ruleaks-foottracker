@@ -73,6 +73,9 @@ export type ScanImage =
   | { status: 'not-modified'; etag: string | null }
   | { status: 'not-found' };
 
+/** Хранилище сканов недоступно или ответило ошибкой (не «скана нет») — роутер отдаёт BAD_GATEWAY, /scans — 502. */
+export class ScanStoreError extends Error {}
+
 /** scanstore-api-gate: uuid сканов приходят в записях утечек (ключ scans). */
 export interface ScanStore {
   /** null — скана нет. */

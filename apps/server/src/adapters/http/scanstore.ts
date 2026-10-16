@@ -1,5 +1,5 @@
 import type { AppConfig } from '@ft/config';
-import type { ScanImage, ScanMeta, ScanStore } from '../../ports.ts';
+import { ScanStoreError, type ScanImage, type ScanMeta, type ScanStore } from '../../ports.ts';
 
 // Клиент scanstore-api-gate (D:\GoProjs\scanstore-api-gate, описание API — его README.md):
 //  • Authorization: Bearer <api_token> — один токен сайта, в браузер не уходит;
@@ -10,8 +10,6 @@ import type { ScanImage, ScanMeta, ScanStore } from '../../ports.ts';
 type Cfg = AppConfig['scanstore'];
 
 const META_CACHE_MAX = 5000;
-
-export class ScanStoreError extends Error {}
 
 export class HttpScanStore implements ScanStore {
   private metaCache = new Map<string, ScanMeta | null>();

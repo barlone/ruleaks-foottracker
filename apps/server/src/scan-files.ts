@@ -2,9 +2,8 @@ import { Readable, Transform } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { isUuid } from '@ft/shared';
-import { ScanStoreError } from './adapters/http/scanstore.ts';
 import { config } from './config.ts';
-import type { Deps } from './ports.ts';
+import { ScanStoreError, type Deps } from './ports.ts';
 import { sessionOf } from './trpc.ts';
 
 // Картинки сканов документов ([scanstore-api]): браузер берёт их по /scans/<uuid>, сервер проксирует запрос

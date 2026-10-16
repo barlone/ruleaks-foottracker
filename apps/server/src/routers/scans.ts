@@ -1,8 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { isUuid } from '@ft/shared';
-import { ScanStoreError } from '../adapters/http/scanstore.ts';
-import type { ScanMeta } from '../ports.ts';
+import { ScanStoreError, type ScanMeta } from '../ports.ts';
 import { SCANS_PATH } from '../scan-files.ts';
 import { authedProcedure, router } from '../trpc.ts';
 

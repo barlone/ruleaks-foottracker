@@ -96,11 +96,14 @@ export const authRouter = router({
     if (!loginBound(ctx, input.nonce)) return { status: 'expired' as const };
     const r = await ctx.deps.bot.getLoginRequest(input.nonce);
     if (r.status !== 'confirmed') return { status: r.status };
-    await ctx.deps.bot.consumeLoginRequest(input.nonce);
-    ctx.res.clearCookie(LOGIN_COOKIE, { path: '/' });
+    // Сначала пользователь и сессия, потом nonce помечается использованным: если база откажет посреди,
+    // подтверждение бота не пропадает — следующий опрос повторит вход. Cookie ставятся последними.
     const { id } = await ctx.deps.users.upsertByTgId({ tgId: r.tgId, displayName: r.displayName, username: r.username });
     await loadAccess(ctx.deps, r.tgId, true);
-    await startSession(ctx, id);
+    const sid = await ctx.deps.sessions.create(id, config.sessionTtlMs);
+    await ctx.deps.bot.consumeLoginRequest(input.nonce);
+    ctx.res.setCookie(config.sessionCookie, sid, cookieOpts);
+    ctx.res.clearCookie(LOGIN_COOKIE, { path: '/' });
     return { status: 'confirmed' as const };
   }),
 

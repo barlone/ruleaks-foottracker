@@ -106,17 +106,14 @@ function blocks(tokens: Token[], ctx: MdContext): Content[] {
       case 'blockquote':
         out.push({
           table: { widths: ['*'], body: [[{ stack: blocks((t as Tokens.Blockquote).tokens, ctx), color: '#555' }]] },
-          layout: {
-            hLineWidth: () => 0, vLineWidth: (i: number) => (i === 0 ? 2 : 0), vLineColor: () => '#9fd9c6',
-            paddingLeft: () => 8, paddingTop: () => 2, paddingBottom: () => 0,
-          },
+          layout: 'ftQuote', // раскладки — по имени (theme.ts): содержимое уходит в воркер без функций
           margin: [0, 0, 0, 6],
         });
         break;
       case 'code':
         out.push({
           table: { widths: ['*'], body: [[{ text: clean((t as Tokens.Code).text), fontSize: 8, preserveLeadingSpaces: true, color: '#333' }]] },
-          layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => '#f2f4f3' },
+          layout: 'ftCode',
           margin: [0, 0, 0, 6],
         });
         break;

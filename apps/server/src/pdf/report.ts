@@ -1,6 +1,4 @@
-import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
-import type { Content, TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
+import type { Content } from 'pdfmake/interfaces';
 import {
   CREDIBILITY_LABELS, attrDisplayValue, NODE_TYPE_LABELS, POST_KIND_LABELS,
   type Dossier, type DossierItem, type Investigation, type PdfRequest, type Source,
@@ -8,26 +6,17 @@ import {
 import { can } from '../authz.ts';
 import { exportFileName } from '../export/build.ts';
 import type { Deps } from '../ports.ts';
-import { EMOJI_DIR, EMOJI_FONT, emojiFontDef } from './emoji.ts';
 import { graphSvg } from './graph.ts';
 import { clean, markdownToPdf, type MdContext } from './markdown.ts';
+import { renderPdf } from './render.ts';
+import { APP } from './theme.ts';
 
-// PDF-отчёт по досье или расследованию (pdfmake, шрифт Roboto из пакета pdfmake — с кириллицей).
+// PDF-отчёт по досье или расследованию. Здесь собирается содержимое (pdfmake Content[]), сама вёрстка —
+// в отдельном потоке (pdf/worker.ts через pdf/render.ts): на больших отчётах она занимает процессор десятками секунд.
 // В отчёт попадает только то, что пользователь может читать. Снимков поиска в отчёте нет: нужное из ответов шлюза
-// уже перенесено в атрибуты. Изображения — только data URL (JPEG, PNG, SVG):
-// внешние адреса и локальные пути pdfmake открывать запрещено (политики доступа ниже).
-// Пароль — штатное шифрование PDF (AES-256, PDF 1.7 ext 3); без пароля PDF не шифруется.
+// уже перенесено в атрибуты. Изображения — только data URL (JPEG, PNG, SVG).
+// Пароль — штатное шифрование PDF (AES-256); без пароля PDF не шифруется.
 
-const require = createRequire(import.meta.url);
-const pdfmake = require('pdfmake') as typeof import('pdfmake');
-const ROBOTO = (require('pdfmake/fonts/Roboto.js') as TFontDictionary).Roboto!;
-const FONT_DIR = resolve(dirname(String(ROBOTO.normal)));
-pdfmake.addFonts({ Roboto: ROBOTO, [EMOJI_FONT]: emojiFontDef });
-pdfmake.setUrlAccessPolicy(() => false);
-pdfmake.setLocalAccessPolicy((p) => resolve(p).startsWith(FONT_DIR) || resolve(p).startsWith(EMOJI_DIR));
-
-const APP = 'RuLeaks.Следопыт';
-const MINT = '#0f7a5c';
 const PHOTO_ALBUM = 'Фото персоны';
 const PLATFORM: Record<string, string> = {
   vk: 'VK', telegram: 'Telegram', ok: 'OK', instagram: 'Instagram', facebook: 'Facebook', x: 'X', youtube: 'YouTube', web: 'Веб', other: 'Другое',
@@ -353,32 +342,8 @@ export class Report {
       fontSize: 8.5,
       margin: [0, 0, 0, 14],
     };
-    const doc: TDocumentDefinitions = {
-      pageSize: 'A4',
-      pageMargins: [40, 40, 40, 50],
-      info: { title, author: author || undefined, subject: note || undefined, creator: APP, producer: APP },
-      defaultStyle: { font: 'Roboto', fontSize: 9.5, lineHeight: 1.2 },
-      styles: {
-        h1: { fontSize: 18, bold: true, margin: [0, 0, 0, 2] },
-        h2: { fontSize: 12, bold: true, color: MINT, margin: [0, 12, 0, 5] },
-        th: { bold: true, fontSize: 8, color: '#555' },
-        muted: { color: '#777', fontSize: 9 },
-        small: { fontSize: 7.5, color: '#666' },
-        quote: { fontSize: 8.5, color: '#555', italics: true, margin: [0, 1, 0, 0] },
-      },
-      footer: (page, pages) => ({
-        columns: [
-          { text: `${APP} · ${clean(title)}`, fontSize: 7, color: '#999' },
-          { text: `${page} / ${pages}`, alignment: 'right', fontSize: 7, color: '#999' },
-        ],
-        margin: [40, 20, 40, 0],
-      }),
-      content: [meta, ...body],
-      // Заголовок раздела, после которого на странице ничего не помещается, переносится на следующую.
-      pageBreakBefore: (node, following) => node.headlineLevel === 1 && following.getFollowingNodesOnPage().length === 0,
-      ...(password ? { userPassword: password, ownerPassword: password, version: '1.7ext3' as const, permissions: { printing: 'highResolution' as const, copying: true, modifying: false, annotating: true } } : {}),
-    };
-    const buf = await pdfmake.createPdf(doc).getBuffer();
+    // Стили, колонтитул и правила переноса страниц — в воркере (pdf/worker.ts): туда уходит только содержимое.
+    const buf = await renderPdf({ title, footerTitle: clean(title), author, note, password, content: [meta, ...body] });
     return { fileName: exportFileName(title, kind, 'pdf'), data: buf.toString('base64') };
   }
 }

@@ -157,10 +157,15 @@ like `apply`/`call`. Details: ARCHITECTURE.md §7.1.
 
 ### PDF report
 
-`dossiers.exportPdf` / `investigations.exportPdf` (authed, read access) → `apps/server/src/pdf/report.ts`: pdfmake with
-the Roboto TTFs shipped in the `pdfmake` package (loaded via `createRequire` — the CJS module exports an instance, so
-ESM named imports don't work), `pdf/markdown.ts` (marked lexer → pdfmake blocks), `pdf/graph.ts` (graph as SVG from
-saved node positions). pdfmake's URL and local-file access is locked down; only data-URL JPEG/PNG/SVG images render.
+`dossiers.exportPdf` / `investigations.exportPdf` (authed, read access) → `apps/server/src/pdf/report.ts` builds the
+pdfmake `Content[]`; the layout itself runs in a worker thread (`pdf/worker.ts`, driven by `pdf/render.ts`: one worker
+per process, jobs queued, stopped after 5 min idle, 10 min per job) because pdfmake lays out synchronously and a big
+report would stall every request. Content crosses to the worker via structuredClone, so it must contain no functions:
+table layouts are referenced by name and registered from `pdf/theme.ts` (`addTableLayouts`); footer, styles and
+`pageBreakBefore` live in the worker. pdfmake is loaded there via `createRequire` with the Roboto TTFs shipped in the
+`pdfmake` package (the CJS module exports an instance, so ESM named imports don't work); `pdf/markdown.ts` (marked lexer
+→ pdfmake blocks), `pdf/graph.ts` (graph as SVG from saved node positions). pdfmake's URL and local-file access is
+locked down; only data-URL JPEG/PNG/SVG images render.
 Optional password = native PDF AES-256 encryption. The web uses the same `ExportDialog` with `format="pdf"`.
 `search.exportTgPdf` (`pdf/tgReport.ts`) builds a report from a saved Telegram search snapshot (all or only the selected
 messages, at most `TG_PDF_MAX` = 5000), like the bot's HTML reports. Emoji render with monochrome Noto Emoji

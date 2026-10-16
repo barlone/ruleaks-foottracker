@@ -10,7 +10,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "scans-check": "tsx src/tools/scans-check.ts"
+    "scans-check": "tsx src/tools/scans-check.ts",
+    "pages-sites-update": "tsx src/tools/pages-sites-update.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

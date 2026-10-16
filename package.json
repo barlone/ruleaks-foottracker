@@ -12,7 +12,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db": "npm run migrate -w @ft/db --",
     "password-hash": "node packages/config/src/password-hash.ts",
-    "scans-check": "npm run scans-check -w @ft/server --"
+    "scans-check": "npm run scans-check -w @ft/server --",
+    "pages-sites-update": "npm run pages-sites-update -w @ft/server"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

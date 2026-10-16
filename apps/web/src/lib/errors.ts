@@ -23,6 +23,8 @@ const MESSAGES: Record<string, string> = {
   UPLOAD_EXPIRED: 'Загруженный файл устарел — выберите его снова',
   IMPORT_BUSY: 'Сервер сейчас занят другими импортами — повторите через несколько минут',
   SCANSTORE_UNAVAILABLE: 'Хранилище сканов документов недоступно',
+  PAGES_DISABLED: 'Поиск личных страниц выключен в настройках сервера',
+  PAGES_BUSY: 'Сервер сейчас выполняет слишком много поисков страниц — повторите через минуту',
 };
 
 export function errorText(e: unknown): string {

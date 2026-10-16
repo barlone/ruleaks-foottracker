@@ -46,6 +46,13 @@ export const geoSearchRoute = createRoute({
   component: lazyRouteComponent(() => import('./features/search/GeoSearchPage.tsx'), 'GeoSearchPage'),
 });
 
+export const pagesSearchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/search/pages',
+  validateSearch: z.object({ q: text }),
+  component: lazyRouteComponent(() => import('./features/search/PagesSearchPage.tsx'), 'PagesSearchPage'),
+});
+
 export const fuzzySearchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search/fuzzy',
@@ -81,7 +88,7 @@ export const investigationRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  indexRoute, searchRoute, tgSearchRoute, geoSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
+  indexRoute, searchRoute, tgSearchRoute, geoSearchRoute, pagesSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });

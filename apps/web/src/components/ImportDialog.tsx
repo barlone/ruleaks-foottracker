@@ -6,11 +6,13 @@ import { trpc, type RouterOutputs } from '../lib/trpc.ts';
 import { errorCode, errorText } from '../lib/errors.ts';
 import { fmtDate } from '../lib/format.ts';
 import { toast } from '../lib/toast.ts';
+import { isCancelled, ProcessDialog, useProcess, type ProcessHandle } from './ProgressDialog.tsx';
 import { Button, Dialog, Field, FilePicker, Input, Spinner, Tag } from './ui.tsx';
 
 // Окно «Импорт из файла»: выбрать файл экспорта (.ftx) и, если нужно, пароль → сервер показывает, что внутри
 // и что уже было импортировано раньше (будет перезаписано целиком) → подтверждение → переход к объекту.
-// Файл уходит на сервер частями (у сервера предел размера запроса).
+// Файл уходит на сервер частями (у сервера предел размера запроса); ход загрузки и чтения файла, а потом
+// записи в базу — в окне процесса (ProcessDialog). Отменить можно загрузку и чтение, но не запись.
 
 type Preview = RouterOutputs['imports']['inspect'];
 
@@ -31,9 +33,9 @@ const NOUN = { dossier: 'досье', investigation: 'расследование
 export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
-  const upload = trpc.imports.upload.useMutation();
-  const inspect = trpc.imports.inspect.useMutation();
-  const commit = trpc.imports.commit.useMutation();
+  // Прямой клиент: запросам нужен signal окна процесса для «Отмены».
+  const client = trpc.useUtils().client;
+  const process = useProcess();
 
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState('');
@@ -57,11 +59,14 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     onOpenChange(v);
   };
 
-  const sendFile = async (f: File): Promise<string> => {
+  const sendFile = async (f: File, p: ProcessHandle): Promise<string> => {
+    p.set({ value: null, status: 'Читаю файл…' });
     const data = await readBase64(f);
+    const parts = Math.ceil(data.length / CHUNK);
     let id: string | undefined;
-    for (let at = 0; at < data.length; at += CHUNK) {
-      id = (await upload.mutateAsync({ uploadId: id, chunk: data.slice(at, at + CHUNK) })).uploadId;
+    for (let i = 0; i < parts; i++) {
+      p.set({ value: i / parts, status: parts > 1 ? `Загрузка на сервер: часть ${i + 1} из ${parts}` : 'Загрузка на сервер…' });
+      id = (await client.imports.upload.mutate({ uploadId: id, chunk: data.slice(i * CHUNK, (i + 1) * CHUNK) }, { signal: p.signal })).uploadId;
     }
     setUploadId(id!);
     return id!;
@@ -72,18 +77,27 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     setBusy(true);
     setError(null);
     try {
-      let id = uploadId ?? (await sendFile(file));
-      let p: Preview;
-      try {
-        p = await inspect.mutateAsync({ uploadId: id, password });
-      } catch (e) {
-        // Сервер перезапускался или файл пролежал дольше получаса — загружаем заново.
-        if (errorCode(e) !== 'UPLOAD_EXPIRED') throw e;
-        id = await sendFile(file);
-        p = await inspect.mutateAsync({ uploadId: id, password });
-      }
-      setPreview(p);
+      const preview = await process.run(
+        'Импорт из файла',
+        async (p) => {
+          let id = uploadId ?? (await sendFile(file, p));
+          p.set({ value: null, status: 'Сервер расшифровывает и проверяет файл…' });
+          const inspect = () => client.imports.inspect.mutate({ uploadId: id, password }, { signal: p.signal });
+          try {
+            return await inspect();
+          } catch (e) {
+            // Сервер перезапускался или файл пролежал дольше получаса — загружаем заново.
+            if (errorCode(e) !== 'UPLOAD_EXPIRED') throw e;
+            id = await sendFile(file, p);
+            p.set({ value: null, status: 'Сервер расшифровывает и проверяет файл…' });
+            return await inspect();
+          }
+        },
+        { cancellable: true },
+      );
+      setPreview(preview);
     } catch (e) {
+      if (isCancelled(e)) return;
       const code = errorCode(e);
       setNeedPassword(code === 'NEED_PASSWORD' || code === 'BAD_PASSWORD');
       // Файл не подошёл — следующий выбор загружается заново.
@@ -98,7 +112,11 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     if (!uploadId) return;
     setBusy(true);
     try {
-      const r = await commit.mutateAsync({ uploadId });
+      // Запись в базу не прерывается: сервер уже мог создать часть объектов.
+      const r = await process.run('Импорт', async (p) => {
+        p.set({ status: 'Сервер записывает объекты в базу…', detail: preview?.root.title });
+        return client.imports.commit.mutate({ uploadId });
+      });
       await Promise.all([utils.dossiers.invalidate(), utils.investigations.invalidate(), utils.tags.invalidate(), utils.relations.invalidate()]);
       toast(`Импортировано: ${preview?.root.title ?? ''}`);
       setBusy(false);
@@ -218,6 +236,7 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           </div>
         </div>
       )}
+      <ProcessDialog process={process} />
     </Dialog>
   );
 }

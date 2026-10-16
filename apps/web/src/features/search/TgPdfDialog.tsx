@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { TG_PDF_MAX } from '@ft/shared';
 import { download } from '../../components/ExportDialog.tsx';
+import { isCancelled, ProcessDialog, useProcess } from '../../components/ProgressDialog.tsx';
 import { Button, Dialog, Field, Input, Spinner, Textarea } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
 
 // PDF-отчёт по результату поиска в Telegram — как отчёт досье: автор, примечание, необязательный пароль
-// (шифрование PDF). Сообщения — все или только отмеченные; собирает сервер из сохранённого снимка поиска.
+// (шифрование PDF). Сообщения — все или только отмеченные; собирает сервер из сохранённого снимка поиска,
+// на это время поверх окна — окно процесса (тысячи сообщений верстаются до минуты).
 
 export function TgPdfDialog({
   jobId, total, selected, open, onOpenChange,
@@ -27,14 +29,9 @@ export function TgPdfDialog({
   const [password, setPassword] = useState('');
   const [repeat, setRepeat] = useState('');
   const [onlySelected, setOnlySelected] = useState(false);
-  const pdf = trpc.search.exportTgPdf.useMutation({
-    onSuccess: (r) => {
-      download(r.fileName, r.data, 'application/pdf');
-      toast(`Файл «${r.fileName}» сохранён`);
-      onOpenChange(false);
-    },
-    onError: (e) => toast(errorText(e), 'error'),
-  });
+  const client = trpc.useUtils().client;
+  const process = useProcess();
+  const pending = process.state !== null;
 
   // Каждое открытие — с чистыми паролями; есть отмеченные — по умолчанию только они.
   useEffect(() => {
@@ -47,13 +44,30 @@ export function TgPdfDialog({
 
   const mismatch = password !== repeat;
   const count = onlySelected ? selected.length : total ?? 0;
-  const submit = () => {
-    if (mismatch || pdf.isPending) return;
-    pdf.mutate({
-      jobId, author, note, password,
-      only: onlySelected && selected.length ? selected : undefined,
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    });
+  const submit = async () => {
+    if (mismatch || pending) return;
+    try {
+      const r = await process.run(
+        'Отчёт поиска в PDF',
+        (p) => {
+          p.set({ status: 'Сервер формирует отчёт…', detail: `сообщений: ${Math.min(count, TG_PDF_MAX)}` });
+          return client.search.exportTgPdf.mutate(
+            {
+              jobId, author, note, password,
+              only: onlySelected && selected.length ? selected : undefined,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            },
+            { signal: p.signal },
+          );
+        },
+        { cancellable: true },
+      );
+      download(r.fileName, r.data, 'application/pdf');
+      toast(`Файл «${r.fileName}» сохранён`);
+      onOpenChange(false);
+    } catch (e) {
+      if (!isCancelled(e)) toast(errorText(e), 'error');
+    }
   };
 
   return (
@@ -62,7 +76,7 @@ export function TgPdfDialog({
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          submit();
+          void submit();
         }}
       >
         <Field label="Автор">
@@ -110,12 +124,13 @@ export function TgPdfDialog({
         )}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
-          <Button type="submit" variant="primary" disabled={mismatch || pdf.isPending}>
-            {pdf.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : <FileText size={15} />}
-            {pdf.isPending ? 'Формирую…' : 'Сформировать PDF'}
+          <Button type="submit" variant="primary" disabled={mismatch || pending}>
+            {pending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : <FileText size={15} />}
+            {pending ? 'Формирую…' : 'Сформировать PDF'}
           </Button>
         </div>
       </form>
+      <ProcessDialog process={process} />
     </Dialog>
   );
 }

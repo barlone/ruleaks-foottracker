@@ -386,6 +386,14 @@ export const FIELD_TO_KIND: Partial<Record<LeakField, SearchKindId>> = {
 export type SearchSection = 'attr' | 'tg' | 'fuzzy' | 'geo';
 export const SEARCH_SECTIONS: SearchSection[] = ['attr', 'tg', 'fuzzy', 'geo'];
 
+// ---------- Поиск личных страниц ----------
+
+/** Имя пользователя для поиска страниц: без пробелов и символов, ломающих адрес (сайт подставляет его в URL). */
+export const PAGES_USERNAME_MAX = 64;
+export const PAGES_USERNAME_RE = /^[^\s/\\?#%&]+$/;
+/** Проект, чьи список сайтов и логика проверки используются. */
+export const SHERLOCK_URL = 'https://github.com/sherlock-project/sherlock';
+
 // ---------- Поиск по геоданным ----------
 
 /** Записи утечек с геолокациями в круге: lat, lon — градусы, radius — целые метры (шлюз: до 50 км). */

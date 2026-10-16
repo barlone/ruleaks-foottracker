@@ -17,13 +17,16 @@ export function kindLabel(section: SearchSection, kind: string): string {
 }
 
 export function SearchLayout({
-  section, title, subtitle, activeId, onOpen, children,
+  section, title, subtitle, activeId, onOpen, history, children,
 }: {
-  section: SearchSection;
+  /** Раздел истории поиска (search.recent); разделы со своей историей передают history. */
+  section?: SearchSection;
   title: string;
   subtitle: string;
-  activeId: string | null;
-  onOpen: (id: string) => void;
+  activeId?: string | null;
+  onOpen?: (id: string) => void;
+  /** Свой блок истории вместо стандартного. */
+  history?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -36,7 +39,7 @@ export function SearchLayout({
         {children}
       </div>
       <aside className="space-y-4">
-        <HistoryCard section={section} activeId={activeId} onOpen={onOpen} />
+        {history ?? (section && onOpen ? <HistoryCard section={section} activeId={activeId ?? null} onOpen={onOpen} /> : null)}
       </aside>
     </div>
   );

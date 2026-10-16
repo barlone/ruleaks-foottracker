@@ -69,7 +69,8 @@ Each data source is switched independently by its `enabled` flag:
 | `[scanstore-api]` | `HttpScanStore`: document scans from scanstore-api-gate | `deps.scans = null`, scans are not shown |
 
 `[config] geo-search` (default `false`) switches the «Поиск по геоданным» section; `[geo-search]` configures its map
-(see «Geo search» below).
+(see «Geo search» below). `[config] pages-search` (default `true`) switches «Поиск личных страниц»; `[pages-search]`
+sets the per-site timeout and concurrency (see «Personal pages search» below).
 
 `[server] trust-proxy` (default `false`) makes Fastify take the client address from `X-Forwarded-For`; production runs behind
 nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone.
@@ -209,6 +210,29 @@ with Range requests); https URLs are fetched by the browser directly (dev). Vite
 production proxy must too. The MapLibre worker is wired via `?worker&url` + `setWorkerUrl` (its own `import.meta.url`
 lookup breaks after Vite bundling). Map controls are restyled in `styles.css` under `.ft-map.maplibregl-map` (the
 lazy chunk's CSS loads later, so equal-specificity selectors would lose).
+
+### Personal pages search
+
+`/search/pages` (`features/search/PagesSearchPage.tsx`): a username → links to its pages on ~480 sites, a TypeScript
+port of [Sherlock](https://github.com/sherlock-project/sherlock) (`apps/server/src/pages/`). `sites.json` is Sherlock's
+`data.json` verbatim (MIT, `LICENSE.sherlock`; refresh with `npm run pages-sites-update`, which validates it with the
+same Zod schema as `sites.ts`), `check.ts` is the per-site verdict (`errorType` message / status_code / response_url,
+`regexCheck`, `urlProbe`, WAF fingerprints, Firefox User-Agent — keep it in step with `sherlock.py`), `jobs.ts` runs the
+sites with `concurrency` workers and keeps jobs in server memory (one running job per user, `MAX_RUNNING` per process →
+`PAGES_BUSY`, finished jobs live an hour → the section's own «История», nothing in the DB). The browser never talks to
+the sites (CORS); `pages.job` is polled every second while `running` and returns only `found` until the job ends.
+`pages.config` is `null` when `[config] pages-search = false` (nav item and page hide). Sherlock's verdicts are
+heuristic: some sites answer 200 for any name (false «найдено»), WAF-protected ones are reported as «защита от ботов».
+
+### Progress window
+
+`components/ProgressDialog.tsx` is the modal for long processes (gauge, status line, elapsed time, «Отмена»; Esc =
+cancel, no closing by clicking outside). Two ways to drive it: `<ProgressDialog>` with props when the state comes from a
+polled server job (pages search), or `useProcess()` + `<ProcessDialog>` for browser-side async flows — `run(title, fn)`
+shows the window for the promise, `p.set()` moves the bar, `p.signal` goes into tRPC calls via the vanilla client
+(`utils.client.x.mutate(input, { signal })` — `useMutation` has no signal), cancel rejects with `ProcessCancelled`
+(`isCancelled(e)` — don't toast it). Used by `ExportDialog` (file/PDF), `ImportDialog` (upload chunks are determinate,
+inspect/commit indeterminate; commit is not cancellable) and `TgPdfDialog`.
 
 ### Document scans
 

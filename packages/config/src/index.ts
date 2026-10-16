@@ -49,6 +49,8 @@ const SECTIONS = {
     'user-name': str('Следопыт'),
     /** Раздел «Поиск по геоданным» (карта — секция [geo-search]). */
     'geo-search': bool(false),
+    /** Раздел «Поиск личных страниц» (сервер опрашивает сайты из манифеста Sherlock; секция [pages-search]). */
+    'pages-search': bool(true),
   }),
   server: z.object({
     host: str('127.0.0.1'),
@@ -98,6 +100,12 @@ const SECTIONS = {
     token: str(),
     'timeout-sec': int(30, 1, 600),
   }),
+  'pages-search': z.object({
+    /** Сколько ждать ответа одного сайта. */
+    'timeout-sec': int(15, 1, 120),
+    /** Сколько сайтов опрашивать одновременно в одном поиске. */
+    concurrency: int(20, 1, 100),
+  }),
 };
 
 const Schema = z.object({
@@ -109,6 +117,7 @@ const Schema = z.object({
   api: SECTIONS.api.prefault({}),
   'geo-search': SECTIONS['geo-search'].prefault({}),
   'scanstore-api': SECTIONS['scanstore-api'].prefault({}),
+  'pages-search': SECTIONS['pages-search'].prefault({}),
 });
 
 type Raw = z.infer<typeof Schema>;
@@ -167,6 +176,8 @@ export interface AppConfig {
   };
   /** scanstore-api-gate: картинки сканов документов (ключ scans в записях утечек). */
   scanstore: { enabled: boolean; url: string; token: string; timeoutMs: number };
+  /** Поиск личных страниц по имени пользователя (манифест сайтов Sherlock). */
+  pages: { enabled: boolean; timeoutMs: number; concurrency: number };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
 }
@@ -282,6 +293,11 @@ export function loadConfig(): AppConfig {
       token: c['scanstore-api'].token,
       timeoutMs: c['scanstore-api']['timeout-sec'] * 1000,
     },
+    pages: {
+      enabled: c.config['pages-search'],
+      timeoutMs: c['pages-search']['timeout-sec'] * 1000,
+      concurrency: c['pages-search'].concurrency,
+    },
     warnings,
   };
 
@@ -370,5 +386,6 @@ export function describeConfig(cfg: AppConfig): string[] {
     `API:       ${cfg.api.enabled ? `${cfg.api.baseUrl} (таймаут ${cfg.api.timeoutMs / 1000} с, интервал ${cfg.api.minIntervalMs} мс)` : 'выключено — имитация шлюза'}`,
     `сканы:     ${cfg.scanstore.enabled ? `${cfg.scanstore.url} (таймаут ${cfg.scanstore.timeoutMs / 1000} с)` : 'выключены'}`,
     `геопоиск:  ${!cfg.geo.enabled ? 'выключен' : cfg.geo.tiles === 'raster' ? `растровые тайлы ${new URL(cfg.geo.rasterUrl.replace(/[{}]/g, '')).host}` : `PMTiles ${cfg.geo.pmtiles}`}`,
+    `страницы:  ${cfg.pages.enabled ? `поиск личных страниц (таймаут ${cfg.pages.timeoutMs / 1000} с, параллельно ${cfg.pages.concurrency})` : 'выключен'}`,
   ];
 }

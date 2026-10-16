@@ -124,6 +124,17 @@ body {
 }
 .btn-sheen:hover::before { transform: translateX(100%); }
 
+/* Шкала процесса с неизвестной длительностью (ProgressDialog): по заполненной полосе бежит блик. */
+.progress-indeterminate {
+  background: linear-gradient(90deg, rgb(46 224 172 / 0.25) 0%, var(--color-mint) 50%, rgb(46 224 172 / 0.25) 100%);
+  background-size: 50% 100%;
+  animation: progress-slide 1.4s linear infinite;
+}
+@keyframes progress-slide {
+  from { background-position: -100% 0; }
+  to { background-position: 200% 0; }
+}
+
 ::selection { background: rgb(46 224 172 / 0.35); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: rgb(46 224 172 / 0.18); border-radius: 3px; }

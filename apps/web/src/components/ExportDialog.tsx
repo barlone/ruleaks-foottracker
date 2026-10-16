@@ -3,12 +3,14 @@ import { FileDown, FileText } from 'lucide-react';
 import { trpc } from '../lib/trpc.ts';
 import { errorText } from '../lib/errors.ts';
 import { toast } from '../lib/toast.ts';
+import { isCancelled, ProcessDialog, useProcess } from './ProgressDialog.tsx';
 import { Button, Dialog, Field, Input, Spinner, Textarea } from './ui.tsx';
 
 // Окно экспорта: автор, примечание, необязательный пароль, опции. Файл собирает сервер.
 //   file — ZIP формата обмена, зашифрованный всегда (без пароля ключ выводится из пустой строки,
 //          см. packages/shared/src/export.ts);
 //   pdf  — отчёт для чтения; пароль — шифрование PDF, без пароля PDF не шифруется.
+// Пока сервер работает, поверх окна — окно процесса (ProcessDialog); «Отмена» прерывает ожидание ответа.
 
 const NOUN = { dossier: 'досье', investigation: 'расследования' } as const;
 /** У досье связанные — участники и связанные персоны, у расследования — досье узлов графа. */
@@ -52,23 +54,10 @@ export function ExportDialog({
   const [related, setRelated] = useState(false);
   const [sources, setSources] = useState(true);
 
-  const onSuccess = (r: { fileName: string; data: string }) => {
-    download(r.fileName, r.data, format === 'pdf' ? 'application/pdf' : 'application/octet-stream');
-    toast(`Файл «${r.fileName}» сохранён`);
-    onOpenChange(false);
-  };
-  const onError = (e: unknown) => toast(errorText(e), 'error');
-  const mutations = {
-    dossier: {
-      file: trpc.dossiers.exportFile.useMutation({ onSuccess, onError }),
-      pdf: trpc.dossiers.exportPdf.useMutation({ onSuccess, onError }),
-    },
-    investigation: {
-      file: trpc.investigations.exportFile.useMutation({ onSuccess, onError }),
-      pdf: trpc.investigations.exportPdf.useMutation({ onSuccess, onError }),
-    },
-  };
-  const pending = mutations[kind][format].isPending;
+  // Прямой клиент, а не useMutation: запросу нужен signal окна процесса для «Отмены».
+  const client = trpc.useUtils().client;
+  const process = useProcess();
+  const pending = process.state !== null;
 
   // Каждое открытие — с чистыми паролями; автор по умолчанию — имя пользователя.
   useEffect(() => {
@@ -79,14 +68,31 @@ export function ExportDialog({
   }, [open, me.data?.displayName]);
 
   const mismatch = password !== repeat;
-  const submit = () => {
+  const submit = async () => {
     if (mismatch || pending) return;
     const base = { id, author, note, password };
-    if (format === 'file') mutations[kind].file.mutate({ ...base, options: { editable } });
-    else {
-      mutations[kind].pdf.mutate({
-        ...base, options: { photos, related, sources }, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      });
+    const api = kind === 'dossier' ? client.dossiers : client.investigations;
+    try {
+      const r = await process.run(
+        format === 'pdf' ? `Отчёт ${NOUN[kind]} в PDF` : `Экспорт ${NOUN[kind]}`,
+        (p) => {
+          if (format === 'file') {
+            p.set({ status: 'Сервер собирает и шифрует файл…' });
+            return api.exportFile.mutate({ ...base, options: { editable } }, { signal: p.signal });
+          }
+          p.set({ status: 'Сервер формирует отчёт…', detail: 'Большие досье с фотографиями верстаются до минуты' });
+          return api.exportPdf.mutate(
+            { ...base, options: { photos, related, sources }, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+            { signal: p.signal },
+          );
+        },
+        { cancellable: true },
+      );
+      download(r.fileName, r.data, format === 'pdf' ? 'application/pdf' : 'application/octet-stream');
+      toast(`Файл «${r.fileName}» сохранён`);
+      onOpenChange(false);
+    } catch (e) {
+      if (!isCancelled(e)) toast(errorText(e), 'error');
     }
   };
 
@@ -96,7 +102,7 @@ export function ExportDialog({
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          submit();
+          void submit();
         }}
       >
         <Field label="Автор">
@@ -150,6 +156,7 @@ export function ExportDialog({
           </Button>
         </div>
       </form>
+      <ProcessDialog process={process} />
     </Dialog>
   );
 }

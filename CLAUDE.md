@@ -110,7 +110,9 @@ Adding PostgreSQL storage means new repo adapters + a branch in `deps.ts`; route
   The bot's subscription answer is cached 60 s (`loadAccess`).
 - **Authorization** happens only in `src/authz.ts` (`can()`/`roleOf()`: owner/editor/viewer from `ownerId`,
   `visibility`, `shares`). Routers load objects through a local `load(ctx, id, action)`; an object the user may not read
-  is reported as `NOT_FOUND`. Dossiers are only `private | shared` (never public — they hold leaked personal data);
+  is reported as `NOT_FOUND`. When only the right to read plus title/cover is needed (group members, graph nodes,
+  relations, export/PDF pre-checks), use `dossiers.heads(ids)` (`DossierHead`, one query) instead of a full `get()`
+  per dossier. Dossiers are only `private | shared` (never public — they hold leaked personal data);
   investigations may be `public` and `investigations.get` is a public procedure — `present()` strips shares and links to
   dossiers the viewer cannot read.
 - **Optimistic locking**: dossiers/investigations carry `version`; repos throw `VersionConflict` → tRPC `CONFLICT`.

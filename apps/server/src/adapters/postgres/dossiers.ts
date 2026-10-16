@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Dossier, DossierItem, DossierSummary, Share, Tag } from '@ft/shared';
 import { isUuid } from '@ft/shared';
-import type { DossierContent, DossierPatch, DossierRepo, ListFilter, Scope, UidMatch } from '../../ports.ts';
+import type { DossierContent, DossierHead, DossierPatch, DossierRepo, ListFilter, Scope, UidMatch } from '../../ports.ts';
 import { json, likePattern, lockAndBump, replaceTags, tagsJsonSql, tagsFilterSql, mustUuid, newObjectId, notFound, tx, type Db, type Tx } from './db.ts';
 
 // Досье в PostgreSQL: dossiers + dossier_items (тело элемента — jsonb data по типу), dossier_members,
@@ -120,6 +120,22 @@ export class PgDossiers implements DossierRepo {
       id: x.id, ownerId: x.owner_id, kind: x.kind, title: x.title, tags: x.tags, visibility: x.visibility,
       coverMediaUrl: x.cover_url, updatedAt: x.updated_at.toISOString(), itemCount: x.item_count, role: x.role,
     }));
+  }
+
+  async heads(ids: string[]): Promise<DossierHead[]> {
+    const uuids = [...new Set(ids.filter(isUuid))];
+    if (!uuids.length) return [];
+    const r = await this.db.query<{
+      id: string; owner_id: string; kind: Dossier['kind']; title: string; visibility: Dossier['visibility']; cover_url: string | null; shares: Share[];
+    }>(
+      `SELECT d.id, d.owner_id, d.kind, d.title, d.visibility,
+              (SELECT i.data->>'url' FROM dossier_items i WHERE i.dossier_id = d.id AND i.media_id = d.cover_media_id LIMIT 1) AS cover_url,
+              coalesce((SELECT jsonb_agg(jsonb_build_object('userId', s.user_id, 'displayName', u.display_name, 'role', s.role) ORDER BY s.created_at)
+                        FROM dossier_shares s JOIN users u ON u.id = s.user_id WHERE s.dossier_id = d.id), '[]'::jsonb) AS shares
+       FROM dossiers d WHERE d.id = ANY($1::uuid[]) AND d.deleted_at IS NULL`,
+      [uuids],
+    );
+    return r.rows.map((x) => ({ id: x.id, ownerId: x.owner_id, kind: x.kind, title: x.title, visibility: x.visibility, coverMediaUrl: x.cover_url, shares: x.shares }));
   }
 
   async get(id: string): Promise<Dossier | null> {

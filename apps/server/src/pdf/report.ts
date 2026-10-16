@@ -60,11 +60,14 @@ export class Report {
     this.dateTimeFmt = new Intl.DateTimeFormat('ru-RU', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  async readable(id: string): Promise<Dossier | null> {
-    const d = await this.deps.dossiers.get(id);
-    if (!d || !can(this.userId, 'read', d)) return null;
-    this.titles.set(d.id, d.title);
-    return d;
+  /**
+   * Запоминает названия тех досье из списка, которые пользователь может читать (для ссылок и списков),
+   * и возвращает их id. Полные досье здесь не загружаются — только шапки.
+   */
+  async readableIds(ids: Iterable<string>): Promise<string[]> {
+    const fresh = [...new Set(ids)].filter((id) => !this.titles.has(id));
+    for (const h of await this.deps.dossiers.heads(fresh)) if (can(this.userId, 'read', h)) this.titles.set(h.id, h.title);
+    return [...new Set(ids)].filter((id) => this.titles.has(id));
   }
 
   /** Даты фактов вводятся днём (полночь UTC) — показываются так же. */
@@ -162,19 +165,18 @@ export class Report {
     if (d.summaryMd.trim()) out.push(h2('Сводка'), ...this.md(d.summaryMd));
 
     const rels = await this.deps.relations.list(d.id);
-    const relLines: Content[] = [];
-    for (const r of rels) {
-      const outgoing = r.fromId === d.id;
-      const otherId = outgoing ? r.toId : r.fromId;
-      if (!this.titles.has(otherId) && !(await this.readable(otherId))) continue;
-      const note = outgoing ? r.fromNote : r.toNote;
-      relLines.push({ text: [{ text: clean(r.typeText), bold: true }, note ? ` (${clean(note)})` : '', ' — ', this.link(this.titles.get(otherId)!, otherId)] });
-    }
+    const otherOf = (r: (typeof rels)[number]) => (r.fromId === d.id ? r.toId : r.fromId);
+    const visible = new Set(await this.readableIds(rels.map(otherOf)));
+    const relLines: Content[] = rels.flatMap((r) => {
+      const otherId = otherOf(r);
+      if (!visible.has(otherId)) return [];
+      const note = r.fromId === d.id ? r.fromNote : r.toNote;
+      return [{ text: [{ text: clean(r.typeText), bold: true }, note ? ` (${clean(note)})` : '', ' — ', this.link(this.titles.get(otherId)!, otherId)] } as Content];
+    });
     if (relLines.length) out.push(h2('Связи с персонами'), { ul: relLines });
 
     if (d.kind === 'group') {
-      const members: Content[] = [];
-      for (const m of d.memberIds) if (this.titles.has(m) || (await this.readable(m))) members.push(this.link(this.titles.get(m)!, m));
+      const members = (await this.readableIds(d.memberIds)).map((m) => this.link(this.titles.get(m)!, m));
       out.push(h2('Участники'), members.length ? { ul: members } : empty());
     }
 
@@ -348,13 +350,15 @@ export class Report {
   }
 }
 
-/** Связанные досье, которые станут разделами отчёта (уже прочитанные, с правом чтения). */
-async function relatedDossiers(r: Report, ids: Iterable<string>, exclude: Set<string>): Promise<Dossier[]> {
+/** Связанные досье, которые станут разделами отчёта: право чтения проверено по шапкам, целиком загружаются только они. */
+async function relatedDossiers(r: Report, deps: Deps, ids: Iterable<string>, exclude: Set<string>): Promise<Dossier[]> {
   const out: Dossier[] = [];
-  for (const id of new Set(ids)) {
-    if (exclude.has(id)) continue;
-    const d = await r.readable(id);
-    if (d) out.push(d);
+  for (const id of await r.readableIds([...ids].filter((id) => !exclude.has(id)))) {
+    const d = await deps.dossiers.get(id);
+    if (d) {
+      out.push(d);
+      r.sections.add(d.id);
+    }
   }
   return out;
 }
@@ -366,23 +370,21 @@ export async function dossierPdf(deps: Deps, userId: string, d: Dossier, req: Pd
   let related: Dossier[] = [];
   if (req.options.related) {
     const rels = await deps.relations.list(d.id);
-    related = await relatedDossiers(r, [...d.memberIds, ...rels.map((x) => (x.fromId === d.id ? x.toId : x.fromId))], new Set([d.id]));
-    for (const x of related) r.sections.add(x.id);
+    related = await relatedDossiers(r, deps, [...d.memberIds, ...rels.map((x) => (x.fromId === d.id ? x.toId : x.fromId))], new Set([d.id]));
   }
   const body = await r.dossier(d, true);
-  if (related.length) {
-    for (const x of related) body.push(...(await r.dossier(x, false)));
-  }
+  for (const x of related) body.push(...(await r.dossier(x, false)));
   return r.render(d.title, 'dossier', body);
 }
 
 export async function investigationPdf(deps: Deps, userId: string, inv: Investigation, req: PdfRequest) {
   const r = new Report(deps, userId, req);
   r.investigationId = inv.id;
-  // Названия досье узлов нужны в таблице объектов всегда, разделами — по опции.
-  const dossiers = await relatedDossiers(r, inv.nodes.flatMap((n) => (n.dossierId ? [n.dossierId] : [])), new Set());
-  if (req.options.related) for (const x of dossiers) r.sections.add(x.id);
+  // Названия досье узлов нужны в таблице объектов всегда (шапки), разделами — по опции (тогда полные досье).
+  const nodeDossiers = inv.nodes.flatMap((n) => (n.dossierId ? [n.dossierId] : []));
+  const related = req.options.related ? await relatedDossiers(r, deps, nodeDossiers, new Set()) : [];
+  if (!req.options.related) await r.readableIds(nodeDossiers);
   const body = await r.investigation(inv);
-  if (req.options.related) for (const x of dossiers) body.push(...(await r.dossier(x, false)));
+  for (const x of related) body.push(...(await r.dossier(x, false)));
   return r.render(inv.title, 'investigation', body);
 }

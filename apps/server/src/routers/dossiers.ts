@@ -50,12 +50,14 @@ export const dossiersRouter = router({
 
   get: authedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'read');
-    const members = await Promise.all(d.memberIds.map((m) => ctx.deps.dossiers.get(m)));
+    // Участникам нужны только название и обложка — шапки, а не полные досье с элементами.
+    const heads = new Map((await ctx.deps.dossiers.heads(d.memberIds)).map((h) => [h.id, h]));
     return {
       ...withRole(ctx, d),
-      members: members
-        .filter((m): m is Dossier => !!m && can(ctx.user.id, 'read', m))
-        .map((m) => ({ id: m.id, title: m.title, coverMediaUrl: m.coverMediaUrl })),
+      members: d.memberIds.flatMap((id) => {
+        const m = heads.get(id);
+        return m && can(ctx.user.id, 'read', m) ? [{ id: m.id, title: m.title, coverMediaUrl: m.coverMediaUrl }] : [];
+      }),
     };
   }),
 

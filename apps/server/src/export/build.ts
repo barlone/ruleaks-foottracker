@@ -49,12 +49,6 @@ class Builder {
 
   constructor(private deps: Deps, private userId: string) {}
 
-  /** Досье, которое экспортирующий может читать. */
-  async readable(id: string): Promise<Dossier | null> {
-    const d = await this.deps.dossiers.get(id);
-    return d && can(this.userId, 'read', d) ? d : null;
-  }
-
   addDossier(d: Dossier): void {
     if (this.dossierKeys.has(d.id)) return;
     this.dossierKeys.set(d.id, `d${this.dossierKeys.size + 1}`);
@@ -62,9 +56,13 @@ class Builder {
   }
 
   async addDossierIds(ids: Iterable<string>): Promise<void> {
-    for (const id of new Set(ids)) {
-      if (this.dossierKeys.has(id)) continue;
-      const d = await this.readable(id);
+    const fresh = [...new Set(ids)].filter((id) => !this.dossierKeys.has(id));
+    // Право чтения — по шапкам одной выборкой; целиком загружаются только те досье, что войдут в файл.
+    const heads = await this.deps.dossiers.heads(fresh);
+    const allowed = new Set(heads.filter((h) => can(this.userId, 'read', h)).map((h) => h.id));
+    for (const id of fresh) {
+      if (!allowed.has(id)) continue;
+      const d = await this.deps.dossiers.get(id);
       if (d) this.addDossier(d);
     }
   }

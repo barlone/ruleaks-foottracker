@@ -6,7 +6,7 @@ import {
 import { roleOf } from '../../authz.ts';
 import {
   Conflict, DEFAULT_DISPLAY_NAME, TagExists, VersionConflict,
-  type DossierContent, type DossierPatch, type DossierRepo, type InvestigationContent, type InvestigationPatch, type InvestigationRepo,
+  type DossierContent, type DossierHead, type DossierPatch, type DossierRepo, type InvestigationContent, type InvestigationPatch, type InvestigationRepo,
   type ListFilter, type Scope, type SearchJobInternals, type UidMatch,
   type RelationRepo, type SearchRepo, type SessionRepo, type TagRepo, type UserRepo,
 } from '../../ports.ts';
@@ -218,6 +218,12 @@ export class MemoryDossiers implements DossierRepo {
   async get(id: string) {
     const d = this.map.get(id);
     return d ? this.out(d) : null;
+  }
+  async heads(ids: string[]): Promise<DossierHead[]> {
+    return [...new Set(ids)].flatMap((id) => {
+      const d = this.map.get(id);
+      return d ? [{ id: d.id, ownerId: d.ownerId, kind: d.kind, title: d.title, visibility: d.visibility, shares: clone(d.shares), coverMediaUrl: d.coverMediaUrl }] : [];
+    });
   }
   async create({ uid, ...input }: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'> & { uid?: string }) {
     const d: StoredDossier = {

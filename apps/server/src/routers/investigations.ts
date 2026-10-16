@@ -21,9 +21,9 @@ async function load(ctx: Ctx, id: string, action: Action): Promise<Investigation
 async function present(ctx: Ctx, inv: Investigation) {
   const uid = ctx.user?.id ?? null;
   const role = roleOf(uid, inv) ?? 'viewer';
-  const dossierIds = [...new Set(inv.nodes.map((n) => n.dossierId).filter((x): x is string => !!x))];
-  const dossiers = await Promise.all(dossierIds.map((id) => ctx.deps.dossiers.get(id)));
-  const readable = new Set(dossiers.filter((d) => d && uid && can(uid, 'read', d)).map((d) => d!.id));
+  // Без входа досье не видны вовсе — шапки не запрашиваем; иначе одной выборкой проверяем право чтения.
+  const dossierIds = uid ? inv.nodes.flatMap((n) => (n.dossierId ? [n.dossierId] : [])) : [];
+  const readable = new Set((await ctx.deps.dossiers.heads(dossierIds)).filter((h) => can(uid, 'read', h)).map((h) => h.id));
   return {
     ...inv,
     shares: role === 'owner' ? inv.shares : [],

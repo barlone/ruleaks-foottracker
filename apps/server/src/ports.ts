@@ -187,9 +187,17 @@ export type InvestigationContent = Pick<Investigation, 'title' | 'descriptionMd'
   tagIds: string[];
 };
 
+/**
+ * «Шапка» досье: всё, что нужно для проверки прав (can/roleOf) и для ссылки на него (название, обложка, вид),
+ * без элементов, сводки и участников. Для списков участников, узлов графа и связей — вместо полного get().
+ */
+export type DossierHead = Pick<Dossier, 'id' | 'ownerId' | 'kind' | 'title' | 'visibility' | 'shares' | 'coverMediaUrl'>;
+
 export interface DossierRepo {
   list(userId: string, scope: Exclude<Scope, 'public'>, filter?: ListFilter): Promise<DossierSummary[]>;
   get(id: string): Promise<Dossier | null>;
+  /** Шапки живых досье из списка id (порядок произвольный; несуществующие и не-uuid пропускаются). */
+  heads(ids: string[]): Promise<DossierHead[]>;
   /** uid не задан — новый. */
   create(d: Pick<Dossier, 'ownerId' | 'kind' | 'title' | 'summaryMd'> & { uid?: string }): Promise<Dossier>;
   findByUid(ownerId: string, uids: string[]): Promise<UidMatch[]>;

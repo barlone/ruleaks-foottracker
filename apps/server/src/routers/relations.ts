@@ -1,7 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { RelationNote, RelationText, type Dossier, type DossierRelation } from '@ft/shared';
+import { RelationNote, RelationText, type DossierRelation } from '@ft/shared';
 import { can } from '../authz.ts';
+import type { DossierHead } from '../ports.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 
 // Связи между досье персон. Связь видна в обоих досье; другая сторона — только если её досье можно читать.
@@ -9,16 +10,25 @@ import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 // Добавить/изменить связи — право правки своего досье и чтения другого; пояснение другой стороны — если её досье
 // тоже можно править; удалить — правка любой из сторон.
 
-async function readable(ctx: Ctx, id: string): Promise<Dossier | null> {
-  const d = await ctx.deps.dossiers.get(id);
-  return d && can(ctx.user!.id, 'read', d) ? d : null;
+// Для прав и подписей хватает шапок досье (DossierHead) — полные досье с элементами здесь не нужны.
+
+/** Шапки досье из списка, которые пользователь может читать, по id. */
+async function readableHeads(ctx: Ctx, ids: string[]): Promise<Map<string, DossierHead>> {
+  const heads = await ctx.deps.dossiers.heads(ids);
+  return new Map(heads.filter((h) => can(ctx.user!.id, 'read', h)).map((h) => [h.id, h]));
+}
+
+async function readable(ctx: Ctx, id: string): Promise<DossierHead | null> {
+  return (await readableHeads(ctx, [id])).get(id) ?? null;
 }
 
 /** Связь, которую пользователь может менять: правка хотя бы одного из двух досье. */
 async function editableRelation(ctx: Ctx, id: string): Promise<DossierRelation> {
   const r = await ctx.deps.relations.get(id);
   if (!r) throw new TRPCError({ code: 'NOT_FOUND' });
-  const [a, b] = await Promise.all([ctx.deps.dossiers.get(r.fromId), ctx.deps.dossiers.get(r.toId)]);
+  const heads = new Map((await ctx.deps.dossiers.heads([r.fromId, r.toId])).map((h) => [h.id, h]));
+  const a = heads.get(r.fromId);
+  const b = heads.get(r.toId);
   const uid = ctx.user!.id;
   if (!(a && can(uid, 'read', a)) && !(b && can(uid, 'read', b))) throw new TRPCError({ code: 'NOT_FOUND' });
   if (!(a && can(uid, 'edit', a)) && !(b && can(uid, 'edit', b))) throw new TRPCError({ code: 'FORBIDDEN', message: 'NO_RIGHTS' });
@@ -46,7 +56,7 @@ export const relationsRouter = router({
     if (!d) throw new TRPCError({ code: 'NOT_FOUND' });
     const rels = await ctx.deps.relations.list(d.id);
     const otherIds = [...new Set(rels.map((r) => (r.fromId === d.id ? r.toId : r.fromId)))];
-    const others = new Map((await Promise.all(otherIds.map((id) => readable(ctx, id)))).filter((x): x is Dossier => !!x).map((x) => [x.id, x]));
+    const others = await readableHeads(ctx, otherIds);
     const editHere = can(ctx.user.id, 'edit', d);
     return rels.flatMap((r) => {
       const outgoing = r.fromId === d.id;
@@ -84,8 +94,8 @@ export const relationsRouter = router({
       replace: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
-      const d = await ctx.deps.dossiers.get(input.dossierId);
-      if (!d || !can(ctx.user.id, 'read', d)) throw new TRPCError({ code: 'NOT_FOUND' });
+      const d = await readable(ctx, input.dossierId);
+      if (!d) throw new TRPCError({ code: 'NOT_FOUND' });
       if (!can(ctx.user.id, 'edit', d)) throw new TRPCError({ code: 'FORBIDDEN', message: 'NO_RIGHTS' });
       const o = await readable(ctx, input.otherId);
       if (!o || o.id === d.id || d.kind !== 'person' || o.kind !== 'person') throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_RELATION' });

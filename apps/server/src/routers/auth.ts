@@ -70,6 +70,9 @@ export const authRouter = router({
   /** Способ входа ([config] auth): страница входа и кнопка «Выйти» зависят от него. */
   mode: publicProcedure.query(() => config.authMode),
 
+  /** Имя бота ([telegram] bot-username, без «@») — для ссылок на бота в интерфейсе (продление подписки). */
+  botUsername: publicProcedure.query(() => config.botUsername),
+
   /** auth = password-sha256: вход единственного пользователя по паролю. */
   password: publicProcedure.input(z.object({ password: z.string().min(1).max(1024) })).mutation(async ({ ctx, input }) => {
     if (config.authMode !== 'password-sha256' || !ctx.deps.soloUserId) throw new TRPCError({ code: 'NOT_FOUND', message: 'NOT_FOUND' });

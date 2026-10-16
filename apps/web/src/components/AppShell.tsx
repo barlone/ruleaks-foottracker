@@ -157,6 +157,8 @@ function SubscriptionBanner() {
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
   const refresh = trpc.auth.refreshAccess.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
+  // Бот — из настроек сервера ([telegram] bot-username), а не зашитый в интерфейс.
+  const bot = trpc.auth.botUsername.useQuery(undefined, { staleTime: Infinity });
   if (!me.data || me.data.access.active) return null;
   return (
     <div className="flex items-center gap-3 border-b border-warn/30 bg-warn/10 px-5 py-2.5 text-sm text-warn">
@@ -164,9 +166,11 @@ function SubscriptionBanner() {
       <span className="flex-1">
         {me.data.access.reason ?? 'Подписка неактивна'}. Режим только для чтения: поиск и правки недоступны.
       </span>
-      <a href="https://t.me/ruleaks_bot?start=subscribe" target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">
-        Продлить в боте
-      </a>
+      {bot.data && (
+        <a href={`https://t.me/${bot.data}?start=subscribe`} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">
+          Продлить в боте
+        </a>
+      )}
       <Button variant="ghost" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending} title="Проверить снова">
         <RefreshCw size={14} className={refresh.isPending ? 'animate-spin' : ''} />
       </Button>

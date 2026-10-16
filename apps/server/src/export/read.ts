@@ -6,7 +6,8 @@ import { archivePassword } from './password.ts';
 // Чтение файла экспорта: версия по имени version.vN (без пароля), затем расшифровка и проверка Zod-схемами
 // из packages/shared/src/export.ts. Ошибки — ImportError с машиночитаемым кодом (роутер отдаёт его в message).
 
-export type ImportErrorCode = 'BAD_FILE' | 'UNSUPPORTED_VERSION' | 'NEED_PASSWORD' | 'BAD_PASSWORD' | 'FILE_TOO_LARGE' | 'UPLOAD_EXPIRED';
+/** IMPORT_BUSY — на сервере уже ждут импорта файлы на общий предел памяти (export/uploads.ts): повторить позже. */
+export type ImportErrorCode = 'BAD_FILE' | 'UNSUPPORTED_VERSION' | 'NEED_PASSWORD' | 'BAD_PASSWORD' | 'FILE_TOO_LARGE' | 'UPLOAD_EXPIRED' | 'IMPORT_BUSY';
 
 export class ImportError extends Error {
   constructor(public readonly code: ImportErrorCode, detail?: string) {

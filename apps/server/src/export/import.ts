@@ -42,7 +42,9 @@ async function matches(deps: Deps, userId: string, pkg: ExportPackage) {
 
 export async function previewPackage(deps: Deps, userId: string, pkg: ExportPackage): Promise<ImportPreview> {
   // Пробное преобразование с временными id: ошибки содержимого видны до подтверждения, а не посреди записи.
-  const conv = new Converter(pkg);
+  // Картинки при этом не кодируются (probe): их data URL понадобятся только при записи, а здесь заняли бы
+  // ещё ~1,3 размера файла памяти впустую.
+  const conv = new Converter(pkg, { probe: true });
   for (const d of pkg.dossiers) conv.dossierIds.set(d.key, newId());
   for (const s of pkg.searches) conv.searchIds.set(s.key, newId());
   if (pkg.investigation) conv.investigationId = newId();
@@ -176,13 +178,14 @@ class Converter {
   /** id расследования из файла — для ссылок ft:i1 в текстах; задаётся до преобразования досье. */
   investigationId: string | null = null;
 
-  constructor(private pkg: ExportPackage) {}
+  /** probe — только проверка: ссылки на картинки сверяются с пакетом, но в data URL не кодируются. */
+  constructor(private pkg: ExportPackage, private opts: { probe?: boolean } = {}) {}
 
   private image(img: ExportImage): string {
     if ('url' in img) return img.url;
     const m = this.pkg.media.get(img.file);
     if (!m) throw new ImportError('BAD_FILE', `нет ${img.file}`);
-    return `data:${m.mime};base64,${Buffer.from(m.bytes).toString('base64')}`;
+    return `data:${m.mime};base64,${this.opts.probe ? '' : Buffer.from(m.bytes).toString('base64')}`;
   }
 
   /** [@Имя](ft:d1) → [@Имя](/dossiers/<id>); ссылка на то, чего нет в файле, — просто текст. */

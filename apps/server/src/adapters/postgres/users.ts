@@ -55,6 +55,13 @@ export class PgUsers implements UserRepo {
 /** В cookie — случайный идентификатор, в БД — только его sha256. */
 const hash = (sid: string) => createHash('sha256').update(sid).digest();
 
+/**
+ * Как часто обновлять sessions.last_seen_at. Сессия проверяется на каждом запросе (tRPC, картинки сканов,
+ * тайлы карты — сотни в секунду у одного пользователя), и запись при каждом из них раздувала бы таблицу и WAL.
+ * Поле нужно лишь с точностью до минут («когда последний раз заходил»).
+ */
+const LAST_SEEN_STEP_MS = 5 * 60_000;
+
 export class PgSessions implements SessionRepo {
   constructor(private db: Db) {}
 
@@ -69,13 +76,21 @@ export class PgSessions implements SessionRepo {
   }
 
   async get(sid: string) {
-    const r = await this.db.query<{ user_id: string }>(
-      `UPDATE sessions SET last_seen_at = now()
-       WHERE id_hash = $1 AND expires_at > now()
-       RETURNING user_id`,
-      [hash(sid)],
+    const h = hash(sid);
+    const r = await this.db.query<{ user_id: string; last_seen_at: Date }>(
+      `SELECT user_id, last_seen_at FROM sessions WHERE id_hash = $1 AND expires_at > now()`,
+      [h],
     );
-    return r.rows[0] ? { userId: r.rows[0].user_id } : null;
+    const row = r.rows[0];
+    if (!row) return null;
+    // Отметка «был в сети» — не чаще раза в LAST_SEEN_STEP_MS и не на пути запроса: ответ её не ждёт.
+    // Условие повторено в SQL, чтобы параллельные запросы одной сессии не писали строку наперегонки.
+    if (Date.now() - row.last_seen_at.getTime() >= LAST_SEEN_STEP_MS) {
+      void this.db
+        .query(`UPDATE sessions SET last_seen_at = now() WHERE id_hash = $1 AND last_seen_at < now() - $2::float8 * interval '1 millisecond'`, [h, LAST_SEEN_STEP_MS])
+        .catch(() => {});
+    }
+    return { userId: row.user_id };
   }
 
   async delete(sid: string) {

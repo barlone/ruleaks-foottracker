@@ -42,17 +42,38 @@ export class GatewayError extends Error {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Как часто просматривать lanes/polls на предмет забытых записей. */
+const SWEEP_MS = 60_000;
+/** Очередь токена без запросов дольше этого — удаляется (следующий запрос заведёт новую). */
+const LANE_IDLE_MS = 10 * 60_000;
+
 export class HttpGateway implements SearchGateway {
   /** Очередь запросов по токену: следующий уходит не раньше, чем через minIntervalMs после предыдущего. */
-  private lanes = new Map<string, { tail: Promise<void>; last: number }>();
+  private lanes = new Map<string, { tail: Promise<void>; last: number; pending: number }>();
   /** Опрос задач: время последнего и запрос в полёте — повторный вызов не дублирует запрос. */
   private polls = new Map<string, { last: number; inflight?: Promise<GatewayAnswer> }>();
+  private lastSweep = 0;
 
   constructor(private api: Api) {}
 
+  /**
+   * Записи об опросах, которые никто не завершил (задача истекла по таймауту сервера, клиент ушёл), и очереди
+   * токенов без запросов убираются по возрасту — иначе обе карты росли бы до перезапуска. Очередь удаляется
+   * только пустой: у запроса в ней есть своя ссылка на lane, и новая запись в карте сбила бы ему интервал.
+   */
+  private sweep() {
+    const now = Date.now();
+    if (now - this.lastSweep < SWEEP_MS) return;
+    this.lastSweep = now;
+    for (const [k, p] of this.polls) if (!p.inflight && now - p.last > this.api.jobTimeoutMs) this.polls.delete(k);
+    for (const [k, l] of this.lanes) if (!l.pending && now - l.last > LANE_IDLE_MS) this.lanes.delete(k);
+  }
+
   private spaced<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    const lane = this.lanes.get(key) ?? { tail: Promise.resolve(), last: 0 };
+    this.sweep();
+    const lane = this.lanes.get(key) ?? { tail: Promise.resolve(), last: 0, pending: 0 };
     this.lanes.set(key, lane);
+    lane.pending++;
     const run = lane.tail.then(async () => {
       const wait = lane.last + this.api.minIntervalMs + SPACING_MARGIN_MS - Date.now();
       if (wait > 0) await sleep(wait);
@@ -60,6 +81,7 @@ export class HttpGateway implements SearchGateway {
         return await fn();
       } finally {
         lane.last = Date.now();
+        lane.pending--;
       }
     });
     lane.tail = run.then(() => undefined, () => undefined);
@@ -120,6 +142,7 @@ export class HttpGateway implements SearchGateway {
   }
 
   async poll(token: string, service: 'ruleaks' | 'tgcmnts', jobId: string): Promise<GatewayAnswer> {
+    this.sweep();
     const key = `${service}:${jobId}`;
     const p = this.polls.get(key) ?? { last: 0 };
     this.polls.set(key, p);
@@ -131,7 +154,10 @@ export class HttpGateway implements SearchGateway {
         const body = await this.fetchJson(token, `/${service}/v1/job.results`, { jobid: jobId });
         const code = body.error ? String(body.error.code ?? '') : null;
         if (code === '5') return { state: 'running' as const, jobId }; // перегрузка — спросим в следующий раз
-        if (code) return { state: 'failed' as const, jobId, error: errorText(code, body.error?.text), code: Number(code) || undefined };
+        if (code) {
+          this.polls.delete(key);
+          return { state: 'failed' as const, jobId, error: errorText(code, body.error?.text), code: Number(code) || undefined };
+        }
         const ans = this.answer(body);
         if (ans.state !== 'running') this.polls.delete(key);
         return ans;

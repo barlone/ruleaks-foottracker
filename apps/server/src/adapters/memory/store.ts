@@ -5,7 +5,7 @@ import {
 } from '@ft/shared';
 import { roleOf } from '../../authz.ts';
 import {
-  Conflict, TagExists, VersionConflict,
+  Conflict, DEFAULT_DISPLAY_NAME, TagExists, VersionConflict,
   type DossierContent, type DossierPatch, type DossierRepo, type InvestigationContent, type InvestigationPatch, type InvestigationRepo,
   type ListFilter, type Scope, type SearchJobInternals, type UidMatch,
   type RelationRepo, type SearchRepo, type SessionRepo, type TagRepo, type UserRepo,
@@ -23,14 +23,16 @@ type StoredUser = Omit<User, 'access'>;
 export class MemoryUsers implements UserRepo {
   private byId = new Map<string, StoredUser>(seedUsers.map((u) => [u.id, u]));
 
-  async upsertByTgId(u: { tgId: string; displayName: string; username: string | null }) {
+  async upsertByTgId(u: { tgId: string; displayName: string | null; username: string | null }) {
     const existing = [...this.byId.values()].find((x) => x.tgId === u.tgId);
     if (existing) {
-      Object.assign(existing, u);
+      // null — бот не сообщил имя/ник: прежние значения остаются.
+      if (u.displayName !== null) existing.displayName = u.displayName;
+      if (u.username !== null) existing.username = u.username;
       return { id: existing.id };
     }
     const id = newId();
-    this.byId.set(id, { id, ...u });
+    this.byId.set(id, { id, tgId: u.tgId, displayName: u.displayName ?? DEFAULT_DISPLAY_NAME, username: u.username });
     return { id };
   }
   async get(id: string) {

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { User } from '@ft/shared';
 import { isUuid } from '@ft/shared';
-import type { SessionRepo, UserRepo } from '../../ports.ts';
+import { DEFAULT_DISPLAY_NAME, type SessionRepo, type UserRepo } from '../../ports.ts';
 import { tx, type Db } from './db.ts';
 
 type StoredUser = Omit<User, 'access'>;
@@ -19,18 +19,19 @@ const toUser = (r: UserRow): StoredUser => ({ id: r.id, tgId: r.tg_id, displayNa
 export class PgUsers implements UserRepo {
   constructor(private db: Db) {}
 
-  async upsertByTgId(u: { tgId: string; displayName: string; username: string | null }) {
+  async upsertByTgId(u: { tgId: string; displayName: string | null; username: string | null }) {
     return tx(this.db, async (c) => {
       // @username в Telegram уникален: если он «переехал» к другому, у прежнего владельца он устарел.
       if (u.username) {
         await c.query(`UPDATE users SET username = NULL WHERE lower(username) = lower($1) AND tg_id <> $2`, [u.username, u.tgId]);
       }
+      // Неизвестные имя/ник (null) не затирают записанные раньше: по @username делятся досье.
       const r = await c.query<{ id: string }>(
-        `INSERT INTO users (tg_id, display_name, username, last_seen_at) VALUES ($1, $2, $3, now())
+        `INSERT INTO users (tg_id, display_name, username, last_seen_at) VALUES ($1, coalesce($2::text, $4::text), $3::text, now())
          ON CONFLICT (tg_id) DO UPDATE
-           SET display_name = EXCLUDED.display_name, username = EXCLUDED.username, last_seen_at = now()
+           SET display_name = coalesce($2::text, users.display_name), username = coalesce($3::text, users.username), last_seen_at = now()
          RETURNING id`,
-        [u.tgId, u.displayName, u.username],
+        [u.tgId, u.displayName, u.username, DEFAULT_DISPLAY_NAME],
       );
       return { id: r.rows[0]!.id };
     });

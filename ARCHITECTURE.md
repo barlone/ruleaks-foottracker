@@ -117,13 +117,18 @@ apps/web          React SPA
 браузер              сайт (BFF)                         БД бота / бот
   │ auth.start ───────▶ INSERT site_login_requests ──────▶ nonce, TTL 5 мин
   │ ◀── deepLink t.me/<bot>?start=login_<nonce> + QR
+  │ ◀── Set-Cookie ft_login = HMAC(nonce) (httpOnly, TTL 5 мин)
   │ (пользователь в Telegram) ──────────────────────────▶ бот: /start login_<nonce>
   │                                                       кнопка «Войти на сайт» → confirmed, tg_id
-  │ auth.status (опрос 1.5 с) ─▶ SELECT site_login_requests
+  │ auth.status (опрос 1.5 с) ─▶ cookie ft_login сходится с nonce? иначе «expired», nonce не расходуется
+  │                              SELECT site_login_requests
   │                            ◀── confirmed + tg_id
   │                            consume; upsert user; сессия
   │ ◀── Set-Cookie ft_sid (httpOnly, Secure, SameSite=Lax, signed)
 ```
+
+Nonce виден всем, кто видит экран или ссылку (QR-код, чат с ботом), поэтому сессию получает только браузер,
+начавший вход: `auth.status` требует cookie `ft_login`, выданную `auth.start` для этого nonce.
 
 - Сессия хранится на сервере (`sessions`, в БД — sha256 от значения cookie), срок — `[server] session-ttl-days`.
   JWT не используем: сессию нужно уметь отозвать сразу (команда бота «Завершить все сессии на сайте»).

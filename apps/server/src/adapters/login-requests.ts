@@ -8,7 +8,8 @@ import { config } from '../config.ts';
 
 interface Confirmed {
   tgId: string;
-  displayName: string;
+  /** null — бот имя не сообщил (у существующего пользователя остаётся прежнее). */
+  displayName: string | null;
   username: string | null;
 }
 

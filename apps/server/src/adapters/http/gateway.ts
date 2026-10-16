@@ -136,8 +136,13 @@ export class HttpGateway implements SearchGateway {
         if (ans.state !== 'running') this.polls.delete(key);
         return ans;
       } catch (e) {
-        if (e instanceof GatewayError && !['401'].includes(e.code ?? '')) return { state: 'running' as const, jobId }; // сеть мигнула — повторим
-        throw e;
+        if (!(e instanceof GatewayError)) throw e;
+        // Токен отозван — задача завершается ошибкой (как при старте), иначе клиент опрашивал бы её до таймаута.
+        if (e.code === '401') {
+          this.polls.delete(key);
+          return { state: 'failed' as const, jobId, error: e.message, code: 401 };
+        }
+        return { state: 'running' as const, jobId }; // сеть мигнула — повторим
       } finally {
         p.last = Date.now();
         p.inflight = undefined;

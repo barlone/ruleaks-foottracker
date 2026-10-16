@@ -71,6 +71,9 @@ Each data source is switched independently by its `enabled` flag:
 `[config] geo-search` (default `false`) switches the «Поиск по геоданным» section; `[geo-search]` configures its map
 (see «Geo search» below).
 
+`[server] trust-proxy` (default `false`) makes Fastify take the client address from `X-Forwarded-For`; production runs behind
+nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone.
+
 `[server] dev-login` (allowed only when `host` is loopback; bot-db mode only) enables login without the bot: demo-profile buttons, or a
 Telegram-ID field when `[bot-db]` is real. `LoginPage.tsx` also has a temporary quick-login button for one fixed ID
 (`QUICK_LOGIN_TG_ID`, marked TODO).

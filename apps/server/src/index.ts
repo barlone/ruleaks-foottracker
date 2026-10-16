@@ -15,6 +15,8 @@ const app = Fastify({
   logger: { level: 'info' },
   logController: new LogController({ disableRequestLogging: true }),
   routerOptions: { maxParamLength: 5000 },
+  // За nginx/Cloudflare req.ip иначе был бы адресом прокси (лимит попыток пароля — на один адрес).
+  trustProxy: appConfig.server.trustProxy,
 });
 
 app.log.info(`версия:    ${versionLine}`);

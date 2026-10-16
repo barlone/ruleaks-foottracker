@@ -84,8 +84,9 @@ export class BotDbBridge implements BotBridge {
     const tgId = who.tgId.trim();
     const exists = /^\d{1,20}$/.test(tgId) && (await this.pool.query(`select 1 from users where provider = 'tg' and provider_id = $1`, [tgId])).rowCount;
     if (!exists) return { ok: false as const, error: `Пользователь с Telegram ID ${tgId} не найден в базе бота` };
-    // Имени и ника в БД бота нет — показываем ID; позже бот будет передавать их при подтверждении входа.
-    const ok = this.logins.confirm(nonce, { tgId, displayName: 'Пользователь бота', username: null });
+    // Имени и ника в БД бота нет: null — новому пользователю хранилище даст имя-заглушку, у существующего
+    // имя и @username (по нему делятся досье) не затираются; позже бот будет передавать их при подтверждении входа.
+    const ok = this.logins.confirm(nonce, { tgId, displayName: null, username: null });
     return ok ? { ok: true as const } : { ok: false as const, error: 'Ссылка входа устарела, обновите страницу' };
   }
 }

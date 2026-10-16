@@ -12,7 +12,8 @@ import type {
 export type LoginRequestStatus =
   | { status: 'pending' }
   | { status: 'expired' }
-  | { status: 'confirmed'; tgId: string; displayName: string; username: string | null };
+  /** displayName / username = null — бот их не сообщил: у существующего пользователя остаются прежние. */
+  | { status: 'confirmed'; tgId: string; displayName: string | null; username: string | null };
 
 /**
  * Мост к боту pyruleaks-bot. В проде — SQL к его базе ([bot-db]): site_login_requests, site_user_access(), users/tokens;
@@ -85,8 +86,12 @@ export interface ScanStore {
 
 // ---------- Хранилище сайта ----------
 
+/** Имя нового пользователя, если бот его не сообщил (displayName = null). */
+export const DEFAULT_DISPLAY_NAME = 'Пользователь бота';
+
 export interface UserRepo {
-  upsertByTgId(u: { tgId: string; displayName: string; username: string | null }): Promise<{ id: string }>;
+  /** null в displayName / username — не менять то, что уже записано (новому пользователю — имя-заглушка). */
+  upsertByTgId(u: { tgId: string; displayName: string | null; username: string | null }): Promise<{ id: string }>;
   get(id: string): Promise<Omit<User, 'access'> | null>;
   findByUsername(username: string): Promise<Omit<User, 'access'> | null>;
 }

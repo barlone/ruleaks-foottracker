@@ -110,6 +110,12 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   const [edges, setEdges, onEdgesChange] = useEdgesState<RelEdge>(toFlowEdges(srcEdges));
   const [dirty, setDirty] = useState(false);
   const versionRef = useRef(version);
+  // Счётчик правок и номер правки, ушедшей в последнем сохранении: правка во время запроса не теряется —
+  // dirty снимается, только если с момента отправки ничего не менялось.
+  const editSeq = useRef(0);
+  const sentSeq = useRef(0);
+  // Сервер отверг версию: местная копия устарела — при следующем ответе берём граф с сервера.
+  const conflict = useRef(false);
   const rf = useReactFlow<EntityNode, RelEdge>();
   const navigate = useNavigate();
   const utils = trpc.useUtils();
@@ -119,42 +125,55 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
     onSuccess: (inv) => {
       versionRef.current = inv.version;
       utils.investigations.get.setData({ id: investigationId }, inv);
-      setDirty(false);
+      if (sentSeq.current === editSeq.current) setDirty(false);
     },
     onError: (e) => {
       toast(errorText(e), 'error');
-      if (errorCode(e) === 'VERSION_CONFLICT') void utils.investigations.get.invalidate({ id: investigationId });
+      if (errorCode(e) === 'VERSION_CONFLICT') {
+        conflict.current = true;
+        void utils.investigations.get.invalidate({ id: investigationId });
+      }
     },
   });
 
-  // Пришла новая версия с сервера (чужая правка, факты) — принимаем, если нет несохранённых изменений.
+  // Пришла новая версия с сервера (чужая правка, факты) — принимаем, если нет несохранённых изменений
+  // или наша версия отвергнута (конфликт): тогда несохранённое заменяется серверным, как и говорит сообщение об ошибке.
   useEffect(() => {
-    if (version !== versionRef.current && !dirty) {
+    if (version !== versionRef.current && (!dirty || conflict.current)) {
       versionRef.current = version;
+      conflict.current = false;
       setNodes(toFlowNodes(srcNodes, facts));
       setEdges(toFlowEdges(srcEdges));
+      setDirty(false);
     } else {
       setNodes((ns) => ns.map((n) => ({ ...n, data: { ...n.data, factCount: facts.filter((f) => f.nodeIds.includes(n.id)).length } })));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, facts]);
 
-  // Автосохранение через 1.2 с после последней правки.
+  // Автосохранение через 1.2 с после последней правки. Пока запрос в полёте, следующий не отправляется
+  // (иначе он ушёл бы со старой версией и получил конфликт) — он уйдёт, когда ответ придёт и isPending сменится.
+  const saving = save.isPending;
   useEffect(() => {
-    if (!dirty || !editable) return;
+    if (!dirty || !editable || saving) return;
     const t = setTimeout(() => {
+      sentSeq.current = editSeq.current;
       const g = fromFlow(rf.getNodes(), rf.getEdges());
       save.mutate({ id: investigationId, version: versionRef.current, ...g });
     }, 1200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, nodes, edges]);
+  }, [dirty, nodes, edges, saving]);
 
   useEffect(() => {
     if (focus) setTimeout(() => rf.fitView({ nodes: [{ id: focus }], maxZoom: 1.2, duration: 400 }), 50);
   }, [focus, rf]);
 
-  const touch = () => editable && setDirty(true);
+  const touch = () => {
+    if (!editable) return;
+    editSeq.current++;
+    setDirty(true);
+  };
 
   const onConnect = useCallback(
     (c: Connection) => {

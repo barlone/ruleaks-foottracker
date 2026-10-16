@@ -57,6 +57,8 @@ const SECTIONS = {
     /** Вход без бота по Telegram ID пользователя (пока бот не умеет подтверждать вход). Только на localhost. */
     'dev-login': bool(true),
     'session-ttl-days': int(30, 1, 365),
+    /** Сервер за обратным прокси (nginx, Cloudflare): адрес клиента брать из X-Forwarded-For. */
+    'trust-proxy': bool(false),
   }),
   telegram: z.object({
     'bot-username': str('ruleaks_bot'),
@@ -142,6 +144,8 @@ export interface AppConfig {
     loopback: boolean;
     devLogin: boolean;
     sessionTtlMs: number;
+    /** Доверять X-Forwarded-For (req.ip — адрес клиента, а не прокси). */
+    trustProxy: boolean;
   };
   telegram: { botUsername: string };
   /** База сайта: досье, расследования, медиа, сессии. */
@@ -248,6 +252,7 @@ export function loadConfig(): AppConfig {
       sessionTtlMs: c.server['session-ttl-days'] * 86400_000,
       loopback,
       devLogin: c.server['dev-login'],
+      trustProxy: c.server['trust-proxy'],
     },
     telegram: { botUsername: c.telegram['bot-username'].replace(/^@/, '') },
     projectDb: db(c['project-db']),
@@ -329,6 +334,9 @@ function validate(cfg: AppConfig) {
     missing.push('[config] password-sha256 (64 hex-символа: npm run password-hash)');
   }
   if (!cfg.server.loopback) {
+    if (!cfg.server.trustProxy) {
+      cfg.warnings.push('[server] trust-proxy = false: за обратным прокси req.ip — адрес прокси, а не клиента (лимит попыток пароля общий на всех)');
+    }
     if (mode === 'none') missing.push('[config] auth (none — только при host = 127.0.0.1 / localhost: сайт открыт без входа)');
     if (cfg.server.cookieSecret === DEV_COOKIE_SECRET || cfg.server.cookieSecret.length < 32) missing.push('[server] cookie-secret (не короче 32 символов — сервер слушает не только localhost)');
     if (cfg.server.devLogin) missing.push('[server] dev-login = false (вход без бота допустим только на localhost)');

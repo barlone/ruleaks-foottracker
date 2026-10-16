@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { config } from '../config.ts';
@@ -9,6 +9,8 @@ import { authedProcedure, loadAccess, publicProcedure, router, type Ctx } from '
 //   1) start → nonce + ссылка t.me/<bot>?start=login_<nonce>;
 //   2) бот подтверждает вход (в dev — devConfirm);
 //   3) status опрашивается страницей входа; на confirmed сервер создаёт сессию и ставит cookie.
+//   Nonce виден в ссылке и QR-коде, поэтому сам по себе сессию не даёт: start ставит браузеру httpOnly-cookie
+//   с HMAC(nonce), и status принимает nonce только вместе с ней — чужой браузер, узнавший nonce, получает «expired».
 // password-sha256 — один пользователь, password сверяет sha256 пароля с конфигом и ставит cookie.
 // none — входа нет: контекст запроса всегда содержит соло-пользователя (см. trpc.ts).
 
@@ -50,6 +52,18 @@ async function startSession(ctx: Ctx, userId: string) {
   ctx.res.setCookie(config.sessionCookie, sid, cookieOpts);
 }
 
+/** Cookie, привязывающая запрос входа к браузеру, который его начал: HMAC от nonce на секрете сервера. */
+const LOGIN_COOKIE = 'ft_login';
+const loginCookieOpts = { ...cookieOpts, signed: false, maxAge: config.loginTtlMs / 1000 };
+const loginBinding = (nonce: string) => createHmac('sha256', config.cookieSecret).update(nonce).digest('base64url');
+
+function loginBound(ctx: Ctx, nonce: string): boolean {
+  const got = ctx.req.cookies[LOGIN_COOKIE];
+  if (!got) return false;
+  const want = loginBinding(nonce);
+  return got.length === want.length && timingSafeEqual(Buffer.from(got), Buffer.from(want));
+}
+
 export const authRouter = router({
   me: publicProcedure.query(({ ctx }) => ctx.user),
 
@@ -71,14 +85,19 @@ export const authRouter = router({
     return true;
   }),
 
-  start: botProcedure.mutation(({ ctx }) =>
-    ctx.deps.bot.createLoginRequest({ userAgent: ctx.req.headers['user-agent'] }),
-  ),
+  start: botProcedure.mutation(async ({ ctx }) => {
+    const r = await ctx.deps.bot.createLoginRequest({ userAgent: ctx.req.headers['user-agent'] });
+    ctx.res.setCookie(LOGIN_COOKIE, loginBinding(r.nonce), loginCookieOpts);
+    return r;
+  }),
 
   status: botProcedure.input(z.object({ nonce: z.string().min(10).max(64) })).query(async ({ ctx, input }) => {
+    // Без cookie этого браузера nonce не принимается — и не расходуется: настоящий браузер ещё войдёт.
+    if (!loginBound(ctx, input.nonce)) return { status: 'expired' as const };
     const r = await ctx.deps.bot.getLoginRequest(input.nonce);
     if (r.status !== 'confirmed') return { status: r.status };
     await ctx.deps.bot.consumeLoginRequest(input.nonce);
+    ctx.res.clearCookie(LOGIN_COOKIE, { path: '/' });
     const { id } = await ctx.deps.users.upsertByTgId({ tgId: r.tgId, displayName: r.displayName, username: r.username });
     await loadAccess(ctx.deps, r.tgId, true);
     await startSession(ctx, id);

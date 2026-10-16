@@ -148,10 +148,23 @@ export const AttributeItem = z.object({
 
 export const Platform = z.enum(['vk', 'telegram', 'ok', 'instagram', 'facebook', 'x', 'youtube', 'web', 'other']);
 
+/**
+ * Внешняя ссылка, которую интерфейс показывает как <a href>: только абсолютный http(s)-адрес.
+ * Схемы javascript:, data: и прочие не принимаются ни от интерфейса, ни из файла импорта.
+ */
+export const HttpUrl = z.string().max(2048).refine((s) => {
+  if (!/^https?:\/\//i.test(s) || /[\s\\\u0000-\u001f\u007f]/.test(s)) return false;
+  try {
+    return !!new URL(s).hostname;
+  } catch {
+    return false;
+  }
+}, 'Нужна ссылка вида https://…');
+
 export const LinkItem = z.object({
   ...itemBase,
   type: z.literal('link'),
-  url: z.string().url(),
+  url: HttpUrl,
   title: z.string().max(256).optional(),
   platform: Platform.default('web'),
 });
@@ -202,7 +215,7 @@ export const PostItem = z.object({
   /** Где опубликовано: группа, канал, страница. */
   place: z.string().max(256).optional(),
   /** Ссылка на само сообщение. */
-  url: z.string().max(2048).optional(),
+  url: HttpUrl.optional(),
   /** Время публикации (для реакции — время реакции), ISO в UTC; null — неизвестно. */
   at: z.string().nullable(),
   /** Текст поста/комментария; для реакции — текст сообщения, на которое реагировали. */

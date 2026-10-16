@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { ReactNode } from 'react';
 import { KeyRound, Send } from 'lucide-react';
@@ -94,7 +94,12 @@ function BotLogin() {
   const [expired, setExpired] = useState(false);
   const nonce = start.data?.nonce;
 
+  // Один запрос входа на монтирование: сервер привязывает nonce к cookie браузера, и второй запрос
+  // (StrictMode вызывает эффект дважды) перебил бы cookie первого — опрос статуса получал бы «expired».
+  const started = useRef(false);
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     start.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

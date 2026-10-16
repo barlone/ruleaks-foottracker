@@ -86,9 +86,11 @@ export const dossiersRouter = router({
 
   addItem: activeProcedure.input(z.object({ id: z.string(), item: NewItem })).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'edit');
-    // Тот же пост/реакция (по внешнему id) уже в досье — повторно не добавляем.
+    // Тот же пост/реакция (по внешнему id) или та же ссылка уже в досье — повторно не добавляем.
     const ext = input.item.type === 'post' ? input.item.extId : undefined;
     if (ext && d.items.some((i) => i.type === 'post' && i.extId === ext)) return withRole(ctx, d);
+    const url = input.item.type === 'link' ? input.item.url : undefined;
+    if (url && d.items.some((i) => i.type === 'link' && i.url === url)) return withRole(ctx, d);
     const item = DossierItem.parse({
       ...input.item,
       id: newId(),

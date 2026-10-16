@@ -18,6 +18,7 @@ import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, FileP
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
+import { guessPlatform } from '../../lib/platform.ts';
 import { toast } from '../../lib/toast.ts';
 import { dossierRoute } from '../../router.tsx';
 import { MediaGallery } from './MediaGallery.tsx';
@@ -27,17 +28,6 @@ import { RelationsCard } from './RelationsCard.tsx';
 
 type Of<T extends DossierItem['type']> = Extract<DossierItem, { type: T }>;
 type NewItem = RouterInputs['dossiers']['addItem']['item'];
-
-function guessPlatform(url: string): Of<'link'>['platform'] {
-  if (/vk\.com/.test(url)) return 'vk';
-  if (/t\.me|telegram/.test(url)) return 'telegram';
-  if (/ok\.ru/.test(url)) return 'ok';
-  if (/instagram/.test(url)) return 'instagram';
-  if (/facebook|fb\.com/.test(url)) return 'facebook';
-  if (/x\.com|twitter/.test(url)) return 'x';
-  if (/youtu/.test(url)) return 'youtube';
-  return 'web';
-}
 
 /** Порядок атрибутов по важности; остальные поля — после ссылок в порядке LEAK_FIELDS, свои — перед «Прочим». */
 const ATTR_ORDER: string[] = ['names', 'bdays', 'inns', 'pasps', 'snilss', 'phones', 'emails', 'addrs', 'weblinks'];

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Copy, ExternalLink, History, UserSearch } from 'lucide-react';
+import { Copy, ExternalLink, FolderPlus, History, UserSearch } from 'lucide-react';
 import { PAGES_USERNAME_MAX, PAGES_USERNAME_RE, SHERLOCK_URL } from '@ft/shared';
 import { ProgressDialog } from '../../components/ProgressDialog.tsx';
 import { Button, Card, CopyButton, Empty, Input, Segmented, Spinner, Tag } from '../../components/ui.tsx';
@@ -11,6 +11,7 @@ import { ago } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { pagesSearchRoute } from '../../router.tsx';
+import { AddPagesDialog, type PendingPage } from './AddPagesDialog.tsx';
 import { SearchLayout, useRunOnMount } from './common.tsx';
 
 // «Поиск личных страниц»: имя пользователя → страницы на сайтах и в соцсетях из списка проекта Sherlock.
@@ -197,6 +198,8 @@ function PagesHistory({ activeId, onOpen }: { activeId: string | null; onOpen: (
 
 function PagesResults({ job, loading, error }: { job: Job | undefined; loading: boolean; error: string | null }) {
   const [view, setView] = useState<'found' | 'all'>('found');
+  // Что переносить в досье: одна страница (кнопка в карточке) или все найденные (кнопка в панели).
+  const [adding, setAdding] = useState<PendingPage[] | null>(null);
   // Новый поиск — снова список найденных.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setView('found'), [job?.id]);
@@ -239,7 +242,10 @@ function PagesResults({ job, loading, error }: { job: Job | undefined; loading: 
         </div>
         <div className="flex items-center gap-2">
           <Segmented value={view} onChange={setView} options={[{ value: 'found', label: 'найденные' }, { value: 'all', label: 'все сайты' }]} />
-          <Button variant="primary" size="sm" onClick={() => void copyAll()} disabled={!found.length}>
+          <Button variant="primary" size="sm" onClick={() => setAdding(found)} disabled={!found.length}>
+            <FolderPlus size={15} /> Все найденные в досье
+          </Button>
+          <Button size="sm" onClick={() => void copyAll()} disabled={!found.length}>
             <Copy size={14} /> Скопировать ссылки
           </Button>
         </div>
@@ -256,7 +262,7 @@ function PagesResults({ job, loading, error }: { job: Job | undefined; loading: 
           <Empty>Страниц с таким именем не найдено</Empty>
         ) : (
           <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-            {found.map((r) => <FoundCard key={r.site} r={r} />)}
+            {found.map((r) => <FoundCard key={r.site} r={r} onAdd={() => setAdding([r])} />)}
           </div>
         )
       ) : (
@@ -275,17 +281,27 @@ function PagesResults({ job, loading, error }: { job: Job | undefined; loading: 
           </div>
         </Card>
       )}
+      <AddPagesDialog open={!!adding} onOpenChange={(v) => !v && setAdding(null)} pages={adding ?? []} username={job.username} />
     </>
   );
 }
 
-function FoundCard({ r }: { r: Result }) {
+function FoundCard({ r, onAdd }: { r: Result; onAdd: () => void }) {
   return (
     <Card compact className="!p-3.5">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate font-semibold">{r.site}</span>
         {r.nsfw && <Tag tone="warn">18+</Tag>}
         <span className="font-mono text-[10px] text-mute">{r.ms} мс</span>
+        <button
+          type="button"
+          onClick={onAdd}
+          title="Добавить в досье"
+          aria-label="Добавить в досье"
+          className="shrink-0 cursor-pointer text-mute transition hover:text-mint"
+        >
+          <FolderPlus size={15} />
+        </button>
       </div>
       <div className="mt-1.5 flex items-center gap-2">
         <a href={r.url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-xs text-mint hover:underline">

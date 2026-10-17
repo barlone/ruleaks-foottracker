@@ -51,7 +51,14 @@ export function makeCreateContext(deps: Deps) {
 }
 
 // Машиночитаемый код ошибки — в message (NO_SESSION, SUBSCRIPTION_INACTIVE, VERSION_CONFLICT…).
-const t = initTRPC.context<Ctx>().create();
+// Необработанные ошибки (PostgreSQL, воркер, шлюз) наружу не раскрываются: в браузер уходит код INTERNAL,
+// подробности — в журнале сервера (onError в index.ts); stack tRPC по умолчанию добавляет в ответ вне NODE_ENV=production.
+const t = initTRPC.context<Ctx>().create({
+  errorFormatter({ shape, error }) {
+    const { stack: _stack, ...data } = shape.data;
+    return { ...shape, message: error.code === 'INTERNAL_SERVER_ERROR' ? 'INTERNAL' : shape.message, data };
+  },
+});
 
 export const router = t.router;
 

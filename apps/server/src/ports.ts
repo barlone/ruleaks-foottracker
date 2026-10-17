@@ -208,6 +208,8 @@ export interface DossierRepo {
   replaceContent(id: string, content: DossierContent, actorId: string): Promise<Dossier>;
   update(id: string, version: number, patch: DossierPatch): Promise<Dossier>;
   addItem(id: string, item: DossierItem, actorId: string): Promise<Dossier>;
+  /** Несколько элементов одной правкой (одна транзакция, одно повышение version). */
+  addItems(id: string, items: DossierItem[], actorId: string): Promise<Dossier>;
   updateItem(id: string, item: DossierItem): Promise<Dossier>;
   removeItem(id: string, itemId: string): Promise<Dossier>;
   reorderItems(id: string, orderedIds: string[]): Promise<Dossier>;

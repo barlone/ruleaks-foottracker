@@ -260,9 +260,13 @@ export class PgDossiers implements DossierRepo {
   }
 
   async addItem(id: string, item: DossierItem, actorId: string) {
+    return this.addItems(id, [item], actorId);
+  }
+
+  async addItems(id: string, items: DossierItem[], actorId: string) {
     await tx(this.db, async (c) => {
       const { ownerId } = await lockAndBump(c, 'dossiers', id);
-      await insertItem(c, ownerId, id, item, actorId);
+      for (const item of items) await insertItem(c, ownerId, id, item, actorId);
     });
     return this.reload(id);
   }

@@ -108,6 +108,7 @@ Adding PostgreSQL storage means new repo adapters + a branch in `deps.ts`; route
   `activeProcedure` (subscription active). Expired subscription = read-only site: reads work, search and every
   mutation throw `FORBIDDEN SUBSCRIPTION_INACTIVE`. Machine-readable error codes travel in the error `message`
   (`NO_SESSION`, `VERSION_CONFLICT`, `NO_RIGHTS`, …) and are mapped to Russian text in `apps/web/src/lib/errors.ts`.
+  Unhandled errors leave the server as `INTERNAL` with no stack (`errorFormatter` in `trpc.ts`); details go to the log.
   The bot's subscription answer is cached 60 s (`loadAccess`).
 - **Authorization** happens only in `src/authz.ts` (`can()`/`roleOf()`: owner/editor/viewer from `ownerId`,
   `visibility`, `shares`). Routers load objects through a local `load(ctx, id, action)`; an object the user may not read

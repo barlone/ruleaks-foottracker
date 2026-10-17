@@ -98,7 +98,7 @@ function PhotosDialog({
   editable: boolean;
 }) {
   const utils = trpc.useUtils();
-  const addItem = trpc.dossiers.addItem.useMutation();
+  const addItems = trpc.dossiers.addItems.useMutation();
   const removeItem = trpc.dossiers.removeItem.useMutation();
   const update = trpc.dossiers.update.useMutation();
   const [url, setUrl] = useState('');
@@ -121,11 +121,12 @@ function PhotosDialog({
   /** Добавить фото; если основного ещё нет — первое добавленное становится основным. */
   const addPhotos = (urls: { url: string; caption?: string }[]) =>
     run(async () => {
-      let d: { version: number; coverMediaUrl: string | null } | null = null;
-      for (const p of urls) {
-        d = await addItem.mutateAsync({ id: dossierId, item: { type: 'media', mediaId: newId(), url: p.url, caption: p.caption, album: PHOTO_ALBUM } });
-      }
-      if (d && !coverUrl && urls[0]) await update.mutateAsync({ id: dossierId, version: d.version, patch: { coverMediaUrl: urls[0].url } });
+      if (!urls.length) return;
+      const d = await addItems.mutateAsync({
+        id: dossierId,
+        items: urls.map((p) => ({ type: 'media' as const, mediaId: newId(), url: p.url, caption: p.caption, album: PHOTO_ALBUM })),
+      });
+      if (!coverUrl && urls[0]) await update.mutateAsync({ id: dossierId, version: d.version, patch: { coverMediaUrl: urls[0].url } });
       setUrl('');
     });
 

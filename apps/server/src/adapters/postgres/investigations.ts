@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import type { Fact, GraphEdge, GraphNode, Hypothesis, Investigation, InvestigationSummary, Share, Tag } from '@ft/shared';
 import { isUuid } from '@ft/shared';
 import type { InvestigationContent, InvestigationPatch, InvestigationRepo, ListFilter, Scope, UidMatch } from '../../ports.ts';
@@ -171,14 +170,8 @@ export class PgInvestigations implements InvestigationRepo {
       };
       if (patch.title !== undefined) set('title', patch.title);
       if (patch.descriptionMd !== undefined) set('description_md', patch.descriptionMd);
-      if (patch.visibility !== undefined) {
-        set('visibility', patch.visibility);
-        // Публичному расследованию нужна неугадываемая ссылка; при повторной публикации — прежняя.
-        if (patch.visibility === 'public') {
-          vals.push(randomBytes(12).toString('base64url'));
-          sets.push(`public_slug = coalesce(public_slug, $${vals.length})`);
-        }
-      }
+      // Публичное расследование открывается по своему id (uuid v7: 74 случайных бита — не угадать).
+      if (patch.visibility !== undefined) set('visibility', patch.visibility);
       if (sets.length) await c.query(`UPDATE investigations SET ${sets.join(', ')} WHERE id = $1`, vals);
       if (patch.tagIds !== undefined) await replaceTags(c, 'investigation', id, patch.tagIds);
     });

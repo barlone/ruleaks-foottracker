@@ -35,7 +35,7 @@ export function AddToDossierDialog({
   const [dossierId, setDossierId] = useState('');
   const [title, setTitle] = useState('');
   const create = trpc.dossiers.create.useMutation();
-  const addItem = trpc.dossiers.addItem.useMutation();
+  const addItems = trpc.dossiers.addItems.useMutation();
   const [busy, setBusy] = useState(false);
 
   const editable = (options.data ?? []).filter((d) => d.role !== 'viewer');
@@ -52,15 +52,17 @@ export function AddToDossierDialog({
       if (!id) return;
       const capturedAt = new Date().toISOString();
       const source = { kind: 'search' as const, ref: search.id, reliability: 'C' as const, credibility: '3' as const, capturedAt };
-      await addItem.mutateAsync({ id, item: { type: 'snapshot', searchId: search.id, section: search.section, kind: search.kind, query: search.query, deep: search.deep, summary: search.summary } });
-      for (const v of values) {
-        await addItem.mutateAsync({ id, item: { type: 'attribute', key: v.key, label: v.label, value: v.value, source } });
-      }
-      // Посты — в хронологическом порядке; уже перенесённые (тот же extId) сервер пропускает.
-      for (const p of [...posts].sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''))) {
-        const src = p.url ? { ...source, kind: 'url' as const, ref: p.url } : source;
-        await addItem.mutateAsync({ id, item: { type: 'post', ...p, source: src } });
-      }
+      // Всё одним запросом: снимок, значения, посты (в хронологическом порядке; уже перенесённые сервер пропускает).
+      await addItems.mutateAsync({
+        id,
+        items: [
+          { type: 'snapshot', searchId: search.id, section: search.section, kind: search.kind, query: search.query, deep: search.deep, summary: search.summary },
+          ...values.map((v) => ({ type: 'attribute' as const, key: v.key, label: v.label, value: v.value, source })),
+          ...[...posts]
+            .sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''))
+            .map((p) => ({ type: 'post' as const, ...p, source: p.url ? { ...source, kind: 'url' as const, ref: p.url } : source })),
+        ],
+      });
       await utils.dossiers.invalidate();
       toast(`Добавлено в досье: ${values.length} знач.${posts.length ? `, ${posts.length} пост.` : ''} + снимок поиска`);
       onOpenChange(false);

@@ -30,6 +30,30 @@ async function load(ctx: Ctx, id: string, action: Action): Promise<Dossier> {
 
 const withRole = (ctx: Ctx, d: Dossier) => ({ ...d, role: roleOf(ctx.user!.id, d)! });
 
+/**
+ * Новые элементы досье: id, позиция за последней, время. Тот же пост/реакция (по внешнему id) или та же ссылка,
+ * уже имеющиеся в досье или повторяющиеся в самом списке, пропускаются.
+ */
+function prepareItems(d: Dossier, inputs: z.infer<typeof NewItem>[]): DossierItem[] {
+  const exts = new Set(d.items.flatMap((i) => (i.type === 'post' && i.extId ? [i.extId] : [])));
+  const urls = new Set(d.items.flatMap((i) => (i.type === 'link' ? [i.url] : [])));
+  let position = Math.max(-1, ...d.items.map((i) => i.position));
+  const createdAt = new Date().toISOString();
+  const out: DossierItem[] = [];
+  for (const input of inputs) {
+    if (input.type === 'post' && input.extId) {
+      if (exts.has(input.extId)) continue;
+      exts.add(input.extId);
+    }
+    if (input.type === 'link') {
+      if (urls.has(input.url)) continue;
+      urls.add(input.url);
+    }
+    out.push(DossierItem.parse({ ...input, id: newId(), position: ++position, createdAt }));
+  }
+  return out;
+}
+
 export const dossiersRouter = router({
   list: authedProcedure
     .input(z.object({
@@ -94,18 +118,15 @@ export const dossiersRouter = router({
 
   addItem: activeProcedure.input(z.object({ id: z.string(), item: NewItem })).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'edit');
-    // Тот же пост/реакция (по внешнему id) или та же ссылка уже в досье — повторно не добавляем.
-    const ext = input.item.type === 'post' ? input.item.extId : undefined;
-    if (ext && d.items.some((i) => i.type === 'post' && i.extId === ext)) return withRole(ctx, d);
-    const url = input.item.type === 'link' ? input.item.url : undefined;
-    if (url && d.items.some((i) => i.type === 'link' && i.url === url)) return withRole(ctx, d);
-    const item = DossierItem.parse({
-      ...input.item,
-      id: newId(),
-      position: Math.max(-1, ...d.items.map((i) => i.position)) + 1,
-      createdAt: new Date().toISOString(),
-    });
-    return withRole(ctx, await ctx.deps.dossiers.addItem(input.id, item, ctx.user.id));
+    const items = prepareItems(d, [input.item]);
+    return withRole(ctx, items.length ? await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id) : d);
+  }),
+
+  /** Несколько элементов за один запрос (перенос из поиска): одна транзакция, один ответ. */
+  addItems: activeProcedure.input(z.object({ id: z.string(), items: z.array(NewItem).min(1).max(500) })).mutation(async ({ ctx, input }) => {
+    const d = await load(ctx, input.id, 'edit');
+    const items = prepareItems(d, input.items);
+    return withRole(ctx, items.length ? await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id) : d);
   }),
 
   updateItem: activeProcedure.input(z.object({ id: z.string(), item: DossierItem })).mutation(async ({ ctx, input }) => {

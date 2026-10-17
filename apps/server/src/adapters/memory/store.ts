@@ -254,6 +254,12 @@ export class MemoryDossiers implements DossierRepo {
     bump(d);
     return this.out(d);
   }
+  async addItems(id: string, items: DossierItem[]) {
+    const d = this.must(id);
+    d.items.push(...items);
+    bump(d);
+    return this.out(d);
+  }
   async updateItem(id: string, item: DossierItem) {
     const d = this.must(id);
     d.items = d.items.map((i) => (i.id === item.id ? item : i));

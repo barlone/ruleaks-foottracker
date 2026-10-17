@@ -397,7 +397,7 @@ dossiers(id, uid, owner_id, kind, title, summary_md, visibility, cover_media_id,
 dossier_members(group_id, member_id, role_label)             dossier_items(id, dossier_id, type, data jsonb, source jsonb, position, media_id)
 dossier_shares(dossier_id, user_id, role)                    media(id, owner_id, storage_key, sha256, exif)
 search_jobs(id, user_id, section, kind, query, params, state, result jsonb, pinned, hidden_at)
-investigations(id, uid, owner_id, title, description_md, visibility, public_slug, version, deleted_at, search_tsv)
+investigations(id, uid, owner_id, title, description_md, visibility, version, deleted_at, search_tsv)
 investigation_shares(investigation_id, user_id, role)
 graph_nodes(id, investigation_id, type, label, dossier_id, props, x, y)
 graph_edges(id, investigation_id, source_node_id, target_node_id, relation, label, credibility)

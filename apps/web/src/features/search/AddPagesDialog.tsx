@@ -32,7 +32,7 @@ export function AddPagesDialog({
   const [dossierId, setDossierId] = useState('');
   const [title, setTitle] = useState('');
   const create = trpc.dossiers.create.useMutation();
-  const addItem = trpc.dossiers.addItem.useMutation();
+  const addItems = trpc.dossiers.addItems.useMutation();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -51,18 +51,17 @@ export function AddPagesDialog({
       }
       if (!id) return;
       const capturedAt = new Date().toISOString();
-      for (const p of pages) {
-        await addItem.mutateAsync({
-          id,
-          item: {
-            type: 'link',
-            url: p.url,
-            title: p.site,
-            platform: guessPlatform(p.url),
-            source: { kind: 'url', ref: p.url, note: `Поиск личных страниц${p.by === 'email' ? ' по e-mail' : p.by === 'username' ? ' по нику' : ''}: ${username}`, reliability: 'C', credibility: '3', capturedAt },
-          },
-        });
-      }
+      // Все ссылки одним запросом; уже имеющиеся в досье сервер пропускает.
+      await addItems.mutateAsync({
+        id,
+        items: pages.map((p) => ({
+          type: 'link' as const,
+          url: p.url,
+          title: p.site,
+          platform: guessPlatform(p.url),
+          source: { kind: 'url' as const, ref: p.url, note: `Поиск личных страниц${p.by === 'email' ? ' по e-mail' : p.by === 'username' ? ' по нику' : ''}: ${username}`, reliability: 'C' as const, credibility: '3' as const, capturedAt },
+        })),
+      });
       await utils.dossiers.invalidate();
       toast(`Добавлено в досье: ссылок ${pages.length}`);
       onOpenChange(false);

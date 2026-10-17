@@ -47,6 +47,8 @@ const SECTIONS = {
     /** Соло-режим (none / password-sha256): Telegram ID и имя единственного пользователя сайта. */
     'user-tg-id': str('0'),
     'user-name': str('Следопыт'),
+    /** dev-вход (auth = bot-db, [server] dev-login на localhost): кнопка «Войти как …» с этим Telegram ID. */
+    'bot-db-dev-quick-login-tg-id': str(),
     /** Раздел «Поиск по геоданным» (карта — секция [geo-search]). */
     'geo-search': bool(false),
     /** Раздел «Поиск личных страниц» (сервер опрашивает сайты из манифеста Sherlock; секция [pages-search]). */
@@ -146,6 +148,8 @@ export interface AppConfig {
     /** sha256 пароля, hex в нижнем регистре (только password-sha256). */
     passwordSha256: string;
     user: { tgId: string; displayName: string };
+    /** Telegram ID для кнопки быстрого dev-входа (bot-db + dev-login); '' — кнопки нет. В бандл не попадает: отдаётся сервером. */
+    devQuickLoginTgId: string;
   };
   server: {
     host: string;
@@ -257,6 +261,7 @@ export function loadConfig(): AppConfig {
       mode: c.config.auth,
       passwordSha256: c.config['password-sha256'].toLowerCase(),
       user: { tgId: c.config['user-tg-id'], displayName: c.config['user-name'] || 'Следопыт' },
+      devQuickLoginTgId: c.config['bot-db-dev-quick-login-tg-id'],
     },
     server: {
       host: c.server.host,
@@ -349,6 +354,7 @@ function validate(cfg: AppConfig) {
     if (!/^\d{1,19}$/.test(cfg.auth.user.tgId)) missing.push('[config] user-tg-id (только цифры)');
     if (cfg.api.enabled && !cfg.api.token) missing.push(`[api] token (без бота токен API задаётся в конфиге: auth = ${mode})`);
   }
+  if (cfg.auth.devQuickLoginTgId && !/^\d{1,19}$/.test(cfg.auth.devQuickLoginTgId)) missing.push('[config] bot-db-dev-quick-login-tg-id (только цифры)');
   if (mode === 'password-sha256' && !/^[0-9a-f]{64}$/.test(cfg.auth.passwordSha256)) {
     missing.push('[config] password-sha256 (64 hex-символа: npm run password-hash)');
   }

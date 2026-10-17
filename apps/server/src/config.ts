@@ -24,6 +24,7 @@ export const config = {
   /** none | password-sha256 | bot-db ([config] auth). */
   authMode: auth.mode,
   passwordSha256: auth.passwordSha256,
+  devQuickLoginTgId: auth.devQuickLoginTgId,
   // При входе по паролю хеш пароля входит в секрет подписи cookie: смена пароля завершает все сессии.
   cookieSecret: auth.mode === 'password-sha256' ? `${appConfig.server.cookieSecret}:${auth.passwordSha256}` : appConfig.server.cookieSecret,
   sessionCookie: 'ft_sid',

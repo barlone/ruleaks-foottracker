@@ -10,9 +10,8 @@ import { Button, Input, Spinner } from './ui.tsx';
 // bot-db — одноразовая deep-link ссылка в бота; страница опрашивает статус,
 //          после подтверждения в боте сервер ставит httpOnly-cookie сессии;
 // password-sha256 — пароль единственного пользователя; none — страница входа не показывается.
-
-/** Временный быстрый вход (dev, только с реальной БД бота на localhost). */
-const QUICK_LOGIN_TG_ID = '8787072107';
+// Кнопка быстрого dev-входа «Войти как …» берёт Telegram ID с сервера ([config] bot-db-dev-quick-login-tg-id):
+// в сборке сайта чужого ID нет.
 
 export function LoginPage() {
   const mode = trpc.auth.mode.useQuery();
@@ -157,7 +156,7 @@ function BotLogin() {
         )}
       </div>
 
-      {devLogin.data === 'profiles' && nonce && !expired && (
+      {devLogin.data?.mode === 'profiles' && nonce && !expired && (
         <div className="mt-8 border-t border-dashed border-line pt-5">
           <div className="mb-3 font-mono text-[11px] uppercase tracking-widest text-warn">dev · имитация подтверждения ботом</div>
           <div className="flex flex-wrap gap-2">
@@ -169,7 +168,7 @@ function BotLogin() {
       )}
 
       {/* Реальная БД бота, но бот ещё не подтверждает вход: входим как существующий пользователь бота. */}
-      {devLogin.data === 'tgid' && nonce && !expired && (
+      {devLogin.data?.mode === 'tgid' && nonce && !expired && (
         <form
           className="mt-8 border-t border-dashed border-line pt-5"
           onSubmit={(e) => {
@@ -182,15 +181,16 @@ function BotLogin() {
           <div className="flex gap-2">
             <Input value={tgId} onChange={(e) => setTgId(e.target.value)} placeholder="Telegram ID (chat_id)" inputMode="numeric" className="max-w-xs font-mono" />
             <Button type="submit" disabled={!tgId.trim() || devConfirm.isPending}>Войти</Button>
-            {/* TODO: временная кнопка быстрого входа — убрать, когда вход пойдёт через бота. */}
-            <Button
-              type="button"
-              variant="primary"
-              disabled={devConfirm.isPending}
-              onClick={() => devConfirm.mutate({ nonce, tgId: QUICK_LOGIN_TG_ID })}
-            >
-              Войти как {QUICK_LOGIN_TG_ID}
-            </Button>
+            {devLogin.data.quickTgId && (
+              <Button
+                type="button"
+                variant="primary"
+                disabled={devConfirm.isPending}
+                onClick={() => devConfirm.mutate({ nonce, tgId: devLogin.data!.quickTgId! })}
+              >
+                Войти как {devLogin.data.quickTgId}
+              </Button>
+            )}
           </div>
           {devConfirm.error && <div className="mt-2 font-mono text-xs text-danger">{errorText(devConfirm.error)}</div>}
         </form>

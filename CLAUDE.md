@@ -76,8 +76,8 @@ sets the per-site timeout and concurrency (see «Personal pages search» below).
 nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone.
 
 `[server] dev-login` (allowed only when `host` is loopback; bot-db mode only) enables login without the bot: demo-profile buttons, or a
-Telegram-ID field when `[bot-db]` is real. `LoginPage.tsx` also has a temporary quick-login button for one fixed ID
-(`QUICK_LOGIN_TG_ID`, marked TODO).
+Telegram-ID field when `[bot-db]` is real, plus a «Войти как …» button when `[config] bot-db-dev-quick-login-tg-id` is
+set (the ID comes from the server via `auth.devLogin`, never from the bundle).
 
 ## Architecture
 

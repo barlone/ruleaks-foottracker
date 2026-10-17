@@ -125,8 +125,14 @@ export const authRouter = router({
     return true;
   }),
 
-  /** Какой вход без бота доступен: profiles — демо-учётки, tgid — по Telegram ID пользователя бота, null — никакого. */
-  devLogin: publicProcedure.query(({ ctx }) => ctx.deps.bot.devLogin),
+  /**
+   * Какой вход без бота доступен: profiles — демо-учётки, tgid — по Telegram ID пользователя бота, null — никакого.
+   * quickTgId — ID для кнопки «Войти как …» ([config] bot-db-dev-quick-login-tg-id), только когда dev-вход по ID включён.
+   */
+  devLogin: publicProcedure.query(({ ctx }) => ({
+    mode: ctx.deps.bot.devLogin,
+    quickTgId: ctx.deps.bot.devLogin === 'tgid' && config.devQuickLoginTgId ? config.devQuickLoginTgId : null,
+  })),
 
   /** dev: подтверждает вход вместо бота (демо-учётка или реальный пользователь бота по Telegram ID). */
   devConfirm: botProcedure

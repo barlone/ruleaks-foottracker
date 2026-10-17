@@ -194,9 +194,10 @@ Nonce виден всем, кто видит экран или ссылку (QR-
 
 ### Что добавить в бота
 
-1. **Команда входа** (сначала в админ-боте `pyruleaksadmin-bot`, затем в `pyruleaks-bot`): `/auth_foottracker`
-   собирает ссылку по 4.0 (`login_link(secret, site, chat_id, имя, ник)`) и отправляет её без превью. Секрет и адрес
-   сайта — в конфиге бота. Больше ничего: ни таблиц, ни HTTP.
+1. **Команда входа** `/auth_foottracker`: собирает ссылку по 4.0 (`login_link(secret, site, chat_id, имя, ник)`) и
+   отправляет её без превью. Секрет и адрес сайта — в конфиге бота. Больше ничего: ни таблиц, ни HTTP.
+   Сделано в админ-боте `pyruleaksadmin-bot` (`app/foottracker.py`, `FOOTTRACKER_LOGIN_SECRET` /
+   `FOOTTRACKER_SITE_URL` в `.env`); в клиентском `pyruleaks-bot` — ещё нет.
 2. (Позже, для 4.1) миграция alembic с `site_login_requests` и `site_user_access()`, обработчик `/start login_<nonce>`
    с callback-префиксом `site_login:`.
 3. (Позже) команда «Завершить все сессии на сайте» — отметка, которую сайт проверяет при обращении к сессии.

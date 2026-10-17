@@ -81,6 +81,14 @@ export const dossiersRouter = router({
       const d = await load(ctx, input.id, 'edit');
       const patch = { ...input.patch };
       if (patch.tagIds) patch.tagIds = await checkTagIds(ctx, d.tags, patch.tagIds);
+      if (patch.memberIds) {
+        // Добавить в группу можно только досье, которое правящий может читать (саму группу — нет);
+        // уже состоящие участники остаются, даже если правящему они недоступны (их поставил владелец).
+        const added = [...new Set(patch.memberIds)].filter((m) => !d.memberIds.includes(m));
+        const readable = new Set((await ctx.deps.dossiers.heads(added)).filter((h) => can(ctx.user.id, 'read', h)).map((h) => h.id));
+        if (added.some((m) => m === d.id || !readable.has(m))) throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_MEMBERS' });
+        patch.memberIds = [...new Set(patch.memberIds)];
+      }
       return withRole(ctx, await ctx.deps.dossiers.update(input.id, input.version, patch));
     }),
 

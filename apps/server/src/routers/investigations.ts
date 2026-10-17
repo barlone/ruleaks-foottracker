@@ -66,10 +66,23 @@ export const investigationsRouter = router({
   saveGraph: activeProcedure
     .input(z.object({ id: z.string(), version: z.number().int(), nodes: z.array(GraphNode).max(2000), edges: z.array(GraphEdge).max(5000) }))
     .mutation(async ({ ctx, input }) => {
-      await load(ctx, input.id, 'edit');
-      const ids = new Set(input.nodes.map((n) => n.id));
+      const inv = await load(ctx, input.id, 'edit');
+      // Привязать узел можно только к досье, которое правящий может читать. Привязки к недоступным ему досье
+      // (поставил владелец; present() их от него скрывает, и редактор присылает null) сохраняются как были.
+      const stored = new Map(inv.nodes.map((n) => [n.id, n.dossierId]));
+      const involved = [...input.nodes.map((n) => n.dossierId), ...stored.values()].filter((x): x is string => !!x);
+      const readable = new Set((await ctx.deps.dossiers.heads(involved)).filter((h) => can(ctx.user.id, 'read', h)).map((h) => h.id));
+      const nodes = input.nodes.map((n) => {
+        const prev = stored.get(n.id) ?? null;
+        // Новая привязка к недоступному досье — отказ; прежняя (такая же) остаётся.
+        if (n.dossierId && n.dossierId !== prev && !readable.has(n.dossierId)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_NODE_DOSSIER' });
+        // Привязку «сняли» потому, что не видели её: возвращаем прежнюю.
+        if (!n.dossierId && prev && !readable.has(prev)) return { ...n, dossierId: prev };
+        return n;
+      });
+      const ids = new Set(nodes.map((n) => n.id));
       const edges = input.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
-      return present(ctx, await ctx.deps.investigations.saveGraph(input.id, input.version, input.nodes, edges));
+      return present(ctx, await ctx.deps.investigations.saveGraph(input.id, input.version, nodes, edges));
     }),
 
   upsertFact: activeProcedure

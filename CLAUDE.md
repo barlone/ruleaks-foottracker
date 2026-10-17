@@ -231,7 +231,10 @@ registrations, a TypeScript port of three OSINT tools (`apps/server/src/pages/`)
   (`fillAccount`: percent-encoding in the URL and form bodies, JSON escaping in JSON bodies — `user+tag@…` must survive).
   Probes that submit a real registration (password in the body) or password-recovery form are flagged `sideEffect`
   (`isSideEffect`) and skipped unless `[pages-search] side-effect-probes = true`: they can create an account on the
-  target's address or notify them.
+  target's address or notify them. All probe requests go through `pages/outbound.ts` (`outboundFetch`): redirects are
+  followed manually (≤5 hops, 301/302/303 → GET) and every hop must be http(s) to a public address — literal IPs and
+  DNS answers in loopback/private/link-local/CGNAT ranges are refused (`OutboundBlocked` → status `unknown`), so a site
+  cannot bounce the server to localhost, the DB, scanstore or cloud metadata.
 
 `jobs.ts` runs all checks for a query (nickname sites + e-mail sites) through `concurrency` workers; each `SiteResult`
 carries `by: 'username' | 'email'`, shown in the UI as «по нику» / «по e-mail». Jobs live in server memory (one running

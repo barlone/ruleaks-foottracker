@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { PageFoundBy } from '@ft/shared';
 import type { EmailSite } from './email-sites.ts';
+import { OutboundBlocked, outboundFetch } from './outbound.ts';
 import type { Site } from './sites.ts';
 
 // Проверка одного сайта по нику — перевод логики sherlock_project/sherlock.py (функция sherlock()):
@@ -95,6 +96,7 @@ const NET_ERRORS: Record<string, string> = {
 
 function describeError(e: unknown): string {
   if (!(e instanceof Error)) return String(e);
+  if (e instanceof OutboundBlocked) return e.message;
   if (e.name === 'TimeoutError') return 'нет ответа (таймаут)';
   if (e.name === 'AbortError') return 'отменено';
   // undici заворачивает сетевую ошибку в TypeError: fetch failed { cause }.
@@ -129,7 +131,7 @@ export async function checkSite(site: Site, username: string, opts: CheckOptions
     if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
   }
   // response_url: сайт уводит редиректом, когда пользователя нет — нужен код первого ответа.
-  const redirect = site.errorType === 'response_url' ? 'manual' : 'follow';
+  const follow = site.errorType !== 'response_url';
   const signals = [AbortSignal.timeout(opts.timeoutMs), ...(opts.signal ? [opts.signal] : [])];
 
   const t0 = performance.now();
@@ -137,7 +139,7 @@ export async function checkSite(site: Site, username: string, opts: CheckOptions
   let res: Response;
   let text = '';
   try {
-    res = await fetch(probe, { method, headers, body, redirect, signal: AbortSignal.any(signals) });
+    res = await outboundFetch(probe, { method, headers, body, follow, signal: AbortSignal.any(signals) });
     if (method === 'HEAD') await res.body?.cancel().catch(() => undefined);
     else text = await readText(res, MAX_BODY_BYTES);
   } catch (e) {
@@ -206,7 +208,7 @@ export async function checkEmailSite(site: EmailSite, email: string, opts: Check
   try {
     // pre_check: сходить за cookie и подставить её значение в заголовки ({<cookieName>_value}).
     if (site.preCheck) {
-      const pre = await fetch(site.preCheck.url, { method: 'GET', headers: { 'User-Agent': USER_AGENT }, redirect: 'follow', signal: signal() });
+      const pre = await outboundFetch(site.preCheck.url, { method: 'GET', headers: { 'User-Agent': USER_AGENT }, follow: true, signal: signal() });
       await pre.body?.cancel().catch(() => undefined);
       const value = cookieValue(pre, site.preCheck.cookieName);
       if (!value) return { ...base, status: 'unknown', error: 'не получена cookie для проверки', ms: ms() };
@@ -223,7 +225,7 @@ export async function checkEmailSite(site: EmailSite, email: string, opts: Check
         headers['Content-Type'] = kind === 'json' ? 'application/json' : 'application/x-www-form-urlencoded';
       }
     }
-    const res = await fetch(fillAccount(site.uriCheck, account, 'url'), { method: site.method, headers, body, redirect: 'follow', signal: signal() });
+    const res = await outboundFetch(fillAccount(site.uriCheck, account, 'url'), { method: site.method, headers, body, follow: true, signal: signal() });
     const text = await readText(res, MAX_BODY_BYTES);
     const http = res.status;
     if (WAF_HITS.some((h) => text.includes(h))) return { ...base, status: 'waf', httpStatus: http, ms: ms() };

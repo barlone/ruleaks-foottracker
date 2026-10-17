@@ -257,7 +257,7 @@ function GeoSearch({ config }: { config: GeoConfig }) {
         <GeoPicker config={config} point={point} radiusM={radiusM} onPick={pick} focus={focus} className="ft-map h-[480px] w-full" />
       </div>
 
-      {jobId && <JobView job={job.data} loading={job.isLoading} onPivot={pivot} />}
+      {jobId && <JobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onPivot={pivot} />}
 
       <MapLinkDialog
         open={linkOpen}

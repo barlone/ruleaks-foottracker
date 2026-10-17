@@ -117,12 +117,12 @@ export function FuzzySearchPage() {
         </form>
       </Card>
 
-      {jobId ? <FuzzyJobView job={job.data} loading={job.isLoading} /> : <Empty>Используйте ? для одного неизвестного символа и * для любой последовательности.</Empty>}
+      {jobId ? <FuzzyJobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} /> : <Empty>Используйте ? для одного неизвестного символа и * для любой последовательности.</Empty>}
     </SearchLayout>
   );
 }
 
-function FuzzyJobView({ job, loading }: { job: Job | undefined; loading: boolean }) {
+function FuzzyJobView({ job, loading, error }: { job: Job | undefined; loading: boolean; error?: string | null }) {
   const navigate = useNavigate();
   const { selected, toggle, reset } = useSelection();
   const [dialog, setDialog] = useState(false);
@@ -130,7 +130,7 @@ function FuzzyJobView({ job, loading }: { job: Job | undefined; loading: boolean
   useEffect(() => reset(), [job?.id]);
   const results = useMemo(() => ((job?.result as { job?: { results?: FuzzyMatch[] } } | null)?.job?.results ?? []), [job?.result]);
 
-  const status = <JobStatus job={job} loading={loading} />;
+  const status = <JobStatus job={job} loading={loading} error={error} />;
   if (!job || job.state !== 'done') return status;
 
   const matchField = job.kind === 'plate' ? 'plates' : 'emails';

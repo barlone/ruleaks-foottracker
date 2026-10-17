@@ -27,6 +27,19 @@ export interface EmailSite {
   inputOp: 'sha256' | null;
   preCheck: { url: string; cookieName: string } | null;
   nsfw: boolean;
+  /**
+   * Проба с побочным действием: отправляет настоящую форму регистрации (с паролем) или запускает восстановление —
+   * сайт может завести учётку на адрес цели или написать ей. По умолчанию такие не выполняются ([pages-search]
+   * side-effect-probes).
+   */
+  sideEffect: boolean;
+}
+
+/** Регистрация или восстановление: в теле есть пароль либо адрес запроса похож на форму регистрации/сброса. */
+function isSideEffect(method: 'GET' | 'POST', uriCheck: string, data: string | null): boolean {
+  if (method !== 'POST') return false;
+  if (data && /"pass(word)?"\s*:|(^|&)pass(word)?=/i.test(data)) return true;
+  return /regist|sign-?up|password\/(restore|reset|recover)|recover/i.test(uriCheck);
 }
 
 // --- Формат blackbird email-data.json (как лежит в файле, без изменений) ---
@@ -65,6 +78,7 @@ function fromRaw(r: z.infer<typeof RawEmailSite>): EmailSite {
     inputOp: op,
     preCheck: r.pre_check ? { url: r.pre_check.endpoint, cookieName: r.pre_check.cookie_name } : null,
     nsfw: r.cat === 'xx NSFW xx',
+    sideEffect: isSideEffect(r.method, r.uri_check, r.data ?? null),
   };
 }
 
@@ -99,14 +113,20 @@ const EXTRA: EmailSite[] = [
     inputOp: null,
     preCheck: null,
     nsfw: false,
+    // Первый шаг восстановления только перечисляет доступные способы; писем и SMS он не шлёт (так работает holehe,
+    // который заявляет, что цель не оповещается).
+    sideEffect: false,
   },
 ];
 
 let cache: EmailSite[] | null = null;
 
-/** Все почтовые сайты: манифест blackbird + проверки holehe (EXTRA). */
-export function allEmailSites(): EmailSite[] {
+/**
+ * Почтовые сайты: манифест blackbird + проверки holehe (EXTRA). Пробы с побочным действием (регистрация,
+ * восстановление) — только при includeSideEffects ([pages-search] side-effect-probes = true).
+ */
+export function allEmailSites(includeSideEffects = false): EmailSite[] {
   cache ??= [...parseEmailSites(JSON.parse(readFileSync(EMAIL_SITES_FILE, 'utf8'))), ...EXTRA]
     .sort((a, b) => a.name.localeCompare(b.name, 'en'));
-  return cache;
+  return includeSideEffects ? cache : cache.filter((s) => !s.sideEffect);
 }

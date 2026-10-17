@@ -227,6 +227,11 @@ registrations, a TypeScript port of three OSINT tools (`apps/server/src/pages/`)
   a small code-defined `EXTRA` set of holehe-style checks (e.g. Mail.ru) that are not in blackbird. `checkEmailSite` in
   `check.ts` ports blackbird's verdict (`eCode`+`eString` = taken, `mCode`+`mString` = free, `inputOp` sha256,
   `preCheck` cookie) — this is also holehe's method. Adding more holehe modules = new entries in `EXTRA`.
+  The placeholder is blackbird's `{account}` (not Sherlock's `{}`), substituted with context-aware encoding
+  (`fillAccount`: percent-encoding in the URL and form bodies, JSON escaping in JSON bodies — `user+tag@…` must survive).
+  Probes that submit a real registration (password in the body) or password-recovery form are flagged `sideEffect`
+  (`isSideEffect`) and skipped unless `[pages-search] side-effect-probes = true`: they can create an account on the
+  target's address or notify them.
 
 `jobs.ts` runs all checks for a query (nickname sites + e-mail sites) through `concurrency` workers; each `SiteResult`
 carries `by: 'username' | 'email'`, shown in the UI as «по нику» / «по e-mail». Jobs live in server memory (one running

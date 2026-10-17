@@ -25,12 +25,12 @@ const enabledProcedure = activeProcedure.use(({ next }) => {
 export const pagesRouter = router({
   /** null — раздел выключен. */
   config: authedProcedure.query(() =>
-    pages.enabled ? { sites: allSites().length, emailSites: allEmailSites().length, timeoutSec: pages.timeoutMs / 1000 } : null,
+    pages.enabled ? { sites: allSites().length, emailSites: allEmailSites(pages.sideEffectProbes).length, timeoutSec: pages.timeoutMs / 1000 } : null,
   ),
 
   start: enabledProcedure.input(z.object({ username: Query })).mutation(({ ctx, input }) => {
     try {
-      return startJob(ctx.user.id, input.username, { timeoutMs: pages.timeoutMs, concurrency: pages.concurrency });
+      return startJob(ctx.user.id, input.username, { timeoutMs: pages.timeoutMs, concurrency: pages.concurrency, sideEffectProbes: pages.sideEffectProbes });
     } catch (e) {
       if (e instanceof PagesBusy) throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'PAGES_BUSY', cause: e });
       throw e;

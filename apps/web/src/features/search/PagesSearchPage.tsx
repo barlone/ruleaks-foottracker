@@ -79,7 +79,8 @@ function PagesSearch({ sites, emailSites }: { sites: number; emailSites: number 
   });
   const job = trpc.pages.job.useQuery(
     { id: jobId ?? '' },
-    { enabled: !!jobId, refetchInterval: (q) => (q.state.data?.state === 'running' ? 1000 : false), refetchIntervalInBackground: true },
+    // После ошибки (задание пропало — сервер перезапущен) прежние данные остаются в кэше: по ним опрос не продолжаем.
+    { enabled: !!jobId, refetchInterval: (q) => (!q.state.error && q.state.data?.state === 'running' ? 1000 : false), refetchIntervalInBackground: true },
   );
   const cancel = trpc.pages.cancel.useMutation({
     onSuccess: () => void utils.pages.job.invalidate({ id: jobId ?? '' }),
@@ -105,7 +106,8 @@ function PagesSearch({ sites, emailSites }: { sites: number; emailSites: number 
   useRunOnMount(() => start.mutate({ username: clean(params.q!) }), !!(params.q && !problemOf(clean(params.q)) && me.data?.access.active));
 
   const j = job.data;
-  const running = !!jobId && j?.state === 'running';
+  // Ошибка запроса задания закрывает окно процесса: иначе оно показывало бы устаревшее «выполняется» без выхода.
+  const running = !!jobId && !job.error && j?.state === 'running';
 
   return (
     <SearchLayout
@@ -174,7 +176,7 @@ function PagesSearch({ sites, emailSites }: { sites: number; emailSites: number 
 }
 
 function PagesHistory({ activeId, onOpen }: { activeId: string | null; onOpen: (id: string) => void }) {
-  const recent = trpc.pages.recent.useQuery(undefined, { refetchInterval: (q) => (q.state.data?.some((j) => j.state === 'running') ? 3000 : false) });
+  const recent = trpc.pages.recent.useQuery(undefined, { refetchInterval: (q) => (!q.state.error && q.state.data?.some((j) => j.state === 'running') ? 3000 : false) });
   const items = recent.data ?? [];
   return (
     <Card title={<><History size={13} /> История</>}>

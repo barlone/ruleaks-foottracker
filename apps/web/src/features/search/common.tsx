@@ -105,7 +105,8 @@ export function useSearchJob(jobId: string | null) {
   const q = trpc.search.job.useQuery(
     { id: jobId ?? '' },
     // И в фоне: тяжёлый поиск идёт минутами, пользователь тем временем на другой вкладке.
-    { enabled: !!jobId, refetchInterval: (q) => (q.state.data?.state === 'running' ? 1500 : false), refetchIntervalInBackground: true },
+    // После ошибки (задача пропала, сервер перезапущен) прежние данные остаются в кэше — опрос по ним не продолжаем.
+    { enabled: !!jobId, refetchInterval: (q) => (!q.state.error && q.state.data?.state === 'running' ? 1500 : false), refetchIntervalInBackground: true },
   );
   // Задача завершилась — обновить историю, чтобы там не осталось индикатора «выполняется».
   const state = q.data?.state;
@@ -116,8 +117,9 @@ export function useSearchJob(jobId: string | null) {
   return q;
 }
 
-/** Состояния «выполняется / ошибка». Возвращает null, когда пора рисовать результат. */
-export function JobStatus({ job, loading }: { job: RouterOutputs['search']['job'] | undefined; loading: boolean }) {
+/** Состояния «выполняется / ошибка». error — ошибка запроса задачи (сервер её не нашёл). Возвращает null, когда пора рисовать результат. */
+export function JobStatus({ job, loading, error }: { job: RouterOutputs['search']['job'] | undefined; loading: boolean; error?: string | null }) {
+  if (error) return <Card><div className="text-danger">{error}</div></Card>;
   if (loading || !job) return <Empty><Spinner /></Empty>;
   if (job.state === 'running') {
     return (

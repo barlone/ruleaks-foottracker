@@ -105,6 +105,8 @@ const SECTIONS = {
     'timeout-sec': int(15, 1, 120),
     /** Сколько сайтов опрашивать одновременно в одном поиске. */
     concurrency: int(20, 1, 100),
+    /** Выполнять и пробы по e-mail с побочным действием (настоящая регистрация / восстановление пароля на сайте). */
+    'side-effect-probes': bool(false),
   }),
 };
 
@@ -177,7 +179,7 @@ export interface AppConfig {
   /** scanstore-api-gate: картинки сканов документов (ключ scans в записях утечек). */
   scanstore: { enabled: boolean; url: string; token: string; timeoutMs: number };
   /** Поиск личных страниц по имени пользователя (манифест сайтов Sherlock). */
-  pages: { enabled: boolean; timeoutMs: number; concurrency: number };
+  pages: { enabled: boolean; timeoutMs: number; concurrency: number; sideEffectProbes: boolean };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
 }
@@ -297,6 +299,7 @@ export function loadConfig(): AppConfig {
       enabled: c.config['pages-search'],
       timeoutMs: c['pages-search']['timeout-sec'] * 1000,
       concurrency: c['pages-search'].concurrency,
+      sideEffectProbes: c['pages-search']['side-effect-probes'],
     },
     warnings,
   };

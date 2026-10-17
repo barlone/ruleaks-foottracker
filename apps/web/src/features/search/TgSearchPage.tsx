@@ -158,7 +158,7 @@ export function TgSearchPage() {
       </Card>
 
       {jobId ? (
-        <TgJobView job={job.data} loading={job.isLoading} onRun={onRun} />
+        <TgJobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onRun={onRun} />
       ) : (
         <Empty>
           Пользователя можно указать по ID, @нику или телефону — ник и телефон сервер
@@ -173,7 +173,7 @@ export function TgSearchPage() {
 const FULLTEXT_EXAMPLE = 'орлан краснополь or "беспилотник над городом" -продам';
 
 /** Результат поиска; memo — набор текста в поле поиска его не перерисовывает. */
-const TgJobView = memo(function TgJobView({ job, loading, onRun }: { job: Job | undefined; loading: boolean; onRun: (m: TgModeId, v: string) => void }) {
+const TgJobView = memo(function TgJobView({ job, loading, error, onRun }: { job: Job | undefined; loading: boolean; error?: string | null; onRun: (m: TgModeId, v: string) => void }) {
   const [posts, setPosts] = useState<Map<string, PendingPost>>(new Map());
   const [users, setUsers] = useState<Map<string, string>>(new Map());
   const [dialog, setDialog] = useState(false);
@@ -200,7 +200,7 @@ const TgJobView = memo(function TgJobView({ job, loading, onRun }: { job: Job | 
       </Card>
     );
   }
-  const status = <JobStatus job={job} loading={loading} />;
+  const status = <JobStatus job={job} loading={loading} error={error} />;
   if (!job || job.state !== 'done') return status;
 
   const mode = findTgMode(job.kind)!;

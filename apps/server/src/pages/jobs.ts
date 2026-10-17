@@ -56,15 +56,17 @@ export interface PagesJobSummary {
 }
 
 /** Что и как будем проверять по запросу: сайты по нику (Sherlock) и/или по e-mail (blackbird + holehe). */
-function plan(query: string) {
+function plan(query: string, opts: JobsOptions) {
   const { kind, email, nick } = parsePagesQuery(query);
-  const total = (nick ? allSites().length : 0) + (email ? allEmailSites().length : 0);
+  const total = (nick ? allSites().length : 0) + (email ? allEmailSites(opts.sideEffectProbes).length : 0);
   return { kind, email, nick, total };
 }
 
 export interface JobsOptions {
   timeoutMs: number;
   concurrency: number;
+  /** Выполнять и пробы с побочным действием (регистрация, восстановление пароля) — [pages-search] side-effect-probes. */
+  sideEffectProbes: boolean;
 }
 
 /** Сколько поисков одновременно во всём процессе. */
@@ -106,7 +108,7 @@ async function run(job: PagesJob, opts: JobsOptions) {
   // Один общий список проверок: по нику (Sherlock) и по e-mail (blackbird + holehe) — вперемешку.
   const checks: Array<() => Promise<SiteResult>> = [];
   if (nick) for (const s of allSites()) checks.push(() => checkSite(s, nick, co));
-  if (email) for (const s of allEmailSites()) checks.push(() => checkEmailSite(s, email, co));
+  if (email) for (const s of allEmailSites(opts.sideEffectProbes)) checks.push(() => checkEmailSite(s, email, co));
 
   let next = 0;
   const worker = async () => {
@@ -131,7 +133,7 @@ export function startJob(userId: string, query: string, opts: JobsOptions): Page
   // Лишние завершённые — долой (самые старые).
   for (const j of mine(userId).slice(PER_USER - 1)) jobs.delete(j.id);
 
-  const p = plan(query);
+  const p = plan(query, opts);
   const job: PagesJob = {
     id: randomBytes(12).toString('base64url'),
     userId,

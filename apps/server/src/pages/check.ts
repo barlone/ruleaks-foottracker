@@ -167,6 +167,24 @@ function transformAccount(email: string, op: EmailSite['inputOp']): string {
   return op === 'sha256' ? createHash('sha256').update(email, 'utf8').digest('hex') : email;
 }
 
+/**
+ * {account} (плейсхолдер blackbird, не {} Sherlock) → адрес с кодированием по месту подстановки:
+ * в адресе и form-теле — percent-кодирование (иначе «+» в user+tag@… сайт читает как пробел, а «&» и «#»
+ * ломают запрос), в JSON-теле — экранирование строки JSON. sha256-хеш кодирование не меняет.
+ */
+function fillAccount(s: string, account: string, where: 'url' | 'form' | 'json'): string {
+  const v = where === 'json' ? JSON.stringify(account).slice(1, -1) : encodeURIComponent(account);
+  return s.replaceAll('{account}', v);
+}
+
+/** Вид тела запроса — по Content-Type, иначе по первому символу (blackbird хранит JSON-тело строкой). */
+function bodyKind(headers: Record<string, string>, data: string): 'form' | 'json' {
+  const ct = Object.entries(headers).find(([k]) => k.toLowerCase() === 'content-type')?.[1] ?? '';
+  if (/json/i.test(ct)) return 'json';
+  if (/x-www-form-urlencoded/i.test(ct)) return 'form';
+  return /^\s*[[{]/.test(data) ? 'json' : 'form';
+}
+
 /** Значение cookie по имени из заголовков Set-Cookie ответа. */
 function cookieValue(res: Response, name: string): string | null {
   for (const c of res.headers.getSetCookie()) {
@@ -196,8 +214,16 @@ export async function checkEmailSite(site: EmailSite, email: string, opts: Check
       for (const k of Object.keys(headers)) headers[k] = headers[k]!.replaceAll(ph, value);
     }
 
-    const body = site.data ? fill(site.data, account) : undefined;
-    const res = await fetch(fill(site.uriCheck, account), { method: site.method, headers, body, redirect: 'follow', signal: signal() });
+    let body: string | undefined;
+    if (site.data) {
+      const kind = bodyKind(headers, site.data);
+      body = fillAccount(site.data, account, kind);
+      // fetch без Content-Type пометил бы строку как text/plain — сайт форму не разберёт.
+      if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) {
+        headers['Content-Type'] = kind === 'json' ? 'application/json' : 'application/x-www-form-urlencoded';
+      }
+    }
+    const res = await fetch(fillAccount(site.uriCheck, account, 'url'), { method: site.method, headers, body, redirect: 'follow', signal: signal() });
     const text = await readText(res, MAX_BODY_BYTES);
     const http = res.status;
     if (WAF_HITS.some((h) => text.includes(h))) return { ...base, status: 'waf', httpStatus: http, ms: ms() };

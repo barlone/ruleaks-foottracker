@@ -134,7 +134,7 @@ export function AttrSearchPage() {
           </form>
         </Card>
 
-      {jobId && <JobView job={job.data} loading={job.isLoading} onPivot={pivot} />}
+      {jobId && <JobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onPivot={pivot} />}
       {!jobId && (
         <Empty>
           Введите значение — тип определится автоматически.
@@ -147,7 +147,7 @@ export function AttrSearchPage() {
 }
 
 /** Результат raw/deep-поиска по утечкам: и «Поиск по атрибутам», и «Поиск по геоданным» (у шлюза ответ того же вида). */
-export function JobView({ job, loading, onPivot }: { job: Job | undefined; loading: boolean; onPivot: (kind: string, value: string) => void }) {
+export function JobView({ job, loading, error, onPivot }: { job: Job | undefined; loading: boolean; error?: string | null; onPivot: (kind: string, value: string) => void }) {
   const [selected, setSelected] = useState<Map<string, PendingValue>>(new Map());
   const [dialog, setDialog] = useState(false);
   // Сканы — до ранних return: хуки. Ссылка на leaks стабильна между опросами (structural sharing react-query).
@@ -181,7 +181,7 @@ export function JobView({ job, loading, onPivot }: { job: Job | undefined; loadi
       </Card>
     );
   }
-  const status = <JobStatus job={job} loading={loading} />;
+  const status = <JobStatus job={job} loading={loading} error={error} />;
   if (!job || job.state !== 'done') return status;
 
   const res = job.result as { job?: { leaks?: LeakCard[]; rows?: DeepRow[] } } | null;

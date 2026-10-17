@@ -13,6 +13,8 @@ import { toast } from '../../lib/toast.ts';
 export interface PendingPage {
   site: string;
   url: string;
+  /** Как найдена страница — попадёт в примечание источника. */
+  by?: 'username' | 'email';
 }
 
 export function AddPagesDialog({
@@ -57,7 +59,7 @@ export function AddPagesDialog({
             url: p.url,
             title: p.site,
             platform: guessPlatform(p.url),
-            source: { kind: 'url', ref: p.url, note: `Поиск личных страниц: ${username}`, reliability: 'C', credibility: '3', capturedAt },
+            source: { kind: 'url', ref: p.url, note: `Поиск личных страниц${p.by === 'email' ? ' по e-mail' : p.by === 'username' ? ' по нику' : ''}: ${username}`, reliability: 'C', credibility: '3', capturedAt },
           },
         });
       }

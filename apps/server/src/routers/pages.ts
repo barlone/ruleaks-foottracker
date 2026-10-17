@@ -1,18 +1,20 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { PAGES_USERNAME_MAX, PAGES_USERNAME_RE } from '@ft/shared';
+import { isPagesQuery, PAGES_QUERY_MAX } from '@ft/shared';
 import { appConfig } from '../config.ts';
+import { allEmailSites } from '../pages/email-sites.ts';
 import { cancelJob, getJob, PagesBusy, recentJobs, startJob } from '../pages/jobs.ts';
 import { allSites } from '../pages/sites.ts';
 import { activeProcedure, authedProcedure, router } from '../trpc.ts';
 
-// «Поиск личных страниц» — по имени пользователя на сайтах из манифеста Sherlock (pages/sites.ts).
+// «Поиск личных страниц» — по нику или e-mail. По нику сайты берутся из манифеста Sherlock (pages/sites.ts),
+// по e-mail — из blackbird + holehe (pages/email-sites.ts); e-mail ищется ещё и по нику из части до @.
 // Запросы к сайтам делает сервер (из браузера мешает CORS), задание живёт в памяти (pages/jobs.ts).
 // Раздел выключается флагом [config] pages-search: тогда config → null, остальное — PAGES_DISABLED.
 
 const pages = appConfig.pages;
 
-const Username = z.string().trim().min(1).max(PAGES_USERNAME_MAX).regex(PAGES_USERNAME_RE, 'BAD_USERNAME');
+const Query = z.string().trim().min(1).max(PAGES_QUERY_MAX).refine(isPagesQuery, 'BAD_QUERY');
 const JobId = z.string().min(1).max(64);
 
 const enabledProcedure = activeProcedure.use(({ next }) => {
@@ -22,9 +24,11 @@ const enabledProcedure = activeProcedure.use(({ next }) => {
 
 export const pagesRouter = router({
   /** null — раздел выключен. */
-  config: authedProcedure.query(() => (pages.enabled ? { sites: allSites().length, timeoutSec: pages.timeoutMs / 1000 } : null)),
+  config: authedProcedure.query(() =>
+    pages.enabled ? { sites: allSites().length, emailSites: allEmailSites().length, timeoutSec: pages.timeoutMs / 1000 } : null,
+  ),
 
-  start: enabledProcedure.input(z.object({ username: Username })).mutation(({ ctx, input }) => {
+  start: enabledProcedure.input(z.object({ username: Query })).mutation(({ ctx, input }) => {
     try {
       return startJob(ctx.user.id, input.username, { timeoutMs: pages.timeoutMs, concurrency: pages.concurrency });
     } catch (e) {

@@ -1,7 +1,12 @@
+import { createHash } from 'node:crypto';
+import type { PageFoundBy } from '@ft/shared';
+import type { EmailSite } from './email-sites.ts';
 import type { Site } from './sites.ts';
 
-// Проверка одного сайта — перевод логики sherlock_project/sherlock.py (функция sherlock()):
+// Проверка одного сайта по нику — перевод логики sherlock_project/sherlock.py (функция sherlock()):
 // запрос к urlProbe (или url) с именем пользователя, вердикт по errorType сайта.
+// Проверка по e-mail (checkEmailSite ниже) — логика blackbird/holehe: дёрнуть форму регистрации или
+// восстановления пароля и понять по ответу, занят ли адрес.
 
 /** Вердикт по сайту (QueryStatus Sherlock). */
 export type PageStatus =
@@ -26,6 +31,8 @@ export interface SiteResult {
   /** Длительность запроса, мс. */
   ms: number;
   nsfw: boolean;
+  /** Чем нашли: по нику или по e-mail. */
+  by: PageFoundBy;
 }
 
 /** Sherlock представляется Firefox: без User-Agent браузера многие сайты отвечают иначе. */
@@ -109,7 +116,7 @@ export interface CheckOptions {
 export async function checkSite(site: Site, username: string, opts: CheckOptions): Promise<SiteResult> {
   // Пробел в имени — %20, остальное как есть (так делает Sherlock).
   const url = fill(site.url, username.replaceAll(' ', '%20'));
-  const base = { site: site.name, url, urlMain: site.urlMain, httpStatus: null, error: null, nsfw: site.nsfw };
+  const base = { site: site.name, url, urlMain: site.urlMain, httpStatus: null, error: null, nsfw: site.nsfw, by: 'username' as const };
   if (site.regexCheck && !site.regexCheck.test(username)) return { ...base, status: 'illegal', ms: 0 };
 
   const probe = site.urlProbe ? fill(site.urlProbe, username) : url;
@@ -153,4 +160,54 @@ export async function checkSite(site: Site, username: string, opts: CheckOptions
       break;
   }
   return { ...base, status, httpStatus: http, ms: ms() };
+}
+
+/** Преобразование адреса перед подстановкой в запрос (input_operation blackbird). */
+function transformAccount(email: string, op: EmailSite['inputOp']): string {
+  return op === 'sha256' ? createHash('sha256').update(email, 'utf8').digest('hex') : email;
+}
+
+/** Значение cookie по имени из заголовков Set-Cookie ответа. */
+function cookieValue(res: Response, name: string): string | null {
+  for (const c of res.headers.getSetCookie()) {
+    const m = /^([^=]+)=([^;]*)/.exec(c.trim());
+    if (m && m[1] === name) return m[2] ?? null;
+  }
+  return null;
+}
+
+/** Есть ли у адреса учётка на сайте — логика blackbird checkSite / модулей holehe. */
+export async function checkEmailSite(site: EmailSite, email: string, opts: CheckOptions): Promise<SiteResult> {
+  const base = { site: site.name, url: site.urlMain, urlMain: site.urlMain, httpStatus: null, error: null, nsfw: site.nsfw, by: 'email' as const };
+  const account = transformAccount(email, site.inputOp);
+  const headers: Record<string, string> = { 'User-Agent': USER_AGENT, ...site.headers };
+  const signal = () => AbortSignal.any([AbortSignal.timeout(opts.timeoutMs), ...(opts.signal ? [opts.signal] : [])]);
+
+  const t0 = performance.now();
+  const ms = () => Math.round(performance.now() - t0);
+  try {
+    // pre_check: сходить за cookie и подставить её значение в заголовки ({<cookieName>_value}).
+    if (site.preCheck) {
+      const pre = await fetch(site.preCheck.url, { method: 'GET', headers: { 'User-Agent': USER_AGENT }, redirect: 'follow', signal: signal() });
+      await pre.body?.cancel().catch(() => undefined);
+      const value = cookieValue(pre, site.preCheck.cookieName);
+      if (!value) return { ...base, status: 'unknown', error: 'не получена cookie для проверки', ms: ms() };
+      const ph = `{${site.preCheck.cookieName}_value}`;
+      for (const k of Object.keys(headers)) headers[k] = headers[k]!.replaceAll(ph, value);
+    }
+
+    const body = site.data ? fill(site.data, account) : undefined;
+    const res = await fetch(fill(site.uriCheck, account), { method: site.method, headers, body, redirect: 'follow', signal: signal() });
+    const text = await readText(res, MAX_BODY_BYTES);
+    const http = res.status;
+    if (WAF_HITS.some((h) => text.includes(h))) return { ...base, status: 'waf', httpStatus: http, ms: ms() };
+
+    // blackbird: занят, если код = eCode, в теле есть eString, нет mString и код не равен mCode.
+    const claimed = http === site.eCode && text.includes(site.eString)
+      && (!site.mString || !text.includes(site.mString))
+      && (site.mCode === null || http !== site.mCode);
+    return { ...base, status: claimed ? 'claimed' : 'available', httpStatus: http, ms: ms() };
+  } catch (e) {
+    return { ...base, status: 'unknown', error: describeError(e), ms: ms() };
+  }
 }

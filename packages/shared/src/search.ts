@@ -391,8 +391,43 @@ export const SEARCH_SECTIONS: SearchSection[] = ['attr', 'tg', 'fuzzy', 'geo'];
 /** Имя пользователя для поиска страниц: без пробелов и символов, ломающих адрес (сайт подставляет его в URL). */
 export const PAGES_USERNAME_MAX = 64;
 export const PAGES_USERNAME_RE = /^[^\s/\\?#%&]+$/;
-/** Проект, чьи список сайтов и логика проверки используются. */
+/** Строка запроса целиком (ник или почта): вмещает длинный e-mail. */
+export const PAGES_QUERY_MAX = 254;
+/** Простая проверка на e-mail: что-то, @, что-то, точка, что-то — без пробелов. */
+export const PAGES_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Как понят запрос поиска личных страниц. */
+export type PagesQueryKind = 'username' | 'email';
+
+/** Ник из e-mail — часть до @, без суффикса +метка (user_name+spam@gmail.com → user_name). */
+export function pagesNickFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? '';
+  const plus = local.indexOf('+');
+  return (plus > 0 ? local.slice(0, plus) : local).trim();
+}
+
+/** Разбор запроса: e-mail ищется и как почта, и по нику из части до @; иначе — только ник. */
+export function parsePagesQuery(raw: string): { kind: PagesQueryKind; email: string | null; nick: string | null } {
+  const q = raw.trim();
+  if (PAGES_EMAIL_RE.test(q)) {
+    const nick = pagesNickFromEmail(q);
+    return { kind: 'email', email: q, nick: PAGES_USERNAME_RE.test(nick) ? nick : null };
+  }
+  return { kind: 'username', email: null, nick: q };
+}
+
+export const isPagesQuery = (s: string) => {
+  const q = s.trim();
+  return q.length > 0 && q.length <= PAGES_QUERY_MAX && (PAGES_EMAIL_RE.test(q) || PAGES_USERNAME_RE.test(q));
+};
+
+/** Как найдена страница: по нику или по e-mail. */
+export type PageFoundBy = 'username' | 'email';
+
+/** Проекты, чьи списки сайтов и логика проверки перенесены. */
 export const SHERLOCK_URL = 'https://github.com/sherlock-project/sherlock';
+export const HOLEHE_URL = 'https://github.com/megadose/holehe';
+export const BLACKBIRD_URL = 'https://github.com/p1ngul1n0/blackbird';
 
 // ---------- Поиск по геоданным ----------
 

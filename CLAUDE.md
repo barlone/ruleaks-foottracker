@@ -213,16 +213,29 @@ lazy chunk's CSS loads later, so equal-specificity selectors would lose).
 
 ### Personal pages search
 
-`/search/pages` (`features/search/PagesSearchPage.tsx`): a username → links to its pages on ~480 sites, a TypeScript
-port of [Sherlock](https://github.com/sherlock-project/sherlock) (`apps/server/src/pages/`). `sites.json` is Sherlock's
-`data.json` verbatim (MIT, `LICENSE.sherlock`; refresh with `npm run pages-sites-update`, which validates it with the
-same Zod schema as `sites.ts`), `check.ts` is the per-site verdict (`errorType` message / status_code / response_url,
-`regexCheck`, `urlProbe`, WAF fingerprints, Firefox User-Agent — keep it in step with `sherlock.py`), `jobs.ts` runs the
-sites with `concurrency` workers and keeps jobs in server memory (one running job per user, `MAX_RUNNING` per process →
-`PAGES_BUSY`, finished jobs live an hour → the section's own «История», nothing in the DB). The browser never talks to
-the sites (CORS); `pages.job` is polled every second while `running` and returns only `found` until the job ends.
-`pages.config` is `null` when `[config] pages-search = false` (nav item and page hide). Sherlock's verdicts are
-heuristic: some sites answer 200 for any name (false «найдено»), WAF-protected ones are reported as «защита от ботов».
+`/search/pages` (`features/search/PagesSearchPage.tsx`): a nickname **or e-mail** → links to the person's pages and
+registrations, a TypeScript port of three OSINT tools (`apps/server/src/pages/`). The query is parsed by
+`parsePagesQuery` (`@ft/shared`): an e-mail is searched both as an e-mail and by the nickname taken from the part before
+`@` (`user+tag@…` → `user`); anything else is a nickname.
+- **By nickname** — [Sherlock](https://github.com/sherlock-project/sherlock). `sites.json` is Sherlock's `data.json`
+  verbatim (MIT, `LICENSE.sherlock`; refresh `npm run pages-sites-update`), `checkSite` in `check.ts` is the per-site
+  verdict (`errorType` message / status_code / response_url, `regexCheck`, `urlProbe`, WAF fingerprints) — keep in step
+  with `sherlock.py`.
+- **By e-mail** — [holehe](https://github.com/megadose/holehe) + [blackbird](https://github.com/p1ngul1n0/blackbird):
+  probe a site's register / password-recovery endpoint and read whether the address is taken. `email-sites.json` is
+  blackbird's `email-data.json` verbatim (refresh `npm run pages-email-update`); `email-sites.ts` parses it and appends
+  a small code-defined `EXTRA` set of holehe-style checks (e.g. Mail.ru) that are not in blackbird. `checkEmailSite` in
+  `check.ts` ports blackbird's verdict (`eCode`+`eString` = taken, `mCode`+`mString` = free, `inputOp` sha256,
+  `preCheck` cookie) — this is also holehe's method. Adding more holehe modules = new entries in `EXTRA`.
+
+`jobs.ts` runs all checks for a query (nickname sites + e-mail sites) through `concurrency` workers; each `SiteResult`
+carries `by: 'username' | 'email'`, shown in the UI as «по нику» / «по e-mail». Jobs live in server memory (one running
+per user, `MAX_RUNNING` per process → `PAGES_BUSY`, finished jobs live an hour → the section's own «История», nothing in
+the DB). The browser never talks to the sites (CORS); `pages.job` is polled every second while `running` and returns
+only `found` until the job ends. `pages.config` is `null` when `[config] pages-search = false`. Verdicts are heuristic
+(a site that answers 200 for any input gives a false «найдено»; WAF pages → «защита от ботов»), and the site lists age —
+refresh them periodically. Found pages go to a dossier's «Соцсети и ссылки» via `AddPagesDialog` (the `by` reaches the
+source note).
 
 ### Progress window
 

@@ -13,7 +13,8 @@
     "db": "npm run migrate -w @ft/db --",
     "password-hash": "node packages/config/src/password-hash.ts",
     "scans-check": "npm run scans-check -w @ft/server --",
-    "pages-sites-update": "npm run pages-sites-update -w @ft/server"
+    "pages-sites-update": "npm run pages-sites-update -w @ft/server",
+    "pages-email-update": "npm run pages-email-update -w @ft/server"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

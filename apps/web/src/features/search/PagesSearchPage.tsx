@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Copy, ExternalLink, FolderPlus, History, UserSearch } from 'lucide-react';
-import { PAGES_USERNAME_MAX, PAGES_USERNAME_RE, SHERLOCK_URL } from '@ft/shared';
+import { BLACKBIRD_URL, HOLEHE_URL, isPagesQuery, PAGES_EMAIL_RE, PAGES_QUERY_MAX, SHERLOCK_URL } from '@ft/shared';
 import { ProgressDialog } from '../../components/ProgressDialog.tsx';
 import { Button, Card, CopyButton, Empty, Input, Segmented, Spinner, Tag } from '../../components/ui.tsx';
 import { copyText } from '../../lib/clipboard.ts';
@@ -29,13 +29,16 @@ const STATUS: Record<Result['status'], { label: string; tone: 'mint' | 'dim' | '
   illegal: { label: 'имя не подходит', tone: 'dim' },
 };
 
-/** «@nick» → «nick»; остальное как ввели. */
+/** Чем найдена страница. */
+const BY_LABEL: Record<Result['by'], string> = { username: 'по нику', email: 'по e-mail' };
+
+/** «@nick» → «nick»; e-mail не трогаем (он не начинается с @). */
 const clean = (s: string) => s.trim().replace(/^@/, '');
 
-function problemOf(username: string): string | null {
-  if (!username) return null;
-  if (username.length > PAGES_USERNAME_MAX) return `не длиннее ${PAGES_USERNAME_MAX} символов`;
-  if (!PAGES_USERNAME_RE.test(username)) return 'без пробелов и символов / \\ ? # % &';
+function problemOf(query: string): string | null {
+  if (!query) return null;
+  if (query.length > PAGES_QUERY_MAX) return `не длиннее ${PAGES_QUERY_MAX} символов`;
+  if (!isPagesQuery(query)) return 'ник без пробелов и / \\ ? # % & или корректный e-mail';
   return null;
 }
 
@@ -56,10 +59,10 @@ export function PagesSearchPage() {
       </div>
     );
   }
-  return <PagesSearch sites={cfg.data.sites} />;
+  return <PagesSearch sites={cfg.data.sites} emailSites={cfg.data.emailSites} />;
 }
 
-function PagesSearch({ sites }: { sites: number }) {
+function PagesSearch({ sites, emailSites }: { sites: number; emailSites: number }) {
   const params = pagesSearchRoute.useSearch();
   const navigate = useNavigate({ from: '/search/pages' });
   const me = trpc.auth.me.useQuery();
@@ -90,6 +93,7 @@ function PagesSearch({ sites }: { sites: number }) {
 
   const username = clean(value);
   const problem = problemOf(username);
+  const isEmail = PAGES_EMAIL_RE.test(username);
   const disabled = !me.data?.access.active;
 
   function run() {
@@ -106,7 +110,7 @@ function PagesSearch({ sites }: { sites: number }) {
   return (
     <SearchLayout
       title="Поиск личных страниц"
-      subtitle={`По имени пользователя: страницы на ${sites} сайтах и в соцсетях. Поиск занимает одну-две минуты.`}
+      subtitle={`По нику (${sites} сайтов) или e-mail (${emailSites} сервисов + поиск по нику из части до @). Поиск занимает одну-две минуты.`}
       history={<PagesHistory activeId={jobId} onOpen={setJobId} />}
     >
       <Card className="animate-fade-up">
@@ -124,10 +128,10 @@ function PagesSearch({ sites }: { sites: number }) {
                 autoFocus
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder="имя пользователя: ivan_petrov"
+                placeholder="ник или e-mail: ivan_petrov или ivan@mail.ru"
                 className="h-12 pl-10 font-mono text-base"
                 disabled={disabled}
-                maxLength={PAGES_USERNAME_MAX + 1}
+                maxLength={PAGES_QUERY_MAX + 1}
               />
             </div>
             <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !username || !!problem || start.isPending}>
@@ -135,15 +139,16 @@ function PagesSearch({ sites }: { sites: number }) {
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
-            <span>Ник, логин или имя аккаунта — как в адресе страницы пользователя.</span>
+            <span>{isEmail ? 'По e-mail проверяется регистрация и ищется ник из части до @.' : 'Ник, логин или имя аккаунта — как в адресе страницы пользователя.'}</span>
+            {isEmail && <Tag tone="info">e-mail</Tag>}
             {problem && <Tag tone="warn">{problem}</Tag>}
             {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
           </div>
           <div className="font-mono text-[11px] text-mute">
             inspired by{' '}
-            <a href={SHERLOCK_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">
-              Sherlock Project
-            </a>
+            <a href={SHERLOCK_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">Sherlock</a>,{' '}
+            <a href={HOLEHE_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">holehe</a>,{' '}
+            <a href={BLACKBIRD_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">blackbird</a>
           </div>
         </form>
       </Card>
@@ -262,15 +267,16 @@ function PagesResults({ job, loading, error }: { job: Job | undefined; loading: 
           <Empty>Страниц с таким именем не найдено</Empty>
         ) : (
           <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-            {found.map((r) => <FoundCard key={r.site} r={r} onAdd={() => setAdding([r])} />)}
+            {found.map((r) => <FoundCard key={`${r.by}:${r.site}`} r={r} onAdd={() => setAdding([r])} />)}
           </div>
         )
       ) : (
         <Card compact>
           <div className="divide-y divide-line-soft">
             {all.map((r) => (
-              <div key={r.site} className="flex items-center gap-3 py-1.5 text-sm">
+              <div key={`${r.by}:${r.site}`} className="flex items-center gap-3 py-1.5 text-sm">
                 <span className="w-44 shrink-0 truncate font-semibold">{r.site}</span>
+                <Tag tone={r.by === 'email' ? 'info' : 'dim'} className="shrink-0">{BY_LABEL[r.by]}</Tag>
                 <Tag tone={STATUS[r.status].tone} className="shrink-0">{STATUS[r.status].label}</Tag>
                 <a href={r.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-mono text-xs text-dim hover:text-mint">{r.url}</a>
                 <span className="max-w-56 shrink-0 truncate font-mono text-[10px] text-mute" title={r.error ?? undefined}>
@@ -291,6 +297,7 @@ function FoundCard({ r, onAdd }: { r: Result; onAdd: () => void }) {
     <Card compact className="!p-3.5">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate font-semibold">{r.site}</span>
+        <Tag tone={r.by === 'email' ? 'info' : 'dim'}>{BY_LABEL[r.by]}</Tag>
         {r.nsfw && <Tag tone="warn">18+</Tag>}
         <span className="font-mono text-[10px] text-mute">{r.ms} мс</span>
         <button

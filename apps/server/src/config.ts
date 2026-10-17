@@ -33,6 +33,9 @@ export const config = {
   /** Сколько кэшировать ответ о подписке. */
   accessCacheMs: 60 * 1000,
   botUsername: appConfig.telegram.botUsername,
+  /** Секрет подписи ссылок входа от бота ('' — вход по ссылке выключен) и срок их жизни. */
+  loginSecret: appConfig.telegram.loginSecret,
+  loginLinkTtlMs: appConfig.telegram.loginLinkTtlMs,
   /** Cookie с флагом Secure, когда сервер доступен не только с localhost (значит, за HTTPS). */
   secureCookie: !appConfig.server.loopback,
 };

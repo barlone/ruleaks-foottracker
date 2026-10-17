@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "scans-check": "tsx src/tools/scans-check.ts",
     "pages-sites-update": "tsx src/tools/pages-sites-update.ts",
-    "pages-email-update": "tsx src/tools/pages-email-update.ts"
+    "pages-email-update": "tsx src/tools/pages-email-update.ts",
+    "login-link": "tsx src/tools/login-link.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

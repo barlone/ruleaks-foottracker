@@ -75,6 +75,11 @@ sets the per-site timeout and concurrency (see «Personal pages search» below).
 `[server] trust-proxy` (default `false`) makes Fastify take the client address from `X-Forwarded-For`; production runs behind
 nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone.
 
+`[telegram] login-secret` (shared with the bot, ≥32 chars) enables login by a signed one-time link from the bot:
+`/login?tg=…&ts=…&n=…&sig=…[&name=…][&nick=…]`, `sig = base64url(HMAC-SHA256(secret, "tg\nts\nn\nname\nnick"))`,
+valid `login-link-ttl-sec` (180 s), single use (`adapters/login-link.ts`, `auth.loginWithLink`, web `/login`).
+Exact format and a Python reference are in ARCHITECTURE.md §4.0; `npm run login-link -- <tgId>` makes a test link.
+
 `[server] dev-login` (allowed only when `host` is loopback; bot-db mode only) enables login without the bot: demo-profile buttons, or a
 Telegram-ID field when `[bot-db]` is real, plus a «Войти как …» button when `[config] bot-db-dev-quick-login-tg-id` is
 set (the ID comes from the server via `auth.devLogin`, never from the bundle).
@@ -271,9 +276,9 @@ thumbnail re-fetches its URL and shows the HTTP status/type. The startup log and
 
 `BotDbBridge` opens the pool with `default_transaction_read_only=on` and duplicates the bot's `access_error()` rules
 (no token → «Токен не установлен», disabled token, unlimited, `users.subscribed_to`). Users are matched by
-`users.provider = 'tg' AND provider_id = <chat id>`. Planned (see ARCHITECTURE.md §4): the bot adds
-`site_login_requests` + `site_user_access()` and confirms `/start login_<nonce>`, replacing dev-login and the
-duplicated rules.
+`users.provider = 'tg' AND provider_id = <chat id>`. Production login is the signed link the bot sends
+(ARCHITECTURE.md §4.0; nothing in the bot DB). Planned (§4.1): the bot adds `site_login_requests` +
+`site_user_access()` and confirms `/start login_<nonce>`, replacing dev-login and the duplicated rules.
 
 ### Web conventions
 

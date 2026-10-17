@@ -24,6 +24,14 @@ const indexRoute = createRoute({
   },
 });
 
+// Вход по ссылке из бота (подписанные параметры проверяет сервер).
+export const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/login',
+  validateSearch: z.object({ tg: text, ts: text, n: text, sig: text, name: text, nick: text }),
+  component: lazyRouteComponent(() => import('./components/LoginLinkPage.tsx'), 'LoginLinkPage'),
+});
+
 export const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search',
@@ -88,7 +96,7 @@ export const investigationRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  indexRoute, searchRoute, tgSearchRoute, geoSearchRoute, pagesSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
+  indexRoute, loginRoute, searchRoute, tgSearchRoute, geoSearchRoute, pagesSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });

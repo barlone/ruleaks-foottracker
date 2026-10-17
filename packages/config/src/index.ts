@@ -66,6 +66,10 @@ const SECTIONS = {
   }),
   telegram: z.object({
     'bot-username': str('ruleaks_bot'),
+    /** Общий с ботом секрет подписи ссылок входа (HMAC-SHA256); пусто — вход по ссылке выключен. */
+    'login-secret': str(),
+    /** Сколько живёт ссылка входа от бота. */
+    'login-link-ttl-sec': int(180, 30, 3600),
   }),
   'project-db': DbSection.extend({ database: str('ruleaksfoottracker'), user: str('ruleaksfoottracker') }),
   'bot-db': DbSection.extend({ 'pool-max': int(5, 1, 50) }),
@@ -162,7 +166,8 @@ export interface AppConfig {
     /** Доверять X-Forwarded-For (req.ip — адрес клиента, а не прокси). */
     trustProxy: boolean;
   };
-  telegram: { botUsername: string };
+  /** Бот: имя для ссылок, секрет подписи ссылок входа (общий с ботом) и срок их жизни. */
+  telegram: { botUsername: string; loginSecret: string; loginLinkTtlMs: number };
   /** База сайта: досье, расследования, медиа, сессии. */
   projectDb: DbConfig;
   /** База бота pyruleaks-bot: users, tokens, подписки (только чтение). */
@@ -272,7 +277,11 @@ export function loadConfig(): AppConfig {
       devLogin: c.server['dev-login'],
       trustProxy: c.server['trust-proxy'],
     },
-    telegram: { botUsername: c.telegram['bot-username'].replace(/^@/, '') },
+    telegram: {
+      botUsername: c.telegram['bot-username'].replace(/^@/, ''),
+      loginSecret: c.telegram['login-secret'],
+      loginLinkTtlMs: c.telegram['login-link-ttl-sec'] * 1000,
+    },
     projectDb: db(c['project-db']),
     botDb: db(c['bot-db']),
     api: {
@@ -355,6 +364,10 @@ function validate(cfg: AppConfig) {
     if (cfg.api.enabled && !cfg.api.token) missing.push(`[api] token (без бота токен API задаётся в конфиге: auth = ${mode})`);
   }
   if (cfg.auth.devQuickLoginTgId && !/^\d{1,19}$/.test(cfg.auth.devQuickLoginTgId)) missing.push('[config] bot-db-dev-quick-login-tg-id (только цифры)');
+  if (cfg.telegram.loginSecret && cfg.telegram.loginSecret.length < 32) missing.push('[telegram] login-secret (не короче 32 символов)');
+  if (mode === 'bot-db' && !cfg.telegram.loginSecret && !cfg.server.loopback) {
+    cfg.warnings.push('[telegram] login-secret не задан: вход по ссылке из бота выключен, а dev-вход вне localhost запрещён — войти на сайт нельзя');
+  }
   if (mode === 'password-sha256' && !/^[0-9a-f]{64}$/.test(cfg.auth.passwordSha256)) {
     missing.push('[config] password-sha256 (64 hex-символа: npm run password-hash)');
   }

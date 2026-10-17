@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { LoginLink, verifyLoginLink } from '../adapters/login-link.ts';
 import { config } from '../config.ts';
 import { authedProcedure, loadAccess, publicProcedure, router, type Ctx } from '../trpc.ts';
 
@@ -108,6 +109,20 @@ export const authRouter = router({
     ctx.res.setCookie(config.sessionCookie, sid, cookieOpts);
     ctx.res.clearCookie(LOGIN_COOKIE, { path: '/' });
     return { status: 'confirmed' as const };
+  }),
+
+  /**
+   * Вход по подписанной ссылке из бота (adapters/login-link.ts): подпись, срок и одноразовость проверены —
+   * пользователь создаётся/обновляется (имя и ник — если бот их передал), ставится cookie сессии.
+   */
+  loginWithLink: botProcedure.input(LoginLink).mutation(async ({ ctx, input }) => {
+    if (!config.loginSecret) throw new TRPCError({ code: 'NOT_FOUND', message: 'LINK_LOGIN_DISABLED' });
+    const v = verifyLoginLink(config.loginSecret, input, config.loginLinkTtlMs);
+    if (!v.ok) throw new TRPCError({ code: 'UNAUTHORIZED', message: v.code });
+    const { id } = await ctx.deps.users.upsertByTgId({ tgId: input.tg, displayName: input.name || null, username: input.nick || null });
+    await loadAccess(ctx.deps, input.tg, true);
+    await startSession(ctx, id);
+    return true;
   }),
 
   /** Повторно спросить бота о подписке (после продления в боте). */

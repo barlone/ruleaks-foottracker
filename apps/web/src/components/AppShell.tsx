@@ -33,8 +33,9 @@ export function Root() {
     );
   }
 
-  // Без сессии доступны только публичные расследования.
+  // Без сессии доступны только публичные расследования и страница входа по ссылке из бота.
   if (!me.data) {
+    if (path === '/login') return <Outlet />;
     if (/^\/investigations\/[^/]+$/.test(path)) {
       return (
         <div className="bg-grid flex h-full flex-col">

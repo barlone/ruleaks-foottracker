@@ -110,8 +110,45 @@ apps/web          React SPA
 
 ## 4. Авторизация через бота
 
-Основной путь — **deep-link** (Telegram Login Widget требует `/setdomain`, и `oauth.telegram.org`
-у части пользователей из РФ работает нестабильно).
+Telegram Login Widget не используется: он требует `/setdomain`, и `oauth.telegram.org` у части пользователей из РФ
+работает нестабильно. Два пути, оба без промежуточных сервисов.
+
+### 4.0. Основной путь — подписанная ссылка из бота
+
+Пользователь даёт боту команду (`/auth_foottracker`), бот присылает одноразовую ссылку на сайт; кто её откроет
+в течение `[telegram] login-link-ttl-sec` (180 с), тот и входит. Подпись доказывает, что ссылку выдал бот, а
+Telegram — что команду дал владелец `chat_id`. Ни API-сервера авторизации, ни таблицы в базе не нужно.
+
+```
+https://investigator.ruleaks.link/login?tg=<Telegram ID>&ts=<unix-секунды>&n=<случайная строка>&sig=<подпись>[&name=<имя>][&nick=<ник без @>]
+
+подпись:  sig = base64url( HMAC-SHA256( login-secret, tg + "\n" + ts + "\n" + n + "\n" + name + "\n" + nick ) )  без «=»
+          (name и nick — как в ссылке; отсутствующие — пустые строки)
+n:        8–64 символов [A-Za-z0-9_-], случайные (16 байт в base64url); у каждой ссылки свой
+секрет:   [telegram] login-secret на сайте = такой же ключ в конфиге бота; не короче 32 символов
+```
+
+Сайт (`auth.loginWithLink`, `adapters/login-link.ts`): сверяет подпись первой (`timingSafeEqual`), затем срок
+(`ts` не старше TTL и не больше чем на минуту в будущем), затем одноразовость (пара `tg:n` помнится в памяти до
+истечения срока) — и только потом делает upsert пользователя (имя и ник из ссылки, если бот их передал), читает
+подписку из базы бота и ставит cookie сессии. Страница `/login` открыта без сессии; после входа она переходит в
+поиск с заменой адреса в истории. Ошибки: `BAD_LINK`, `LINK_EXPIRED`, `LINK_USED`, `LINK_LOGIN_DISABLED` (секрет
+не задан). Проверить без бота: `npm run login-link -- <Telegram ID> [имя] [@ник]`.
+
+Бот должен отправлять ссылку с выключенным превью (`disable_web_page_preview` / `LinkPreviewOptions(is_disabled=True)`):
+иначе сервер превью Telegram откроет одноразовую ссылку первым. На стороне Python:
+
+```python
+import base64, hmac, hashlib, secrets, time, urllib.parse
+def login_link(secret: str, site: str, tg_id: int, name: str = "", nick: str = "") -> str:
+    ts, n = str(int(time.time())), base64.urlsafe_b64encode(secrets.token_bytes(16)).rstrip(b"=").decode()
+    payload = "\n".join([str(tg_id), ts, n, name, nick]).encode()
+    sig = base64.urlsafe_b64encode(hmac.new(secret.encode(), payload, hashlib.sha256).digest()).rstrip(b"=").decode()
+    q = {"tg": tg_id, "ts": ts, "n": n, "sig": sig, **({"name": name} if name else {}), **({"nick": nick} if nick else {})}
+    return f"{site}/login?{urllib.parse.urlencode(q, quote_via=urllib.parse.quote)}"   # пробел → %20, не «+»
+```
+
+### 4.1. Запасной путь — deep-link с подтверждением в боте (код есть, бот пока не подтверждает)
 
 ```
 браузер              сайт (BFF)                         БД бота / бот
@@ -139,7 +176,7 @@ Nonce виден всем, кто видит экран или ссылку (QR-
 - **Токен шлюза** пользователя (`tokens.token` по `users.tokenid`) сервер читает из БД бота при каждом поиске
   и никогда не отдаёт в браузер. Копию у себя не хранит.
 
-### 4.1. Соло-режимы без бота
+### 4.2. Соло-режимы без бота
 
 `[config] auth` выбирает способ входа; `bot-db` — описанный выше. Два других — для работы одного человека,
 без бота и подписки (`apps/server/src/adapters/solo.ts`, `SoloBridge` вместо моста к боту):
@@ -155,19 +192,14 @@ Nonce виден всем, кто видит экран или ссылку (QR-
 токен шлюза — `[api] token`; `[bot-db]` и `dev-login` не используются. Процедуры входа через бота отвечают `NOT_FOUND`,
 веб узнаёт режим из `auth.mode` (форма пароля вместо ссылки в бота, без кнопки «Выйти» при `none`).
 
-### Что добавить в pyruleaks-bot
+### Что добавить в бота
 
-1. Миграция alembic:
-   - таблица `site_login_requests (nonce, status, tg_id, created_at, expires_at, confirmed_at)`;
-   - функция `site_user_access(chat_id) → (active, unlimited, until, reason)` — та же логика, что `access_error()`;
-   - роль сайта: `SELECT` на `users`, `tokens`, `EXECUTE` на функцию, `SELECT, INSERT, UPDATE` на `site_login_requests`.
-2. Обработчик `/start login_<nonce>`: подключается к существующему `start_payload()` в `app/bot/handlers/main.py`;
-   кнопка подтверждения — callback с префиксом `site_login:`, не пересекающимся с существующими
-   (`search_`, `deep_search_`, `payment:` …). По нажатию — `status = confirmed`, `tg_id = chat_id`.
-3. (Позже) команда «Завершить все сессии на сайте» — отметка в `site_login_requests` или отдельной таблице,
-   которую сайт проверяет при обращении к сессии.
-
-HTTP-эндпоинты в боте не нужны: весь обмен идёт через его базу.
+1. **Команда входа** (сначала в админ-боте `pyruleaksadmin-bot`, затем в `pyruleaks-bot`): `/auth_foottracker`
+   собирает ссылку по 4.0 (`login_link(secret, site, chat_id, имя, ник)`) и отправляет её без превью. Секрет и адрес
+   сайта — в конфиге бота. Больше ничего: ни таблиц, ни HTTP.
+2. (Позже, для 4.1) миграция alembic с `site_login_requests` и `site_user_access()`, обработчик `/start login_<nonce>`
+   с callback-префиксом `site_login:`.
+3. (Позже) команда «Завершить все сессии на сайте» — отметка, которую сайт проверяет при обращении к сессии.
 
 ## 5. Поиск
 

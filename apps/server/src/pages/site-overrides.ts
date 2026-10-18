@@ -134,6 +134,10 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { regexCheck: /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/ },
     notFoundMsg: ['"invalid": "true"', '"invalid":"true"', '"invalid": true', '"invalid":true'],
   },
+  // API отвечает 302 на /404 (там 200), когда пользователя нет, и JSON 200, когда есть. Редиректы не следуем.
+  Rarible: {
+    patch: { errorType: 'response_url' },
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

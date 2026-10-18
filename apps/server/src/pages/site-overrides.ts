@@ -150,6 +150,8 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   Shelf: {
     patch: { errorType: 'response_url' },
   },
+  // Профилей /<ник> больше нет (даже эталонный «splice» — Not Found), с сервера приходит каркас SPA с кодом 200.
+  Splice: { disabled: true },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

@@ -7,7 +7,7 @@ import { toasts } from '../lib/toast.ts';
 import { useStore } from '../lib/store.ts';
 import { fmtDate } from '../lib/format.ts';
 import { LoginPage } from './LoginPage.tsx';
-import { Button, Spinner } from './ui.tsx';
+import { Button, Dialog, Spinner } from './ui.tsx';
 
 // feature — раздел есть только если включён в config.ini (geo — [config] geo-search, pages — [config] pages-search).
 const NAV = [
@@ -83,6 +83,32 @@ function Brand({ compact }: { compact?: boolean }) {
   );
 }
 
+/** Квадратная кнопка окна пользователя: контур шестерни с «i» внутри. */
+function UserButton({ onClick, className }: { onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Пользователь"
+      aria-label="Пользователь"
+      className={clsx('grid shrink-0 cursor-pointer place-items-center text-dim transition hover:bg-mint/5 hover:text-mint', className)}
+    >
+      <GearInfoIcon size={22} />
+    </button>
+  );
+}
+
+/** Контур шестерни (как lucide settings) с буквой «i» вместо внутренней окружности. */
+function GearInfoIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="8.4" r="0.6" fill="currentColor" stroke="none" />
+      <path d="M12 11v5" />
+    </svg>
+  );
+}
+
 function TopBar() {
   const mode = trpc.auth.mode.useQuery();
   return (
@@ -108,12 +134,17 @@ function Sidebar() {
   const features = { geo: !!geo.data, pages: !!pages.data };
   const nav = NAV.filter((n) => !('feature' in n) || features[n.feature]);
   const user = me.data!;
+  const [userOpen, setUserOpen] = useState(false);
 
   return (
     <aside className="relative z-10 flex w-64 shrink-0 flex-col border-r border-line bg-panel/80 backdrop-blur max-lg:w-16">
-      <div className="flex h-16 shrink-0 items-center border-b border-line px-4 max-lg:justify-center max-lg:px-0">
-        <div className="max-lg:hidden"><Brand /></div>
-        <div className="lg:hidden"><Brand compact /></div>
+      {/* Шапка: логотип по центру левой части и квадрат 64×64 справа — кнопка окна пользователя. */}
+      <div className="flex h-16 shrink-0 items-stretch border-b border-line">
+        <div className="flex min-w-0 flex-1 items-center justify-center">
+          <div className="flex justify-center max-lg:hidden"><Brand /></div>
+          <div className="flex justify-center lg:hidden"><Brand compact /></div>
+        </div>
+        <UserButton onClick={() => setUserOpen(true)} className="w-16 border-l border-line max-lg:hidden" />
       </div>
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {nav.map((item) => {
@@ -137,17 +168,19 @@ function Sidebar() {
           );
         })}
       </nav>
-      <div className="shrink-0 border-t border-line p-3 max-lg:hidden">
-        <div className="mb-2 flex items-center gap-2.5">
-          <div className="grid size-8 place-items-center rounded-full border border-line bg-mint/10 font-mono text-sm text-mint">
+      {/* В узком сайдбаре шапка занята логотипом — кнопка окна пользователя внизу. */}
+      <UserButton onClick={() => setUserOpen(true)} className="h-14 shrink-0 border-t border-line lg:hidden" />
+      <Dialog open={userOpen} onOpenChange={setUserOpen} title="Пользователь">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="grid size-10 place-items-center rounded-full border border-line bg-mint/10 font-mono text-base text-mint">
             {user.displayName.slice(0, 1)}
           </div>
-          <div className="min-w-0 text-sm">
+          <div className="min-w-0">
             <div className="truncate font-semibold">{user.displayName}</div>
             <div className="truncate font-mono text-[11px] text-mute">{user.username ? `@${user.username}` : `ID ${user.tgId}`}</div>
           </div>
         </div>
-        <div className={clsx('mb-2 rounded-md border px-2 py-1 font-mono text-[11px]', user.access.active ? 'border-line text-mint' : 'border-warn/30 text-warn')}>
+        <div className={clsx('mb-4 rounded-md border px-2.5 py-1.5 font-mono text-[11px]', user.access.active ? 'border-line text-mint' : 'border-warn/30 text-warn')}>
           {solo
             ? '● персональный режим'
             : user.access.active
@@ -155,11 +188,11 @@ function Sidebar() {
             : '○ подписка неактивна'}
         </div>
         {mode.data !== 'none' && (
-          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => logout.mutate()}>
+          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setUserOpen(false); logout.mutate(); }}>
             <LogOut size={14} /> Выйти
           </Button>
         )}
-      </div>
+      </Dialog>
     </aside>
   );
 }

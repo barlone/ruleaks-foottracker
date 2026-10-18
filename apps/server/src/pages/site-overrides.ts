@@ -92,6 +92,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   HackerNews: {
     verify: ({ httpStatus, text }) => (httpStatus === 419 ? 'waf' : text.includes('<title>Profile: ') ? 'claimed' : 'available'),
   },
+  // Отвечает 200 на любой ник; несуществующий — страница с заголовком «User not found | Hashnode».
+  Hashnode: {
+    patch: { requestMethod: 'GET' },
+    notFoundMsg: ['<title>User not found | Hashnode'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

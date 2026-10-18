@@ -74,6 +74,9 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   Clozemaster: {
     patch: { errorType: 'response_url', errorMsg: [] },
   },
+  // У Discord нет публичных страниц профиля: манифест только спрашивает API «занят ли ник», а в результат попадает
+  // ссылка на главную discord.com — она бесполезна и уходит в досье как «страница». Сайт исключён.
+  Discord: { disabled: true },
   // API отвечает 404 {"error": "User not found"}, а манифест ждёт «Server Error (500)» — любой ник считался найденным.
   'Discord.bio': {
     patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },

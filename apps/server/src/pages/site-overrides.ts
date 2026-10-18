@@ -110,6 +110,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },
     notFoundMsg: ['User not found'],
   },
+  // Серверу сайт отвечает 403 своей страницей «High traffic» (или Cloudflare «One moment») без «This user doesn't
+  // exist» из манифеста — блокировка считалась профилем.
+  LibraryThing: {
+    verify: ({ httpStatus, text }) => (httpStatus === 403 || /<title>LibraryThing \| (High traffic|One moment)/.test(text) ? 'waf' : null),
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

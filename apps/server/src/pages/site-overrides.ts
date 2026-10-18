@@ -128,6 +128,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   Odysee: {
     notFoundMsg: ['<link rel="canonical" href="https://odysee.com"/>', '<link rel="canonical" content="odysee.com"/>'],
   },
+  // API availability отвечает available:false и на занятое имя, и на недопустимое (точка и т. п., с флагом
+  // "invalid") — манифест считал занятым любое. Недопустимые имена не проверяем, ответ с "invalid" — «нет».
+  'omg.lol': {
+    patch: { regexCheck: /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/ },
+    notFoundMsg: ['"invalid": "true"', '"invalid":"true"', '"invalid": true', '"invalid":true'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

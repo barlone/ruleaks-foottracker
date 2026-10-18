@@ -17,11 +17,13 @@ export function kindLabel(section: SearchSection, kind: string): string {
 }
 
 export function SearchLayout({
-  section, title, subtitle, activeId, onOpen, history, children,
+  section, title, titleExtra, subtitle, activeId, onOpen, history, children,
 }: {
   /** Раздел истории поиска (search.recent); разделы со своей историей передают history. */
   section?: SearchSection;
   title: string;
+  /** Что показать в строке заголовка после названия (мелкая подпись, ссылки). */
+  titleExtra?: ReactNode;
   subtitle: string;
   activeId?: string | null;
   onOpen?: (id: string) => void;
@@ -33,7 +35,10 @@ export function SearchLayout({
     <div className="grid gap-6 py-6 pl-6 pr-[30px] xl:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-6">
         <header className="animate-fade-up">
-          <h1 className="text-2xl font-extrabold">{title}</h1>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <h1 className="text-2xl font-extrabold">{title}</h1>
+            {titleExtra}
+          </div>
           <p className="mt-1 text-sm text-dim">{subtitle}</p>
         </header>
         {children}

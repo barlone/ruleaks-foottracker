@@ -112,6 +112,14 @@ function PagesSearch({ sites, emailSites }: { sites: number; emailSites: number 
   return (
     <SearchLayout
       title="Поиск личных страниц"
+      titleExtra={(
+        <div className="font-mono text-[11px] text-mute">
+          inspired by{' '}
+          <a href={SHERLOCK_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">Sherlock</a>,{' '}
+          <a href={HOLEHE_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">holehe</a>,{' '}
+          <a href={BLACKBIRD_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">blackbird</a>
+        </div>
+      )}
       subtitle={`По нику (${sites} сайтов) или e-mail (${emailSites} сервисов + поиск по нику из части до @). Поиск занимает одну-две минуты.`}
       history={<PagesHistory activeId={jobId} onOpen={setJobId} />}
     >
@@ -140,18 +148,13 @@ function PagesSearch({ sites, emailSites }: { sites: number; emailSites: number 
               {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Поиск'}
             </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
-            <span>{isEmail ? 'По e-mail проверяется регистрация и ищется ник из части до @.' : 'Ник, логин или имя аккаунта — как в адресе страницы пользователя.'}</span>
-            {isEmail && <Tag tone="info">e-mail</Tag>}
-            {problem && <Tag tone="warn">{problem}</Tag>}
-            {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
-          </div>
-          <div className="font-mono text-[11px] text-mute">
-            inspired by{' '}
-            <a href={SHERLOCK_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">Sherlock</a>,{' '}
-            <a href={HOLEHE_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">holehe</a>,{' '}
-            <a href={BLACKBIRD_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">blackbird</a>
-          </div>
+          {(isEmail || problem || start.error) && (
+            <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
+              {isEmail && <Tag tone="info">e-mail</Tag>}
+              {problem && <Tag tone="warn">{problem}</Tag>}
+              {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
+            </div>
+          )}
         </form>
       </Card>
 

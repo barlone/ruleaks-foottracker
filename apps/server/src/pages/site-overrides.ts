@@ -50,6 +50,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
       requestMethod: 'GET',
     },
   },
+  // API валидации имени отвечает isValid:false и на занятое имя, и на недопустимое (точка, дефис, цифра в начале) —
+  // манифест считает занятым любое isValid:false. Недопустимые имена не проверяем, занятое узнаём по тексту.
+  'BoardGameGeek': {
+    patch: { regexCheck: /^[A-Za-z][A-Za-z0-9_]*$/ },
+    claimedMsg: ['already taken'],
+  },
   // Отвечает 202 на любой адрес (страница AWS WAF challenge), а несуществующий профиль — «Not Found» с кодом 200.
   // Манифест проверяет только код ответа HEAD-ом, поэтому любой ник считался найденным.
   '7Cups': {

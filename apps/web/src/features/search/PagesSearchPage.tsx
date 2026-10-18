@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Copy, ExternalLink, FolderPlus, History, UserSearch } from 'lucide-react';
+import { ExternalLink, FolderPlus, History, UserSearch } from 'lucide-react';
 import { BLACKBIRD_URL, HOLEHE_URL, isPagesQuery, PAGES_EMAIL_RE, PAGES_QUERY_MAX, SHERLOCK_URL } from '@ft/shared';
 import { ProgressDialog } from '../../components/ProgressDialog.tsx';
 import { Button, Card, CopyButton, Empty, Input, Segmented, Spinner, Tag } from '../../components/ui.tsx';
-import { copyText } from '../../lib/clipboard.ts';
 import { errorText } from '../../lib/errors.ts';
 import { ago } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
@@ -236,11 +235,6 @@ function PagesResults({ job, loading, error }: { job: Job | undefined; loading: 
     );
   }
 
-  const copyAll = async () => {
-    const ok = await copyText(found.map((r) => r.url).join('\n'));
-    toast(ok ? `Скопировано ссылок: ${found.length}` : 'Не удалось скопировать', ok ? 'ok' : 'error');
-  };
-
   return (
     <>
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-panel/95 px-4 py-2.5 backdrop-blur">
@@ -250,15 +244,7 @@ function PagesResults({ job, loading, error }: { job: Job | undefined; loading: 
           {counts.waf > 0 && <> · защита от ботов {counts.waf}</>}
           {counts.illegal > 0 && <> · имя не подходит {counts.illegal}</>}
         </div>
-        <div className="flex items-center gap-2">
-          <Segmented value={view} onChange={setView} options={[{ value: 'found', label: 'найденные' }, { value: 'all', label: 'все сайты' }]} />
-          <Button variant="primary" size="sm" onClick={() => setAdding(found)} disabled={!found.length}>
-            <FolderPlus size={15} /> Все найденные в досье
-          </Button>
-          <Button size="sm" onClick={() => void copyAll()} disabled={!found.length}>
-            <Copy size={14} /> Скопировать ссылки
-          </Button>
-        </div>
+        <Segmented value={view} onChange={setView} options={[{ value: 'found', label: 'найденные' }, { value: 'all', label: 'все сайты' }]} />
       </div>
 
       {job.state === 'cancelled' && (

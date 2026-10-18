@@ -60,6 +60,7 @@ const WAF_HITS = [
 const WAF_URL_HITS = [
   '/verify-human/', // developer.apple.com/forums, discussions.apple.com
   'myprivacy.dpgmedia.nl/consent', // 2026-10-18 шлюз согласия DPG Media (tweakers.net и другие их сайты), там 200
+  '/.within.website/', // 2026-10-18 Anubis: 307 на свою проверку (hosted.weblate.org), там 200
 ];
 
 /** Больше тела ответа не читаем: признаки ошибки — в начале страницы, а бесконечный поток не должен держать воркер. */

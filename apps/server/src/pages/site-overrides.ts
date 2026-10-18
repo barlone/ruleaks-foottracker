@@ -11,7 +11,8 @@ import type { Site } from './sites.ts';
 //   claimedMsg    — строки, хотя бы одна из которых обязана быть в теле, иначе страницы нет
 //                   (например, «@ник» или блок профиля — для сайтов, отвечающих 200 на любой адрес);
 //   verify        — произвольная проверка после штатного вердикта «найдено»: получает ответ, тело и имя,
-//                   возвращает окончательный статус или null, если менять нечего.
+//                   возвращает окончательный статус или null, если менять нечего;
+//   disabled      — сайт закрыт или проверить его нельзя: исключается из списка целиком (не считается и не показывается).
 // Проверки применяются только когда штатная логика сказала «найдено»: отрицательный вердикт они не отменяют.
 
 export interface SiteVerifyContext {
@@ -27,6 +28,7 @@ export interface SiteVerifyContext {
 export type SiteVerify = (ctx: SiteVerifyContext) => Promise<'claimed' | 'available' | 'waf' | 'unknown' | null> | 'claimed' | 'available' | 'waf' | 'unknown' | null;
 
 export interface SiteOverride {
+  disabled?: boolean;
   patch?: Partial<Omit<Site, 'name' | 'notFoundMsg' | 'claimedMsg' | 'verify'>>;
   notFoundMsg?: string[];
   claimedMsg?: string[];
@@ -72,6 +74,8 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },
     notFoundMsg: ['"User not found"'],
   },
+  // Сервис закрыт: любой /u/<ник> — 301 на freepik.com/photos (там 200, и ник считался найденным).
+  EyeEm: { disabled: true },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

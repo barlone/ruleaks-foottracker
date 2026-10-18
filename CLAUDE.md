@@ -236,7 +236,7 @@ registrations, a TypeScript port of three OSINT tools (`apps/server/src/pages/`)
   The placeholder is blackbird's `{account}` (not Sherlock's `{}`), substituted with context-aware encoding
   (`fillAccount`: percent-encoding in the URL and form bodies, JSON escaping in JSON bodies — `user+tag@…` must survive).
 - **Per-site fixes** — `site-overrides.ts` (`SITE_OVERRIDES`, keyed by the `sites.json` name, applied in `allSites()`):
-  `patch` replaces `Site` fields, `notFoundMsg` / `claimedMsg` are body strings that turn a standard «найдено» into
+  `disabled` drops a closed site from the list, `patch` replaces `Site` fields, `notFoundMsg` / `claimedMsg` are body strings that turn a standard «найдено» into
   «нет» (the probe becomes GET), `verify` is an arbitrary check after a positive verdict. Add a problem site there
   instead of editing `sites.json` (it is overwritten by `pages-sites-update`); an override for an unknown name is
   logged at startup. Bot-protection pages are detected by `isWafChallenge` from headers too (`x-amzn-waf-action`,

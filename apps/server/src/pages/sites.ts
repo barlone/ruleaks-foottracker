@@ -91,7 +91,7 @@ export function allSites(): Site[] {
     const sites = parseSites(JSON.parse(readFileSync(SITES_FILE, 'utf8')));
     const names = new Set(sites.map((s) => s.name));
     for (const n of Object.keys(SITE_OVERRIDES)) if (!names.has(n)) console.warn(`pages: правило для сайта «${n}» (site-overrides.ts) — такого сайта нет в sites.json`);
-    cache = sites.map(applyOverride);
+    cache = sites.filter((s) => !SITE_OVERRIDES[s.name]?.disabled).map(applyOverride);
   }
   return cache;
 }

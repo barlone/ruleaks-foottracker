@@ -185,6 +185,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   Vero: {
     patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },
   },
+  // Несуществующий профиль — 404 (HEAD при этом 200) с «Profil nelze zobrazit»; манифест ждёт устаревшее
+  // «Neexistujicí profil». Проверяем GET-ом по коду и по новому тексту.
+  'Chatujme.cz': {
+    patch: { errorType: 'status_code', errorCode: null, errorMsg: [], requestMethod: 'GET' },
+    notFoundMsg: ['Profil nelze zobrazit', 'Neexistujicí profil'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

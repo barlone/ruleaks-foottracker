@@ -45,6 +45,12 @@ const WAF_HITS = [
   '<span id="challenge-error-text">', // 2024-11-11 Cloudflare error page
   'AwsWafIntegration.forceRefreshToken', // 2024-11-11 Cloudfront (AWS)
   '{return l.onPageView}}),Object.defineProperty(r,"perimeterxIdentifiers",{enumerable:', // 2024-04-09 PerimeterX / Human Security
+  '/shld/v0/verify.js', // 2026-10-18 Apple «Security Verification» (developer.apple.com/forums)
+];
+
+/** Фрагменты адреса, на который сайт уводит редиректом ради проверки на бота (ответ там 200, но это не страница). */
+const WAF_URL_HITS = [
+  '/verify-human/', // developer.apple.com/forums
 ];
 
 /** Больше тела ответа не читаем: признаки ошибки — в начале страницы, а бесконечный поток не должен держать воркер. */
@@ -179,11 +185,13 @@ export async function checkSite(site: Site, username: string, opts: CheckOptions
 
 /**
  * Страница защиты от ботов: по заголовкам (видны и при HEAD — AWS WAF отвечает 202 с x-amzn-waf-action,
- * Cloudflare ставит cf-mitigated: challenge) или по отпечаткам в теле (WAF_HITS Sherlock).
+ * Cloudflare ставит cf-mitigated: challenge), по адресу после редиректов (WAF_URL_HITS) или по отпечаткам
+ * в теле (WAF_HITS Sherlock).
  */
 function isWafChallenge(res: Response, text: string): boolean {
   if (res.headers.get('x-amzn-waf-action') === 'challenge') return true;
   if (res.headers.get('cf-mitigated') === 'challenge') return true;
+  if (WAF_URL_HITS.some((h) => res.url.includes(h))) return true;
   return WAF_HITS.some((h) => text.includes(h));
 }
 

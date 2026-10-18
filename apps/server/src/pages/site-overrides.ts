@@ -34,6 +34,12 @@ export interface SiteOverride {
 }
 
 export const SITE_OVERRIDES: Record<string, SiteOverride> = {
+  // Уводит 302 на /forums/verify-human/ (JS-проверка, там 200) — это ловит isWafChallenge по адресу.
+  // Если проверка пропустит, несуществующий профиль — страница «Error - Page Not Found» (404, но подстрахуемся по тексту).
+  'Apple Developer': {
+    patch: { requestMethod: 'GET' },
+    notFoundMsg: ['<title>Error - Page Not Found', 'The page you’re looking for can’t be found'],
+  },
   // Отвечает 202 на любой адрес (страница AWS WAF challenge), а несуществующий профиль — «Not Found» с кодом 200.
   // Манифест проверяет только код ответа HEAD-ом, поэтому любой ник считался найденным.
   '7Cups': {

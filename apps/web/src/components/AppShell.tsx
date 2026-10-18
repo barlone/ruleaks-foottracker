@@ -138,13 +138,13 @@ function Sidebar() {
 
   return (
     <aside className="relative z-10 flex w-64 shrink-0 flex-col border-r border-line bg-panel/80 backdrop-blur max-lg:w-16">
-      {/* Шапка: логотип по центру левой части и квадрат 64×64 справа — кнопка окна пользователя. */}
+      {/* Шапка: логотип с отступом 6 px по бокам (как между глифом и текстом), остаток ширины — кнопка окна пользователя. */}
       <div className="flex h-16 shrink-0 items-stretch border-b border-line">
-        <div className="flex min-w-0 flex-1 items-center justify-center">
-          <div className="flex justify-center max-lg:hidden"><Brand /></div>
-          <div className="flex justify-center lg:hidden"><Brand compact /></div>
+        <div className="flex shrink-0 items-center px-1.5 max-lg:flex-1 max-lg:justify-center max-lg:px-0">
+          <div className="max-lg:hidden"><Brand /></div>
+          <div className="lg:hidden"><Brand compact /></div>
         </div>
-        <UserButton onClick={() => setUserOpen(true)} className="w-16 border-l border-line max-lg:hidden" />
+        <UserButton onClick={() => setUserOpen(true)} className="min-w-0 flex-1 border-l border-line max-lg:hidden" />
       </div>
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {nav.map((item) => {

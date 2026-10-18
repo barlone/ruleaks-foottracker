@@ -156,6 +156,9 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   'social.tchncs.de': {
     patch: { requestMethod: 'GET' },
   },
+  // Любой /user/<ник> — 200 с пустым каркасом веб-плеера (профиль рисует JS за reCAPTCHA); oEmbed пользователей
+  // не поддерживает, /embed/user — 404, API требует OAuth. С сервера проверить нельзя.
+  Spotify: { disabled: true },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

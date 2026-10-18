@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
+import { SITE_OVERRIDES, applyOverride, type SiteVerify } from './site-overrides.ts';
 
 // Список сайтов для поиска личных страниц — манифест проекта Sherlock (sites.json рядом, лицензия MIT —
 // LICENSE.sherlock). Обновление: npm run pages-sites-update. Поля — как в data.json Sherlock:
@@ -41,6 +42,13 @@ export interface Site {
   requestPayload: unknown;
   headers: Record<string, string>;
   nsfw: boolean;
+  // Индивидуальные правила поверх манифеста (site-overrides.ts); в манифесте их нет.
+  /** Строки в теле, означающие «страницы нет», даже если штатный вердикт — «найдено». */
+  notFoundMsg: string[];
+  /** Хотя бы одна из строк обязана быть в теле найденной страницы. */
+  claimedMsg: string[];
+  /** Произвольная проверка после штатного «найдено». */
+  verify: SiteVerify | null;
 }
 
 const asList = <T>(v: T | T[] | undefined): T[] => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
@@ -65,6 +73,9 @@ export function parseSites(json: unknown): Site[] {
       requestPayload: r.request_payload,
       headers: r.headers ?? {},
       nsfw: r.isNSFW ?? false,
+      notFoundMsg: [],
+      claimedMsg: [],
+      verify: null,
     });
   }
   return sites.sort((a, b) => a.name.localeCompare(b.name, 'en'));
@@ -74,8 +85,13 @@ export const SITES_FILE = new URL('./sites.json', import.meta.url);
 
 let cache: Site[] | null = null;
 
-/** Все сайты манифеста (файл читается один раз). */
+/** Все сайты манифеста с наложенными индивидуальными правилами (файл читается один раз). */
 export function allSites(): Site[] {
-  cache ??= parseSites(JSON.parse(readFileSync(SITES_FILE, 'utf8')));
+  if (!cache) {
+    const sites = parseSites(JSON.parse(readFileSync(SITES_FILE, 'utf8')));
+    const names = new Set(sites.map((s) => s.name));
+    for (const n of Object.keys(SITE_OVERRIDES)) if (!names.has(n)) console.warn(`pages: правило для сайта «${n}» (site-overrides.ts) — такого сайта нет в sites.json`);
+    cache = sites.map(applyOverride);
+  }
   return cache;
 }

@@ -122,8 +122,9 @@ export async function checkSite(site: Site, username: string, opts: CheckOptions
   if (site.regexCheck && !site.regexCheck.test(username)) return { ...base, status: 'illegal', ms: 0 };
 
   const probe = site.urlProbe ? fill(site.urlProbe, username) : url;
-  // Для вердикта по коду ответа тело не нужно — достаточно HEAD.
-  const method = site.requestMethod ?? (site.errorType === 'status_code' ? 'HEAD' : 'GET');
+  // Для вердикта по коду ответа тело не нужно — достаточно HEAD; индивидуальным проверкам по телу нужен GET.
+  const needBody = site.notFoundMsg.length > 0 || site.claimedMsg.length > 0 || site.verify !== null;
+  const method = site.requestMethod ?? (site.errorType === 'status_code' && !needBody ? 'HEAD' : 'GET');
   const headers: Record<string, string> = { 'User-Agent': USER_AGENT, ...site.headers };
   let body: string | undefined;
   if (site.requestPayload !== undefined) {
@@ -147,7 +148,7 @@ export async function checkSite(site: Site, username: string, opts: CheckOptions
   }
 
   const http = res.status;
-  if (WAF_HITS.some((h) => text.includes(h))) return { ...base, status: 'waf', httpStatus: http, ms: ms() };
+  if (isWafChallenge(res, text)) return { ...base, status: 'waf', httpStatus: http, ms: ms() };
 
   let status: PageStatus;
   switch (site.errorType) {
@@ -161,7 +162,29 @@ export async function checkSite(site: Site, username: string, opts: CheckOptions
       status = http >= 200 && http < 300 ? 'claimed' : 'available';
       break;
   }
+  // Индивидуальные правила сайта (site-overrides.ts) — только уточняют «найдено».
+  if (status === 'claimed') {
+    if (site.notFoundMsg.some((m) => text.includes(m))) status = 'available';
+    else if (site.claimedMsg.length > 0 && !site.claimedMsg.some((m) => text.includes(m))) status = 'available';
+    else if (site.verify) {
+      try {
+        status = (await site.verify({ site, username, url, response: res, text, httpStatus: http })) ?? status;
+      } catch (e) {
+        return { ...base, status: 'unknown', error: describeError(e), httpStatus: http, ms: ms() };
+      }
+    }
+  }
   return { ...base, status, httpStatus: http, ms: ms() };
+}
+
+/**
+ * Страница защиты от ботов: по заголовкам (видны и при HEAD — AWS WAF отвечает 202 с x-amzn-waf-action,
+ * Cloudflare ставит cf-mitigated: challenge) или по отпечаткам в теле (WAF_HITS Sherlock).
+ */
+function isWafChallenge(res: Response, text: string): boolean {
+  if (res.headers.get('x-amzn-waf-action') === 'challenge') return true;
+  if (res.headers.get('cf-mitigated') === 'challenge') return true;
+  return WAF_HITS.some((h) => text.includes(h));
 }
 
 /** Преобразование адреса перед подстановкой в запрос (input_operation blackbird). */
@@ -228,7 +251,7 @@ export async function checkEmailSite(site: EmailSite, email: string, opts: Check
     const res = await outboundFetch(fillAccount(site.uriCheck, account, 'url'), { method: site.method, headers, body, follow: true, signal: signal() });
     const text = await readText(res, MAX_BODY_BYTES);
     const http = res.status;
-    if (WAF_HITS.some((h) => text.includes(h))) return { ...base, status: 'waf', httpStatus: http, ms: ms() };
+    if (isWafChallenge(res, text)) return { ...base, status: 'waf', httpStatus: http, ms: ms() };
 
     // blackbird: занят, если код = eCode, в теле есть eString, нет mString и код не равен mCode.
     const claimed = http === site.eCode && text.includes(site.eString)

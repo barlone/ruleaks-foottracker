@@ -1,0 +1,56 @@
+import type { Site } from './sites.ts';
+
+// Индивидуальные правила для сайтов из sites.json, у которых манифест Sherlock даёт ложные срабатывания.
+// sites.json обновляется из Sherlock целиком (npm run pages-sites-update), поэтому поправки живут здесь
+// и накладываются на разобранный манифест в allSites(). Ключ — имя сайта в sites.json (точное).
+//
+// Что можно задать (всё необязательно, смысл полей — в sites.ts):
+//   patch         — поля Site, которые заменить (requestMethod, urlProbe, errorType, errorMsg, headers…);
+//   notFoundMsg   — строки в теле ответа, означающие «такой страницы нет» (вдобавок к штатному вердикту;
+//                   запрос при этом всегда GET, чтобы тело было);
+//   claimedMsg    — строки, хотя бы одна из которых обязана быть в теле, иначе страницы нет
+//                   (например, «@ник» или блок профиля — для сайтов, отвечающих 200 на любой адрес);
+//   verify        — произвольная проверка после штатного вердикта «найдено»: получает ответ, тело и имя,
+//                   возвращает окончательный статус или null, если менять нечего.
+// Проверки применяются только когда штатная логика сказала «найдено»: отрицательный вердикт они не отменяют.
+
+export interface SiteVerifyContext {
+  site: Site;
+  username: string;
+  url: string;
+  response: Response;
+  /** Тело ответа текстом (не больше MAX_BODY_BYTES из check.ts); пусто для HEAD. */
+  text: string;
+  httpStatus: number;
+}
+
+export type SiteVerify = (ctx: SiteVerifyContext) => Promise<'claimed' | 'available' | 'waf' | 'unknown' | null> | 'claimed' | 'available' | 'waf' | 'unknown' | null;
+
+export interface SiteOverride {
+  patch?: Partial<Omit<Site, 'name' | 'notFoundMsg' | 'claimedMsg' | 'verify'>>;
+  notFoundMsg?: string[];
+  claimedMsg?: string[];
+  verify?: SiteVerify;
+}
+
+export const SITE_OVERRIDES: Record<string, SiteOverride> = {
+  // Отвечает 202 на любой адрес (страница AWS WAF challenge), а несуществующий профиль — «Not Found» с кодом 200.
+  // Манифест проверяет только код ответа HEAD-ом, поэтому любой ник считался найденным.
+  '7Cups': {
+    patch: { requestMethod: 'GET' },
+    notFoundMsg: ['<title>Not Found', 'The content you\'re attempting to access could not be found'],
+  },
+};
+
+/** Накладывает правило на сайт; сайты без правила возвращаются как есть. */
+export function applyOverride(site: Site): Site {
+  const o = SITE_OVERRIDES[site.name];
+  if (!o) return site;
+  return {
+    ...site,
+    ...o.patch,
+    notFoundMsg: o.notFoundMsg ?? site.notFoundMsg,
+    claimedMsg: o.claimedMsg ?? site.claimedMsg,
+    verify: o.verify ?? site.verify,
+  };
+}

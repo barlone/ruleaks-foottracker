@@ -167,6 +167,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   },
   // Сервис закрыт: любой адрес — 403 без текста из манифеста.
   Trovo: { disabled: true },
+  // Несуществующий канал — 200 с <title>Twitch</title> без описания (текст из манифеста устарел); у канала
+  // заголовок «Имя - Twitch». Имя на Twitch — только буквы, цифры и «_».
+  Twitch: {
+    patch: { regexCheck: /^[A-Za-z0-9_]{1,25}$/ },
+    claimedMsg: [' - Twitch</title>'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

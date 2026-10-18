@@ -62,6 +62,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { requestMethod: 'GET' },
     verify: ({ text }) => (text.includes('Вход через SberID') ? 'waf' : null),
   },
+  // Несуществующего игрока уводит 302 на /dashboard, а там обычная страница без «Player not found» из манифеста.
+  // Редиректы не следуем: 2xx — игрок есть, редирект — нет.
+  Clozemaster: {
+    patch: { errorType: 'response_url', errorMsg: [] },
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

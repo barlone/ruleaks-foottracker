@@ -67,6 +67,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   Clozemaster: {
     patch: { errorType: 'response_url', errorMsg: [] },
   },
+  // API отвечает 404 {"error": "User not found"}, а манифест ждёт «Server Error (500)» — любой ник считался найденным.
+  'Discord.bio': {
+    patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },
+    notFoundMsg: ['"User not found"'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

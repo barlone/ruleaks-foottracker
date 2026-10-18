@@ -51,6 +51,8 @@ const WAF_HITS = [
   '<title>Vercel Security Checkpoint</title>', // 2026-10-18 Vercel (observablehq.com), отдаётся с кодом 429
   '.elements.namedItem("solution").value=', // 2026-10-18 JS-проверка Reddit (www.reddit.com), отдаётся с кодом 200
   '<title>Just a moment...</title>', // 2026-10-18 Cloudflare challenge без cf-mitigated и загрузчик realmeye.com (200 + meta refresh)
+  "<title>Making sure you're not a bot!", // 2026-10-18 Anubis (social.tchncs.de и другие Fediverse-инстансы), отдаётся с кодом 200
+  '<title>Making sure you&#39;re not a bot!', // то же с экранированным апострофом
 ];
 
 /** Фрагменты адреса, на который сайт уводит редиректом ради проверки на бота (ответ там 200, но это не страница). */

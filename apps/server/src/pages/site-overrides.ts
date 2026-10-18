@@ -152,6 +152,10 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   },
   // Профилей /<ник> больше нет (даже эталонный «splice» — Not Found), с сервера приходит каркас SPA с кодом 200.
   Splice: { disabled: true },
+  // Закрыт проверкой Anubis (200 «Making sure you're not a bot!»), ловится в WAF_HITS только по телу — нужен GET.
+  'social.tchncs.de': {
+    patch: { requestMethod: 'GET' },
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {
@@ -165,8 +169,17 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   },
 };
 
+/**
+ * Инстансы Mastodon из манифеста. Имя пользователя там — только буквы, цифры и «_»; ник с точкой Rails принимает
+ * за расширение формата (/@irina.krasnonos → 406 «not available in the requested format» или 200 заглушкой),
+ * и проверка по коду давала «найдено».
+ */
+const MASTODON_HOSTS = new Set(['chaos.social', 'fosstodon.org', 'framapiaf.org', 'mamot.fr', 'mastodon.social', 'mastodon.xyz', 'mstdn.social', 'mstdn.io', 'social.tchncs.de', 'mastodon.cloud']);
+const MASTODON_NAME = /^[A-Za-z0-9_]+$/;
+
 /** Накладывает правило на сайт; сайты без правила возвращаются как есть. */
 export function applyOverride(site: Site): Site {
+  if (!site.regexCheck && MASTODON_HOSTS.has(new URL(site.url).hostname)) site = { ...site, regexCheck: MASTODON_NAME };
   const o = SITE_OVERRIDES[site.name];
   if (!o) return site;
   return {

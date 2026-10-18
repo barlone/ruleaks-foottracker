@@ -82,6 +82,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   GeeksforGeeks: {
     notFoundMsg: ['<title>undefined '],
   },
+  // Ник без точки сайт уводит на /explore/… с заголовком из манифеста, а ник с точкой — 404 «404 Not Found»,
+  // где этого заголовка нет, и страница считалась найденной.
+  Giphy: {
+    notFoundMsg: ['<title>404 Not Found'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

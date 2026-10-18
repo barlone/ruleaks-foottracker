@@ -50,7 +50,7 @@ const WAF_HITS = [
 
 /** Фрагменты адреса, на который сайт уводит редиректом ради проверки на бота (ответ там 200, но это не страница). */
 const WAF_URL_HITS = [
-  '/verify-human/', // developer.apple.com/forums
+  '/verify-human/', // developer.apple.com/forums, discussions.apple.com
 ];
 
 /** Больше тела ответа не читаем: признаки ошибки — в начале страницы, а бесконечный поток не должен держать воркер. */

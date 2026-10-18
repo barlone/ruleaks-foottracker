@@ -117,6 +117,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   },
   // Инстанс закрыт: любой адрес — 301 на страницу-заглушку media.mastodon.cloud (там 200).
   'mastodon.cloud': { disabled: true },
+  // Несуществующий профиль — 200 со страницей «Parece que esta página não existe» (существующий уводится
+  // редиректом на страницу продавца); манифест смотрит только на код — всё считалось найденным.
+  mercadolivre: {
+    patch: { requestMethod: 'GET' },
+    notFoundMsg: ['página não existe'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

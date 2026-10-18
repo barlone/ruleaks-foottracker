@@ -76,6 +76,8 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   },
   // Сервис закрыт: любой /u/<ник> — 301 на freepik.com/photos (там 200, и ник считался найденным).
   EyeEm: { disabled: true },
+  // Домен припаркован на GoDaddy: любой адрес — 200 со страницей парковки.
+  'F3.cool': { disabled: true },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

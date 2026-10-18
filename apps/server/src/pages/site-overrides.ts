@@ -64,6 +64,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { requestMethod: 'GET' },
     verify: ({ text }) => (text.includes('Вход через SberID') ? 'waf' : null),
   },
+  // Страница /profile/<ник> — 200 с «Page Not Found» в разметке у всех (профиль рисует JS); различает только
+  // /api/og/<ник>: 404 JSON для несуществующего, 200 PNG для существующего.
+  Codolio: {
+    patch: { urlProbe: 'https://codolio.com/api/og/{}', errorType: 'status_code', errorCode: null, errorMsg: [], requestMethod: 'GET' },
+  },
   // Несуществующего игрока уводит 302 на /dashboard, а там обычная страница без «Player not found» из манифеста.
   // Редиректы не следуем: 2xx — игрок есть, редирект — нет.
   Clozemaster: {

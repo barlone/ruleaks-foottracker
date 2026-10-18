@@ -1,6 +1,6 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { Fragment, useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowUp, Asterisk, FolderSearch, LogOut, MapPin, Network, RefreshCw, Search, Send, ShieldAlert, UserSearch } from 'lucide-react';
 import { trpc } from '../lib/trpc.ts';
 import { toasts } from '../lib/toast.ts';
@@ -16,7 +16,8 @@ const NAV = [
   { to: '/search/geo', label: 'Поиск по геоданным', icon: MapPin, hint: 'точка · радиус', feature: 'geo' },
   { to: '/search/pages', label: 'Поиск личных страниц', icon: UserSearch, hint: 'ник · соцсети · сайты', feature: 'pages' },
   { to: '/search/fuzzy', label: 'Нечёткий поиск', icon: Asterisk, hint: 'маски email и номеров' },
-  { to: '/dossiers', label: 'Досье', icon: FolderSearch, hint: 'личности и группы' },
+  // divider — линия-разделитель над пунктом (как граница шапки над первым): поиск отдельно от рабочих объектов.
+  { to: '/dossiers', label: 'Досье', icon: FolderSearch, hint: 'личности и группы', divider: true },
   { to: '/investigations', label: 'Расследования', icon: Network, hint: 'связи · факты · гипотезы' },
 ] as const;
 
@@ -115,9 +116,12 @@ function Sidebar() {
         <div className="lg:hidden"><Brand compact /></div>
       </div>
       <nav className="flex-1 space-y-1 p-3">
-        {nav.map(({ to, label, icon: Icon, hint }) => (
-          <Link
-            key={to}
+        {nav.map((item) => {
+          const { to, label, icon: Icon, hint } = item;
+          return (
+            <Fragment key={to}>
+              {'divider' in item && item.divider && <div className="-mx-3 !my-2 border-t border-line" />}
+              <Link
             to={to}
             className="group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-dim transition hover:bg-mint/5 hover:text-text max-lg:justify-center"
             activeOptions={{ exact: true, includeSearch: false }}
@@ -128,8 +132,10 @@ function Sidebar() {
               <span className="block text-sm font-semibold">{label}</span>
               <span className="block font-mono text-[10px] uppercase tracking-wider text-mute group-hover:text-dim">{hint}</span>
             </span>
-          </Link>
-        ))}
+              </Link>
+            </Fragment>
+          );
+        })}
       </nav>
       <div className="border-t border-line p-3 max-lg:hidden">
         <div className="mb-2 flex items-center gap-2.5">

@@ -26,7 +26,7 @@ export function DossiersPage() {
   // Сервер отдаёт список по названию — в обоих видах порядок один.
 
   return (
-    <div className="space-y-6 py-6 pl-6 pr-[30px]">
+    <div className="space-y-6 pt-2.5 pb-6 pl-6 pr-[30px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold">Досье</h1>

@@ -32,7 +32,7 @@ export function SearchLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="grid gap-6 py-6 pl-6 pr-[30px] xl:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="grid gap-6 pt-2.5 pb-6 pl-6 pr-[30px] xl:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-6">
         <header className="animate-fade-up">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">

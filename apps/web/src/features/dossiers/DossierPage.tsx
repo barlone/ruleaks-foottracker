@@ -81,7 +81,7 @@ export function DossierPage() {
   const media = items('media').filter((m) => m.album !== PHOTO_ALBUM);
 
   return (
-    <div className="text-plus-1 space-y-[1.2rem] py-[1.2rem] pl-6 pr-[30px]">
+    <div className="text-plus-1 space-y-[1.2rem] pt-2.5 pb-[1.2rem] pl-6 pr-[30px]">
       {/* «Все досье» и кнопки (экспорт, доступ, удаление) — одной строкой над колонками. */}
       <div className="flex min-h-9 items-center justify-between gap-4">
         <Link to="/dossiers" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">

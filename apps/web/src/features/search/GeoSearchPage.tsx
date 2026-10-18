@@ -56,7 +56,7 @@ export function GeoSearchPage() {
   }
   if (!geo.data) {
     return (
-      <div className="py-6 pl-6 pr-[30px]">
+      <div className="pt-2.5 pb-6 pl-6 pr-[30px]">
         <Empty>Поиск по геоданным выключен в настройках сервера.</Empty>
       </div>
     );

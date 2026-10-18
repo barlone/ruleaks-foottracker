@@ -55,7 +55,7 @@ export function InvestigationPage() {
 
   return (
     <div className="text-plus-1 flex h-full flex-col">
-      <header className="border-b border-line bg-panel/60 pb-0 pl-6 pr-[30px] pt-4 backdrop-blur">
+      <header className="border-b border-line bg-panel/60 pb-0 pl-6 pr-[30px] pt-2.5 backdrop-blur">
         {/* «Все расследования» и кнопки (экспорт, доступ, удаление) — одной строкой над заголовком. */}
         <div className="mb-2 flex items-center justify-between gap-4">
           {me.data ? (

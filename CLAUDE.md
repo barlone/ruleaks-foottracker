@@ -290,7 +290,8 @@ thumbnail re-fetches its URL and shows the HTTP status/type. The startup log and
 
 - Theme tokens are in `apps/web/src/styles.css` (`@theme`): black background, mint `#2EE0AC`, JetBrains Mono + Manrope;
   border radii are deliberately 3× smaller than Tailwind defaults. Shared primitives are in `src/components/ui.tsx`.
-- Page containers are full-width with `pl-6 pr-[30px]` (no centered max-width).
+- Page containers are full-width with `pt-2.5 pl-6 pr-[30px]` (no centered max-width); the 10 px top padding puts the
+  first line of the page title level with the visible top of the sidebar logo — keep it when adding a page.
 - Markdown is the storage format for all long text; `@` in the TipTap editor inserts a plain link
   `[@Title](/dossiers/<id>)` rather than a custom node, so stored text stays portable.
 - Every dossier item and fact carries a `source` with an Admiralty-code rating (reliability A–F, credibility 1–6),

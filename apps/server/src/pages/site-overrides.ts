@@ -115,6 +115,8 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   LibraryThing: {
     verify: ({ httpStatus, text }) => (httpStatus === 403 || /<title>LibraryThing \| (High traffic|One moment)/.test(text) ? 'waf' : null),
   },
+  // Инстанс закрыт: любой адрес — 301 на страницу-заглушку media.mastodon.cloud (там 200).
+  'mastodon.cloud': { disabled: true },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

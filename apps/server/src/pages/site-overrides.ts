@@ -173,6 +173,14 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { regexCheck: /^[A-Za-z0-9_]{1,25}$/ },
     claimedMsg: [' - Twitch</title>'],
   },
+  // Профили закрыты для гостей: любой member.php?username=… (даже эталонный red) — 200 «Вы не авторизованы на сайте».
+  Velomania: { disabled: true },
+  // Доступен только из США: CloudFront отвечает 403 «could not be satisfied»; обход манифеста через test1.venmo.com
+  // с подменой Host тоже даёт 403 (голый ответ балансировщика) — без текста из манифеста всё считалось найденным.
+  Venmo: {
+    patch: { urlProbe: null, headers: {} },
+    verify: ({ httpStatus }) => (httpStatus === 403 ? 'waf' : null),
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

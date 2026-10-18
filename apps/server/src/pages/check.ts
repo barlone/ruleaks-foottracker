@@ -53,6 +53,7 @@ const WAF_HITS = [
   '<title>Just a moment...</title>', // 2026-10-18 Cloudflare challenge без cf-mitigated и загрузчик realmeye.com (200 + meta refresh)
   "<title>Making sure you're not a bot!", // 2026-10-18 Anubis (social.tchncs.de и другие Fediverse-инстансы), отдаётся с кодом 200
   '<title>Making sure you&#39;re not a bot!', // то же с экранированным апострофом
+  '<TITLE>ERROR: The request could not be satisfied</TITLE>', // 2026-10-18 CloudFront: гео-блок или WAF (account.venmo.com, 7cups без UA), 403
 ];
 
 /** Фрагменты адреса, на который сайт уводит редиректом ради проверки на бота или согласия на cookie (там 200, но это не страница). */

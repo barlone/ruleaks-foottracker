@@ -103,6 +103,8 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { requestMethod: 'GET' },
     notFoundMsg: ['<title>Page Not Found', 'The page you requested was not found'],
   },
+  // Любой /user/<ник> (даже существующий) — форма входа, сайт закрыт для гостей: проверить нельзя.
+  Hubski: { disabled: true },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

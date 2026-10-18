@@ -97,6 +97,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { requestMethod: 'GET' },
     notFoundMsg: ['<title>User not found | Hashnode'],
   },
+  // Серверу сайт отдаёт 200 со страницей Fastly «Client Challenge» (ловится в WAF_HITS, но только по телу — нужен GET).
+  // Если пропустит, несуществующий профиль — страница «Page Not Found».
+  Houzz: {
+    patch: { requestMethod: 'GET' },
+    notFoundMsg: ['<title>Page Not Found', 'The page you requested was not found'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

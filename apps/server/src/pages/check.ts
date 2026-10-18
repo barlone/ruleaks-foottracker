@@ -46,6 +46,8 @@ const WAF_HITS = [
   'AwsWafIntegration.forceRefreshToken', // 2024-11-11 Cloudfront (AWS)
   '{return l.onPageView}}),Object.defineProperty(r,"perimeterxIdentifiers",{enumerable:', // 2024-04-09 PerimeterX / Human Security
   '/shld/v0/verify.js', // 2026-10-18 Apple «Security Verification» (developer.apple.com/forums)
+  '<title>Client Challenge</title>', // 2026-10-18 Fastly client challenge (houzz.com), отдаётся с кодом 200
+  '/_fs-ch-', // 2026-10-18 Fastly client challenge — пути его ресурсов
 ];
 
 /** Фрагменты адреса, на который сайт уводит редиректом ради проверки на бота (ответ там 200, но это не страница). */

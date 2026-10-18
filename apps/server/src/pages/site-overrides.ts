@@ -78,6 +78,10 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   EyeEm: { disabled: true },
   // Домен припаркован на GoDaddy: любой адрес — 200 со страницей парковки.
   'F3.cool': { disabled: true },
+  // Несуществующий профиль — 200 с <title>undefined | GeeksforGeeks Profile (манифест ждёт устаревшее «false | …»).
+  GeeksforGeeks: {
+    notFoundMsg: ['<title>undefined '],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

@@ -40,6 +40,16 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { requestMethod: 'GET' },
     notFoundMsg: ['<title>Error - Page Not Found', 'The page you’re looking for can’t be found'],
   },
+  // Страница профиля — пустой каркас SPA (200 на любой адрес), профиль грузится через API поиска:
+  // page_type=account_details отвечает 200 для существующего аккаунта и 400 для несуществующего.
+  'Archive.org': {
+    patch: {
+      urlProbe: 'https://archive.org/services/search/beta/page_production/?page_type=account_details&page_target=%40{}&page_elements=%5B%22uploads%22%5D&hits_per_page=1&page=1',
+      errorType: 'status_code',
+      errorCode: [400, 404],
+      requestMethod: 'GET',
+    },
+  },
   // Отвечает 202 на любой адрес (страница AWS WAF challenge), а несуществующий профиль — «Not Found» с кодом 200.
   // Манифест проверяет только код ответа HEAD-ом, поэтому любой ник считался найденным.
   '7Cups': {

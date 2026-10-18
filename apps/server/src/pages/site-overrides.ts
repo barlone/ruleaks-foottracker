@@ -123,6 +123,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { requestMethod: 'GET' },
     notFoundMsg: ['página não existe'],
   },
+  // Несуществующий канал — 200 с canonical на главную (<link rel="canonical" href="https://odysee.com"/>); манифест
+  // ждёт устаревшую форму тега (content="odysee.com"). У канала canonical ведёт на /@Имя:id.
+  Odysee: {
+    notFoundMsg: ['<link rel="canonical" href="https://odysee.com"/>', '<link rel="canonical" content="odysee.com"/>'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

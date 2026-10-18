@@ -144,6 +144,8 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { regexCheck: /^[^.]+$/ },
     notFoundMsg: ['(404 Not found)'],
   },
+  // Сайт переделан в видеочат: любой /<ник>, включая эталонного пользователя манифеста, — 404 с главной страницей.
+  RocketTube: { disabled: true },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

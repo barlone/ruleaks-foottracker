@@ -181,6 +181,10 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { urlProbe: null, headers: {} },
     verify: ({ httpStatus }) => (httpStatus === 403 ? 'waf' : null),
   },
+  // Ник с точкой — 404 с пустым телом, без «Not Found» из манифеста, и считался найденным. Вердикт по коду.
+  Vero: {
+    patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

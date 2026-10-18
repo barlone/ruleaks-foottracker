@@ -137,7 +137,7 @@ function fakeDeep(query: string): DeepRow[] {
       }
     }
   }
-  rows.push({ prm: 'phones', val: '+7 900 000-11-22', val_id: id++, link4: rows[0]?.val ?? query, link4_id: 1 });
+  rows.push({ prm: 'phones', val: '+7 900 000-11-22', val_id: id++, link4: rows[0]?.prm ?? query, link4_id: 1 });
   return rows;
 }
 

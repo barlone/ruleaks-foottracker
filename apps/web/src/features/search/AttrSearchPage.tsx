@@ -518,6 +518,28 @@ export function ValueRow({
   );
 }
 
+/** Подпись «найдено через …» под строкой deep-поиска: имя и значение родительского атрибута с копированием. */
+function FoundVia({ row, parent }: { row: DeepRow; parent?: DeepRow }) {
+  const via = parent?.val ?? '';
+  const label = LEAK_FIELDS[(parent?.prm ?? row.link4) as LeakField] ?? row.link4;
+  return (
+    <div className="ml-8 flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[10px] text-mute">
+      <CornerDownRight size={10} className="shrink-0" />
+      <span className="shrink-0">найдено через {row.link4}</span>
+      {via && (
+        <>
+          <span className="break-all text-text/70">{via}</span>
+          <CopyButton
+            value={attrCopyValue(parent?.prm ?? '', via)}
+            title={`Скопировать: ${label}`}
+            className="[&>svg]:size-3"
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 function DeepResult({
   rows, selected, onToggle, onPivot,
 }: {
@@ -531,6 +553,8 @@ function DeepResult({
     for (const r of rows) m.set(r.prm, [...(m.get(r.prm) ?? []), r]);
     return [...m.entries()];
   }, [rows]);
+  // link4_id — это val_id родительской строки в том же ответе: по нему достаём значение, через которое найдена эта.
+  const byId = useMemo(() => new Map(rows.map((r) => [r.val_id, r] as const)), [rows]);
   if (!rows.length) return <Empty>Ничего не найдено</Empty>;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -539,11 +563,7 @@ function DeepResult({
           {list.map((r) => (
             <div key={r.val_id}>
               <ValueRow field={prm} value={r.val} checked={selected.has(`${prm}:${r.val}`)} onToggle={onToggle} onPivot={onPivot} />
-              {r.link4_id > 0 && (
-                <div className="ml-8 flex items-center gap-1 font-mono text-[10px] text-mute">
-                  <CornerDownRight size={10} /> найдено через {r.link4}
-                </div>
-              )}
+              {r.link4_id > 0 && <FoundVia row={r} parent={byId.get(r.link4_id)} />}
             </div>
           ))}
         </Card>

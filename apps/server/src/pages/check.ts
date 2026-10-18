@@ -50,6 +50,7 @@ const WAF_HITS = [
   '/_fs-ch-', // 2026-10-18 Fastly client challenge — пути его ресурсов
   '<title>Vercel Security Checkpoint</title>', // 2026-10-18 Vercel (observablehq.com), отдаётся с кодом 429
   '.elements.namedItem("solution").value=', // 2026-10-18 JS-проверка Reddit (www.reddit.com), отдаётся с кодом 200
+  '<title>Just a moment...</title>', // 2026-10-18 Cloudflare challenge без cf-mitigated и загрузчик realmeye.com (200 + meta refresh)
 ];
 
 /** Фрагменты адреса, на который сайт уводит редиректом ради проверки на бота (ответ там 200, но это не страница). */

@@ -82,6 +82,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },
     notFoundMsg: ['"User not found"'],
   },
+  // Непубличный аккаунт — 404 «Uh-oh! The profile you're trying to view isn't public yet» без текста из манифеста
+  // («Whoops, that page is gone» — только у несуществующего), и такой ник считался найденным. Страницы у него нет:
+  // вердикт по коду ответа.
+  Dribbble: {
+    patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },
+  },
   // Сервис закрыт: любой /u/<ник> — 301 на freepik.com/photos (там 200, и ник считался найденным).
   EyeEm: { disabled: true },
   // Домен припаркован на GoDaddy: любой адрес — 200 со страницей парковки.

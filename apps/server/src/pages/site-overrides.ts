@@ -87,6 +87,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   Giphy: {
     notFoundMsg: ['<title>404 Not Found'],
   },
+  // При частых запросах с одного адреса HN отвечает 419 и телом «Sorry» (без точки — манифест ждёт «Sorry.»),
+  // и такая блокировка считалась профилем. Профиль узнаём по заголовку страницы.
+  HackerNews: {
+    verify: ({ httpStatus, text }) => (httpStatus === 419 ? 'waf' : text.includes('<title>Profile: ') ? 'claimed' : 'available'),
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

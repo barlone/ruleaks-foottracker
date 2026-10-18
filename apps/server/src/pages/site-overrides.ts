@@ -56,6 +56,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { regexCheck: /^[A-Za-z][A-Za-z0-9_]*$/ },
     claimedMsg: ['already taken'],
   },
+  // На любой адрес отвечает 200 заглушкой «Вход через SberID» (JS ставит cookie и переходит дальше, настоящий
+  // ответ — 404 — виден только после этого). Без браузера проверить нельзя: показываем «защита от ботов».
+  Championat: {
+    patch: { requestMethod: 'GET' },
+    verify: ({ text }) => (text.includes('Вход через SberID') ? 'waf' : null),
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

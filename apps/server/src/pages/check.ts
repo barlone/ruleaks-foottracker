@@ -49,6 +49,7 @@ const WAF_HITS = [
   '<title>Client Challenge</title>', // 2026-10-18 Fastly client challenge (houzz.com), отдаётся с кодом 200
   '/_fs-ch-', // 2026-10-18 Fastly client challenge — пути его ресурсов
   '<title>Vercel Security Checkpoint</title>', // 2026-10-18 Vercel (observablehq.com), отдаётся с кодом 429
+  '.elements.namedItem("solution").value=', // 2026-10-18 JS-проверка Reddit (www.reddit.com), отдаётся с кодом 200
 ];
 
 /** Фрагменты адреса, на который сайт уводит редиректом ради проверки на бота (ответ там 200, но это не страница). */

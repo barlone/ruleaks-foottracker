@@ -69,7 +69,7 @@ export function Root() {
 
 function Brand({ compact }: { compact?: boolean }) {
   return (
-    <Link to="/search" className="flex items-center gap-3">
+    <Link to="/search" className="flex items-center gap-1.5">
       <img src="/logo.png" alt="" className="size-9 drop-shadow-[0_0_14px_rgba(46,224,172,0.35)]" />
       {!compact && (
         <div className="leading-tight">
@@ -93,7 +93,7 @@ function UserButton({ onClick, className }: { onClick: () => void; className?: s
       aria-label="Пользователь"
       className={clsx('grid shrink-0 cursor-pointer place-items-center text-dim transition hover:bg-mint/5 hover:text-mint', className)}
     >
-      <GearInfoIcon size={22} />
+      <GearInfoIcon size={33} />
     </button>
   );
 }

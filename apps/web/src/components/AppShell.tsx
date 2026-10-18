@@ -111,11 +111,11 @@ function Sidebar() {
 
   return (
     <aside className="relative z-10 flex w-64 shrink-0 flex-col border-r border-line bg-panel/80 backdrop-blur max-lg:w-16">
-      <div className="flex h-16 items-center border-b border-line px-4 max-lg:justify-center max-lg:px-0">
+      <div className="flex h-16 shrink-0 items-center border-b border-line px-4 max-lg:justify-center max-lg:px-0">
         <div className="max-lg:hidden"><Brand /></div>
         <div className="lg:hidden"><Brand compact /></div>
       </div>
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {nav.map((item) => {
           const { to, label, icon: Icon, hint } = item;
           return (
@@ -137,7 +137,7 @@ function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-line p-3 max-lg:hidden">
+      <div className="shrink-0 border-t border-line p-3 max-lg:hidden">
         <div className="mb-2 flex items-center gap-2.5">
           <div className="grid size-8 place-items-center rounded-full border border-line bg-mint/10 font-mono text-sm text-mint">
             {user.displayName.slice(0, 1)}

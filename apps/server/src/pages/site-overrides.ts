@@ -56,6 +56,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { regexCheck: /^[A-Za-z][A-Za-z0-9_]*$/ },
     claimedMsg: ['already taken'],
   },
+  // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
+  // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
+  dailykos: {
+    patch: { urlProbe: null, errorType: 'status_code', errorCode: null, errorMsg: [] },
+  },
   // Отвечает 202 на любой адрес (страница AWS WAF challenge), а несуществующий профиль — «Not Found» с кодом 200.
   // Манифест проверяет только код ответа HEAD-ом, поэтому любой ник считался найденным.
   '7Cups': {

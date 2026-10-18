@@ -165,6 +165,8 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
     patch: { urlProbe: 'https://www.instapaper.com/data/profile/{}?page=1' },
     claimedMsg: ['"user": {', '"user":{'],
   },
+  // Сервис закрыт: любой адрес — 403 без текста из манифеста.
+  Trovo: { disabled: true },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

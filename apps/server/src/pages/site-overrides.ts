@@ -138,6 +138,12 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   Rarible: {
     patch: { errorType: 'response_url' },
   },
+  // Часть ника после точки сайт (Rails) считает расширением формата: /irina.krasnonos → профиль irina. Ники с точкой
+  // не проверяем; несуществующий профиль — 404 с заголовком «…doesn't exist (404 Not found)».
+  ReverbNation: {
+    patch: { regexCheck: /^[^.]+$/ },
+    notFoundMsg: ['(404 Not found)'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

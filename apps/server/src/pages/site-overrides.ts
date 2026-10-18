@@ -105,6 +105,11 @@ export const SITE_OVERRIDES: Record<string, SiteOverride> = {
   },
   // Любой /user/<ник> (даже существующий) — форма входа, сайт закрыт для гостей: проверить нельзя.
   Hubski: { disabled: true },
+  // Несуществующий пользователь — 404 с «User not found»; манифест ждёт устаревшее «The requested user does not exist…».
+  interpals: {
+    patch: { errorType: 'status_code', errorCode: null, errorMsg: [] },
+    notFoundMsg: ['User not found'],
+  },
   // Эндпоинт signup/check_nickname исчез (сайт переехал на WordPress, там HTML) — JSON манифеста не встречался,
   // любой ник считался найденным. Страница пользователя отвечает 404, когда его нет (у авторов — 301 на /staff/…).
   dailykos: {

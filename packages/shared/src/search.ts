@@ -37,7 +37,7 @@ export const SEARCH_KINDS = [
   { id: 'milpn', label: 'Личный номер (воен.)', param: 'milpn', raw: rl('raw_search.bymilpn'), deep: rl('deep_search.bymilpn'), placeholder: 'Х-136096' },
   { id: 'bsvid', label: 'Свид. о рождении', param: 'bsvid', raw: rl('raw_search.bybsvid'), deep: rl('deep_search.bybsvid'), placeholder: 'I-МЮ123456' },
   { id: 'orgnn', label: 'ИНН организации', param: 'orgnn', raw: rl('raw_search.byorgnn'), deep: null, placeholder: '7701234567' },
-  { id: 'addr', label: 'Адрес (часть)', param: 'addr1', raw: rl('raw_search.bypartaddr'), deep: null, placeholder: 'Москва Тверская 7' },
+  { id: 'addr', label: 'Адрес', param: 'addr1', raw: rl('raw_search.bypartaddr'), deep: null, placeholder: 'Москва Тверская 7' },
 ].map((k) => ({ ...k, service: 'ruleaks' as const })) satisfies SearchKind[];
 
 export type SearchKindId = (typeof SEARCH_KINDS)[number]['id'];
@@ -195,6 +195,28 @@ const CYR_TO_LAT: Record<string, string> = {
 };
 const mapChars = (s: string, m: Record<string, string>) => [...s].map((c) => m[c] ?? c).join('');
 
+/**
+ * Служебные слова адреса, которые не ищутся: база хранит адрес неупорядоченным набором фрагментов (makesrhstr),
+ * а у записи в утечке «г.», «кв.» и т.п. может и не быть — с ними в запросе она не найдётся. К тому же шлюз берёт
+ * только первые шесть слов, и служебные заняли бы место значимых.
+ */
+const ADDR_STOP_WORDS = new Set([
+  'г', 'гор', 'город', 'ул', 'улица', 'д', 'дом', 'к', 'корп', 'корпус', 'кв', 'квартира', 'с', 'село', 'им', 'имени',
+]);
+
+/**
+ * «г.Краснодар, ул. им.70-летия Октября 1/2, 60» → «Краснодар 70-летия Октября 1/2 60»: знаки препинания — в пробелы
+ * (кроме «/» и «-» внутри слова: 1/2, 70-летия), служебные слова убираются, пробелы схлопываются.
+ */
+export function normalizeAddr(raw: string): string {
+  return raw
+    .replace(/[^\p{L}\p{N}/-]+/gu, ' ')
+    .split(' ')
+    .map((w) => w.replace(/^[/-]+|[/-]+$/g, ''))
+    .filter((w) => w && !ADDR_STOP_WORDS.has(w.toLowerCase()))
+    .join(' ');
+}
+
 /** Значение в том виде, в каком его отправляет бот (InputNormalizer.normalize). */
 export function normalizeQuery(kind: string, raw: string): string {
   const v = raw.trim();
@@ -235,7 +257,7 @@ export function normalizeQuery(kind: string, raw: string): string {
     case 'name':
       return normalizeName(v);
     case 'addr':
-      return v.replace(/\s+/g, ' ');
+      return normalizeAddr(v);
     default:
       return v;
   }

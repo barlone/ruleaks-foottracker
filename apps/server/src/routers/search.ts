@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, STEP2_FIELDS, SearchSectionSchema, TG_MODE_IDS,
+  FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, STEP2_FIELDS, STEP2_KINDS, SearchSectionSchema, TG_MODE_IDS,
   checkFulltext, checkMask, detectKind, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
   AttrPdfRequest, AttrXlsxRequest, TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
@@ -27,6 +27,8 @@ const StartInput = z.discriminatedUnion('section', [
     deep: z.boolean(),
     /** Дополнительный поиск вторым шагом: какие атрибуты брать из его записей (STEP2_FIELDS). Не вместе с deep. */
     step2: z.array(z.string().max(32)).max(64).optional(),
+    /** По каким найденным атрибутам искать вторым шагом (STEP2_KINDS); нет — по всем. */
+    step2by: z.array(z.string().max(16)).max(16).optional(),
   }),
   z.object({
     section: z.literal('tg'),
@@ -93,7 +95,10 @@ function planAttr(input: Extract<StartInput, { section: 'attr' }>): Plan {
   if (input.step2 && !deep) {
     const fields = STEP2_FIELDS.filter((f) => input.step2!.includes(f));
     if (!fields.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Отметьте атрибуты для второго шага поиска' });
+    const by = input.step2by ? STEP2_KINDS.filter((k) => input.step2by!.includes(k)) : STEP2_KINDS;
+    if (!by.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Второй шаг поиска невозможен: не выбраны атрибуты, по которым искать' });
     extra.step2 = fields.join(',');
+    extra.step2by = by.join(',');
   }
   // Значение нормализуется и раскладывается по параметрам, как в боте (ФИО → name1..3 + day/month/year).
   return { path: deep ? kind.deep! : kind.raw, params: searchParams(kind, input.value), service: 'ruleaks', kind: kind.id, deep, extra };
@@ -117,7 +122,8 @@ function planFuzzy(input: Extract<StartInput, { section: 'fuzzy' }>): Plan {
 /** Ответ первого шага с планом второго: задача остаётся running, пока второй шаг идёт фоном. */
 function withStep2(job: { kind: string; query: string; params: Record<string, string> }, result: unknown) {
   if (!job.params.step2) return null;
-  const res = step2Begin(result, job.params.step2.split(','), { kind: job.kind, value: job.query });
+  const by = job.params.step2by?.split(',') ?? STEP2_KINDS;
+  const res = step2Begin(result, job.params.step2.split(','), by, { kind: job.kind, value: job.query });
   return { result: res, state: res.step2.queries.length ? ('running' as const) : ('done' as const) };
 }
 

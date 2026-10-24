@@ -133,7 +133,7 @@ export function JobStatus({ job, loading, error }: { job: RouterOutputs['search'
     return (
       <Card>
         <div className="flex items-center gap-3 font-mono text-sm text-mint">
-          <Spinner /> Второй шаг: поиск по найденным ИНН, СНИЛС и документам — {done} из {step2.queries.length}
+          <Spinner /> Второй шаг: поиск по найденным атрибутам — {done} из {step2.queries.length}
         </div>
         <div className="mt-3 h-1 overflow-hidden rounded bg-line-soft">
           <div className="h-full bg-mint transition-all" style={{ width: `${(done / Math.max(1, step2.queries.length)) * 100}%` }} />

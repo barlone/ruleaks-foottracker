@@ -22,9 +22,9 @@ const FIELDS = Object.keys(LEAK_FIELDS) as LeakField[];
 const MAX_FAILS_IN_ROW = 3;
 
 /** Ответ первого шага → снимок с планом второго. */
-export function step2Begin(result: unknown, fields: string[], first: { kind: string; value: string }): Step2Result {
+export function step2Begin(result: unknown, fields: string[], by: readonly string[], first: { kind: string; value: string }): Step2Result {
   const body = (result ?? {}) as Body;
-  const { queries, skipped } = step2Queries(body.job?.leaks ?? [], first);
+  const { queries, skipped } = step2Queries(body.job?.leaks ?? [], first, by);
   return { ...body, step2: { fields, queries, skipped } };
 }
 

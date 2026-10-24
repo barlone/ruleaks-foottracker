@@ -1,9 +1,9 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, ListChecks, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, ListChecks, Search as SearchIcon, SearchCheck, ShieldCheck, Zap } from 'lucide-react';
 import {
-  FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_MAX_SEARCHES, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
+  FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_KINDS, STEP2_MAX_SEARCHES, STEP2_SOURCES, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
   isUkrainianPhone, step2ByText, step2Summary, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type Step2Info,
 } from '@ft/shared';
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
@@ -40,8 +40,10 @@ export function AttrSearchPage() {
   const [value, setValue] = useState(params.q ?? '');
   const [kind, setKind] = useState<string>(params.kind ?? 'auto');
   const [deep, setDeep] = useState(params.deep ?? false);
-  // Дополнительный поиск вторым шагом (взаимоисключающий с глубоким) и какие атрибуты брать из его записей.
+  // Дополнительный поиск вторым шагом (взаимоисключающий с глубоким): по каким найденным атрибутам искать
+  // и какие атрибуты брать из его записей.
   const [step2, setStep2] = useState(false);
+  const [step2By, setStep2By] = useState<Set<string>>(() => new Set(STEP2_KINDS));
   const [step2Fields, setStep2Fields] = useState<Set<string>>(() => new Set(STEP2_FIELDS));
   const [jobId, setJobId] = useState<string | null>(null);
   const utils = trpc.useUtils();
@@ -66,7 +68,10 @@ export function AttrSearchPage() {
   function run(k = effectiveKind, v = value, d = deep) {
     if (!k || !v.trim()) return;
     void navigate({ search: { kind: k, q: v, deep: d } });
-    start.mutate({ section: 'attr', kind: k, value: v.trim(), deep: d && !step2, step2: step2 ? [...step2Fields] : undefined });
+    start.mutate({
+      section: 'attr', kind: k, value: v.trim(), deep: d && !step2,
+      ...(step2 ? { step2: [...step2Fields], step2by: [...step2By] } : {}),
+    });
   }
 
   // Переход по ссылке /search?kind=..&q=.. (из досье или «провалиться» в значение) запускает поиск.
@@ -84,7 +89,8 @@ export function AttrSearchPage() {
   };
 
   const disabled = !me.data?.access.active;
-  const noStep2Fields = step2 && !step2Fields.size;
+  // Второй шаг невозможен, пока не выбрано, по чему искать и что брать.
+  const noStep2Fields = step2 && (!step2By.size || !step2Fields.size);
 
   return (
     <SearchLayout
@@ -145,7 +151,7 @@ export function AttrSearchPage() {
               </label>
               <label
                 className="flex cursor-pointer items-center gap-2"
-                title={`После обычного поиска — простые поиски по найденным ИНН, СНИЛС, паспортам, загранпаспортам и свидетельствам о рождении (до ${STEP2_MAX_SEARCHES}); из их записей добавляются отмеченные атрибуты с пометкой ²`}
+                title={`После обычного поиска — простые поиски по найденным атрибутам (${STEP2_BY_OPTIONS.map((o) => o.label).join(', ')}; до ${STEP2_MAX_SEARCHES} поисков); из их записей добавляются отмеченные атрибуты с пометкой ²`}
               >
                 <input
                   type="checkbox"
@@ -163,7 +169,26 @@ export function AttrSearchPage() {
               )}
               {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
             </div>
-            {step2 && <Step2Fields value={step2Fields} onChange={setStep2Fields} />}
+            {step2 && (
+              <div className="space-y-2">
+                <ChipSet
+                  title="Искать вторым шагом по:"
+                  icon={<SearchCheck size={13} className="text-mint" />}
+                  options={STEP2_BY_OPTIONS}
+                  value={step2By}
+                  onChange={setStep2By}
+                  empty="второй шаг поиска невозможен — отметьте, по каким атрибутам искать"
+                />
+                <ChipSet
+                  title="Брать из второго шага:"
+                  icon={<ListChecks size={13} className="text-mint" />}
+                  options={STEP2_FIELD_OPTIONS}
+                  value={step2Fields}
+                  onChange={setStep2Fields}
+                  empty="второй шаг поиска невозможен — отметьте хотя бы один атрибут"
+                />
+              </div>
+            )}
           </form>
         </Card>
 
@@ -523,29 +548,43 @@ function step2Errors(info: Step2Info): string | undefined {
   return failed.length ? failed.map((q) => `${q.value}: ${q.error ?? 'ошибка'}`).join('\n') : undefined;
 }
 
-/** Какие атрибуты брать из записей второго шага: изначально все; «Все» включает или снимает разом. */
-function Step2Fields({ value, onChange }: { value: Set<string>; onChange: (v: Set<string>) => void }) {
-  const all = value.size === STEP2_FIELDS.length;
-  const toggle = (f: string) => {
+/** По каким найденным атрибутам искать вторым шагом и какие брать из его записей. */
+const STEP2_BY_OPTIONS = STEP2_SOURCES.map((s) => ({ id: s.kind as string, label: fieldLabel(s.field) }));
+const STEP2_FIELD_OPTIONS = STEP2_FIELDS.map((f) => ({ id: f, label: fieldLabel(f) }));
+
+/** Набор переключателей второго шага: изначально всё включено; «Все» включает или снимает разом. */
+function ChipSet({
+  title, icon, options, value, onChange, empty,
+}: {
+  title: string;
+  icon: ReactNode;
+  options: { id: string; label: string }[];
+  value: Set<string>;
+  onChange: (v: Set<string>) => void;
+  /** Предупреждение, когда ничего не выбрано. */
+  empty: string;
+}) {
+  const all = value.size === options.length;
+  const toggle = (id: string) => {
     const next = new Set(value);
-    if (next.has(f)) next.delete(f);
-    else next.add(f);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     onChange(next);
   };
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line-soft bg-bg-soft px-3 py-2.5">
       <span className="mr-1 flex items-center gap-1.5 font-mono text-xs text-dim">
-        <ListChecks size={13} className="text-mint" /> Брать из второго шага:
+        {icon} {title}
       </span>
-      <button type="button" onClick={() => onChange(all ? new Set() : new Set(STEP2_FIELDS))} className={chip(all)}>
+      <button type="button" onClick={() => onChange(all ? new Set() : new Set(options.map((o) => o.id)))} className={chip(all)}>
         Все
       </button>
-      {STEP2_FIELDS.map((f) => (
-        <button key={f} type="button" onClick={() => toggle(f)} className={chip(value.has(f))}>
-          {fieldLabel(f)}
+      {options.map((o) => (
+        <button key={o.id} type="button" onClick={() => toggle(o.id)} className={chip(value.has(o.id))}>
+          {o.label}
         </button>
       ))}
-      {!value.size && <span className="font-mono text-[11px] text-warn">отметьте хотя бы один атрибут</span>}
+      {!value.size && <span className="font-mono text-[11px] text-warn">{empty}</span>}
     </div>
   );
 }

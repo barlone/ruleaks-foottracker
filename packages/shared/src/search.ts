@@ -423,14 +423,25 @@ export const FIELD_TO_KIND: Partial<Record<LeakField, SearchKindId>> = {
 // запись первого шага, где был найден идентификатор (LeakTuple.step2), с пометкой, по чему найдены. База утечки,
 // где нашлось значение второго шага, не важна и не хранится.
 
-/** По каким найденным атрибутам идёт второй шаг и каким видом поиска. */
+/**
+ * По каким найденным атрибутам может идти второй шаг (пользователь выбирает набор) и каким видом поиска.
+ * ok — годится ли значение для поиска: v — нормализованное, raw — как в ответе (свидетельство проверяется до
+ * нормализации: она переводит латинские X, C, M римской серии в кириллицу). По ОГРНИП у шлюза поиска нет.
+ */
 export const STEP2_SOURCES = [
-  { field: 'inns', kind: 'inn', re: RE.inn, by: 'ИНН' },
-  { field: 'snilss', kind: 'snils', re: RE.snils, by: 'СНИЛС' },
-  { field: 'pasps', kind: 'pasp', re: RE.pasp, by: 'паспорту' },
-  { field: 'forpasps', kind: 'fpasp', re: /^\d{9}$/, by: 'загранпаспорту' },
-  { field: 'bsvids', kind: 'bsvid', re: RE.bsvid, by: 'свидетельству о рождении' },
-] as const satisfies readonly { field: LeakField; kind: SearchKindId; re: RegExp; by: string }[];
+  { field: 'inns', kind: 'inn', by: 'ИНН', ok: (v: string) => RE.inn.test(v) },
+  { field: 'snilss', kind: 'snils', by: 'СНИЛС', ok: (v: string) => RE.snils.test(v) },
+  { field: 'pasps', kind: 'pasp', by: 'паспорту', ok: (v: string) => RE.pasp.test(v) },
+  { field: 'forpasps', kind: 'fpasp', by: 'загранпаспорту', ok: (v: string) => /^\d{9}$/.test(v) },
+  { field: 'bsvids', kind: 'bsvid', by: 'свидетельству о рождении', ok: (v: string, raw: string) => RE.bsvid.test(v) || RE.bsvid.test(raw.trim()) },
+  { field: 'emails', kind: 'email', by: 'email', ok: (v: string) => RE.email.test(v) },
+  { field: 'tgids', kind: 'tgid', by: 'Telegram ID', ok: (v: string) => RE.tgid.test(v) },
+  { field: 'milpns', kind: 'milpn', by: 'личному номеру', ok: (v: string, raw: string) => RE.milpn.test(raw.trim()) || /^\p{L}-\d{6}$/u.test(v) },
+  { field: 'weblinks', kind: 'link', by: 'ссылке', ok: (v: string) => RE.link.test(v) || RE.linkBare.test(v) },
+] as const satisfies readonly { field: LeakField; kind: SearchKindId; by: string; ok: (v: string, raw: string) => boolean }[];
+
+export type Step2Kind = (typeof STEP2_SOURCES)[number]['kind'];
+export const STEP2_KINDS: Step2Kind[] = STEP2_SOURCES.map((s) => s.kind);
 
 /** Значение второго шага в записи первого: поле, значение и по каким её идентификаторам найдено. */
 export interface Step2Value {
@@ -474,26 +485,32 @@ export interface Step2Info {
 
 /**
  * Поиски второго шага по записям первого: значения нормализуются как запрос, проверяются по маске вида поиска,
- * не повторяются и не совпадают с исходным запросом. Порядок — по STEP2_SOURCES, затем по порядку в ответе.
+ * не повторяются и не совпадают с исходным запросом. kinds — выбранные пользователем виды (STEP2_KINDS).
+ * Порядок — по кругу: по одному значению каждого вида, затем следующие, — чтобы при лимите STEP2_MAX_SEARCHES
+ * в поиск попал каждый выбранный вид, а не только первый (у поиска по организации сотни ИНН).
  */
-export function step2Queries(leaks: LeakCard[], first: { kind: string; value: string }): { queries: Step2Query[]; skipped: number } {
-  const all: Step2Query[] = [];
+export function step2Queries(leaks: LeakCard[], first: { kind: string; value: string }, kinds: readonly string[] = STEP2_KINDS): { queries: Step2Query[]; skipped: number } {
   const seen = new Set<string>([`${first.kind}:${normalizeQuery(first.kind, first.value)}`]);
-  for (const src of STEP2_SOURCES) for (const card of leaks) for (const t of card.tuples ?? []) for (const raw of t[src.field] ?? []) {
-    const value = normalizeQuery(src.kind, raw);
-    const key = `${src.kind}:${value}`;
-    // Свидетельство проверяется до нормализации: она переводит латинские X, C, M римской серии в кириллицу.
-    if (!(src.re.test(value) || src.re.test(raw.trim())) || seen.has(key)) continue;
-    seen.add(key);
-    all.push({ kind: src.kind, value, state: 'pending' });
-  }
+  const lists = STEP2_SOURCES.filter((src) => kinds.includes(src.kind)).map((src) => {
+    const list: Step2Query[] = [];
+    for (const card of leaks) for (const t of card.tuples ?? []) for (const raw of t[src.field] ?? []) {
+      const value = normalizeQuery(src.kind, raw);
+      const key = `${src.kind}:${value}`;
+      if (!src.ok(value, raw) || seen.has(key)) continue;
+      seen.add(key);
+      list.push({ kind: src.kind, value, state: 'pending' });
+    }
+    return list;
+  });
+  const all: Step2Query[] = [];
+  for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) if (i < l.length) all.push(l[i]!);
   return { queries: all.slice(0, STEP2_MAX_SEARCHES), skipped: Math.max(0, all.length - STEP2_MAX_SEARCHES) };
 }
 
 /** Итог второго шага одной строкой: «12 из 12 поисков (ИНН, СНИЛС) · добавлено значений: 7 · ошибок: 1». */
 export function step2Summary(info: Step2Info): string {
   const done = info.queries.filter((q) => q.state !== 'pending');
-  if (!info.queries.length) return 'по ИНН, СНИЛС и документам искать нечего';
+  if (!info.queries.length) return 'в результате нет значений, по которым искать';
   const labels = [...new Set(info.queries.map((q) => SEARCH_KINDS.find((k) => k.id === q.kind)?.label ?? q.kind))];
   const failed = done.filter((q) => q.state === 'failed').length;
   const added = done.reduce((n, q) => n + (q.added ?? 0), 0);

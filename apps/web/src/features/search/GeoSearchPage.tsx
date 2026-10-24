@@ -108,7 +108,7 @@ function GeoSearch({ config }: { config: GeoConfig }) {
   useRunOnMount(() => {
     run({ lat: fromUrl!.lat, lon: fromUrl!.lon }, fromUrl!.radiusM);
     setFocus((f) => f + 1);
-  }, !!(fromUrl && me.data?.access.active));
+  }, !!fromUrl, !!me.data?.access.active);
 
   // Открыт поиск из истории — точка и радиус на карте те же, что у него.
   const opened = job.data?.section === 'geo' ? job.data : null;

@@ -204,6 +204,12 @@ the client queues requests per token and skips polls that are too early instead 
 Job progress is advanced only when the browser polls `search.job` (TanStack Query, also in background tabs); a job
 nobody polls stays `running` until `[api] job-timeout-sec`. A server-side poller is planned.
 
+«Дополнительный поиск вторым шагом» (attr, exclusive with deep; `params.step2` = chosen fields): after the raw search,
+`search/step2.ts` runs up to `STEP2_MAX_SEARCHES` raw searches by the found INN/SNILS/passport/foreign passport/birth
+certificate (`STEP2_SOURCES`) in the background — not driven by polls — and merges the chosen fields of their tuples
+into the same leak cards as `step: 2` (UI, PDF and Excel show «²»). The job stays `running` with no `gatewayJobId`
+while `result.step2` records progress; a poll after a server restart resumes it (ARCHITECTURE.md §5.0).
+
 ### Geo search
 
 `/search/geo` (`features/search/GeoSearchPage.tsx` + `GeoPicker.tsx`): MapLibre GL map with a draggable marker

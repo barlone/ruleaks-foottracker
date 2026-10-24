@@ -102,7 +102,7 @@ function PagesSearch({ sites, emailSites }: { sites: number; emailSites: number 
     start.mutate({ username });
   }
 
-  useRunOnMount(() => start.mutate({ username: clean(params.q!) }), !!(params.q && !problemOf(clean(params.q)) && me.data?.access.active));
+  useRunOnMount(() => start.mutate({ username: clean(params.q!) }), !!(params.q && !problemOf(clean(params.q))), !!me.data?.access.active);
 
   const j = job.data;
   // Ошибка запроса задания закрывает окно процесса: иначе оно показывало бы устаревшее «выполняется» без выхода.

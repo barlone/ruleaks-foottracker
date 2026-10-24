@@ -1,8 +1,11 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
-import { FIELD_TO_KIND, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds, isUkrainianPhone, type DeepRow, type LeakCard, type LeakField } from '@ft/shared';
+import { Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, ListChecks, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
+import {
+  FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_MAX_SEARCHES, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
+  isUkrainianPhone, step2Summary, type DeepRow, type LeakCard, type LeakField, type Step2Info,
+} from '@ft/shared';
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
@@ -37,6 +40,9 @@ export function AttrSearchPage() {
   const [value, setValue] = useState(params.q ?? '');
   const [kind, setKind] = useState<string>(params.kind ?? 'auto');
   const [deep, setDeep] = useState(params.deep ?? false);
+  // Дополнительный поиск вторым шагом (взаимоисключающий с глубоким) и какие атрибуты брать из его записей.
+  const [step2, setStep2] = useState(false);
+  const [step2Fields, setStep2Fields] = useState<Set<string>>(() => new Set(STEP2_FIELDS));
   const [jobId, setJobId] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
@@ -60,7 +66,7 @@ export function AttrSearchPage() {
   function run(k = effectiveKind, v = value, d = deep) {
     if (!k || !v.trim()) return;
     void navigate({ search: { kind: k, q: v, deep: d } });
-    start.mutate({ section: 'attr', kind: k, value: v.trim(), deep: d });
+    start.mutate({ section: 'attr', kind: k, value: v.trim(), deep: d && !step2, step2: step2 ? [...step2Fields] : undefined });
   }
 
   // Переход по ссылке /search?kind=..&q=.. (из досье или «провалиться» в значение) запускает поиск.
@@ -69,7 +75,7 @@ export function AttrSearchPage() {
     setKind(params.kind!);
     setDeep(params.deep ?? false);
     start.mutate({ section: 'attr', kind: params.kind!, value: params.q!, deep: params.deep ?? false });
-  }, !!(params.q && params.kind && me.data?.access.active));
+  }, !!(params.q && params.kind), !!me.data?.access.active);
 
   const pivot = (k: string, v: string) => {
     setValue(v);
@@ -78,6 +84,7 @@ export function AttrSearchPage() {
   };
 
   const disabled = !me.data?.access.active;
+  const noStep2Fields = step2 && !step2Fields.size;
 
   return (
     <SearchLayout
@@ -118,20 +125,45 @@ export function AttrSearchPage() {
                   <option key={k.id} value={k.id}>{k.label}</option>
                 ))}
               </Select>
-              <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !effectiveKind || !value.trim() || start.isPending}>
+              <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !effectiveKind || !value.trim() || noStep2Fields || start.isPending}>
                 {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <label className={clsx('flex cursor-pointer items-center gap-2', !kindInfo?.deep && 'opacity-40')}>
-                <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} disabled={!kindInfo?.deep} className="accent-[var(--color-mint)]" />
+                <input
+                  type="checkbox"
+                  checked={deep && !step2}
+                  onChange={(e) => {
+                    setDeep(e.target.checked);
+                    if (e.target.checked) setStep2(false);
+                  }}
+                  disabled={!kindInfo?.deep}
+                  className="accent-[var(--color-mint)]"
+                />
                 <Layers size={14} className="text-mint" /> Глубокий поиск со связями
+              </label>
+              <label
+                className="flex cursor-pointer items-center gap-2"
+                title={`После обычного поиска — простые поиски по найденным ИНН, СНИЛС, паспортам, загранпаспортам и свидетельствам о рождении (до ${STEP2_MAX_SEARCHES}); из их записей добавляются отмеченные атрибуты с пометкой ²`}
+              >
+                <input
+                  type="checkbox"
+                  checked={step2}
+                  onChange={(e) => {
+                    setStep2(e.target.checked);
+                    if (e.target.checked) setDeep(false);
+                  }}
+                  className="accent-[var(--color-mint)]"
+                />
+                <ListChecks size={14} className="text-mint" /> Дополнительный поиск вторым шагом
               </label>
               {(kind === 'auto' || autoPick) && value.trim() && !detected.length && (
                 <Tag tone="warn">{isUkrainianPhone(value) ? 'поиск только по номерам РФ' : 'тип не распознан — выберите вручную'}</Tag>
               )}
               {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
             </div>
+            {step2 && <Step2Fields value={step2Fields} onChange={setStep2Fields} />}
           </form>
         </Card>
 
@@ -194,7 +226,11 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
   const res = job.result as { job?: { leaks?: LeakCard[]; rows?: DeepRow[] } } | null;
   const leaks = res?.job?.leaks ?? [];
   const rows = res?.job?.rows ?? [];
-  const summary = job.deep ? `${rows.length} связанных значений` : `${leaks.length} утечек`;
+  const step2 = (job.result as { step2?: Step2Info } | null)?.step2 ?? null;
+  const step2Added = step2?.queries.reduce((n, q) => n + (q.added ?? 0), 0) ?? 0;
+  const summary = job.deep
+    ? `${rows.length} связанных значений`
+    : `${leaks.length} утечек${step2 ? `, вторым шагом добавлено записей: ${step2Added}` : ''}`;
 
   // Атрибуты, которые есть в результатах, и сколько у каждого значений.
   const counts = new Map<string, number>();
@@ -230,6 +266,11 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
       {job.params.via && (
         <div className="font-mono text-xs text-dim">
           Telegram ID <span className="text-mint">{job.params.tgid}</span> · найден по {job.params.via}
+        </div>
+      )}
+      {step2 && (
+        <div className="font-mono text-xs text-dim" title={step2Errors(step2)}>
+          Второй шаг<sup className="text-mint">2</sup>: {step2Summary(step2)}
         </div>
       )}
       <ResultBar
@@ -291,7 +332,7 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
                       <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 py-3 first:pt-0 last:pb-0 @4xl:grid-cols-2">
                         {(Object.keys(LEAK_FIELDS) as LeakField[]).filter(shown).flatMap((f) =>
                           (t[f] ?? []).map((v) => (
-                            <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
+                            <ValueRow key={f + v} field={f} value={v} step={t.step} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
                           )),
                         )}
                       </div>
@@ -405,11 +446,6 @@ function FoundGeoMap({ leaks }: { leaks: LeakCard[] }) {
   const totalBases = useMemo(() => new Set(byDate.map((r) => r.key)).size, [byDate]);
 
   if (!geo.data || !records.length) return null;
-  const chip = (on: boolean) =>
-    clsx(
-      'inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wide transition',
-      on ? 'border-mint bg-mint/15 text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
-    );
   return (
     <Card title="Геолокации на карте" actions={<Tag tone="dim">{points.length}</Tag>}>
       {/* isolate — z-index элементов управления карты не выходят за её пределы. */}
@@ -461,9 +497,47 @@ function scanDate(infos: string[]): string | null {
 /** ДД.ММ.ГГГГ → ГГГГММДД для сортировки. */
 const dateKey = (d: string) => d.split('.').reverse().join('');
 
-/** Ключ сканов документов в фильтре атрибутов. */
-const SCANS_FIELD = 'scans';
 const fieldLabel = (f: string) => (f === SCANS_FIELD ? 'Сканы документов' : LEAK_FIELDS[f as LeakField] ?? f);
+
+/** Кнопка-переключатель (фильтр результата, атрибуты второго шага, базы и даты на карте). */
+const chip = (on: boolean) =>
+  clsx(
+    'inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wide transition',
+    on ? 'border-mint bg-mint/15 text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
+  );
+
+/** Ошибки поисков второго шага — подсказкой к его итогу. */
+function step2Errors(info: Step2Info): string | undefined {
+  const failed = info.queries.filter((q) => q.state === 'failed');
+  return failed.length ? failed.map((q) => `${q.value}: ${q.error ?? 'ошибка'}`).join('\n') : undefined;
+}
+
+/** Какие атрибуты брать из записей второго шага: изначально все; «Все» включает или снимает разом. */
+function Step2Fields({ value, onChange }: { value: Set<string>; onChange: (v: Set<string>) => void }) {
+  const all = value.size === STEP2_FIELDS.length;
+  const toggle = (f: string) => {
+    const next = new Set(value);
+    if (next.has(f)) next.delete(f);
+    else next.add(f);
+    onChange(next);
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line-soft bg-bg-soft px-3 py-2.5">
+      <span className="mr-1 flex items-center gap-1.5 font-mono text-xs text-dim">
+        <ListChecks size={13} className="text-mint" /> Брать из второго шага:
+      </span>
+      <button type="button" onClick={() => onChange(all ? new Set() : new Set(STEP2_FIELDS))} className={chip(all)}>
+        Все
+      </button>
+      {STEP2_FIELDS.map((f) => (
+        <button key={f} type="button" onClick={() => toggle(f)} className={chip(value.has(f))}>
+          {fieldLabel(f)}
+        </button>
+      ))}
+      {!value.size && <span className="font-mono text-[11px] text-warn">отметьте хотя бы один атрибут</span>}
+    </div>
+  );
+}
 
 /** Бокс фильтра: только атрибуты, найденные в результатах; клик включает/выключает атрибут. */
 function FieldFilter({
@@ -483,15 +557,7 @@ function FieldFilter({
       {found.map((f) => {
         const on = active.has(f);
         return (
-          <button
-            key={f}
-            type="button"
-            onClick={() => onToggle(f)}
-            className={clsx(
-              'inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wide transition',
-              on ? 'border-mint bg-mint/15 text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
-            )}
-          >
+          <button key={f} type="button" onClick={() => onToggle(f)} className={chip(on)}>
             {fieldLabel(f)}
             <span className={on ? 'text-mint/70' : 'text-mute'}>{counts.get(f)}</span>
           </button>
@@ -507,10 +573,12 @@ function FieldFilter({
 }
 
 export function ValueRow({
-  field, value, checked, onToggle, onPivot, via,
+  field, value, step, checked, onToggle, onPivot, via,
 }: {
   field: string;
   value: string;
+  /** 2 — значение найдено дополнительным поиском вторым шагом: у подписи «²». */
+  step?: number;
   checked: boolean;
   onToggle: (key: string, label: string, value: string) => void;
   onPivot: (kind: string, value: string) => void;
@@ -527,7 +595,10 @@ export function ValueRow({
       >
         {checked && <Check size={11} strokeWidth={3} />}
       </button>
-      <span className="w-32 shrink-0 font-mono text-[11px] uppercase tracking-wide text-mute">{label}</span>
+      <span className="w-32 shrink-0 font-mono text-[11px] uppercase tracking-wide text-mute">
+        {label}
+        {step === 2 && <sup className="ml-0.5 text-mint" title="Найдено дополнительным поиском вторым шагом">2</sup>}
+      </span>
       <span className="min-w-[7rem] flex-1 break-words font-mono text-sm">{field === 'geolocs' ? attrDisplayValue(field, value) : value}</span>
       {via && <span className="hidden truncate font-mono text-[10px] text-mute md:inline">через {via}</span>}
       {/* Иконки держатся вместе: в узкой колонке они переносятся под значение, а не ломают его по символам. */}

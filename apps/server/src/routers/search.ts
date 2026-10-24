@@ -1,17 +1,18 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, SearchSectionSchema, TG_MODE_IDS,
+  FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, STEP2_FIELDS, SearchSectionSchema, TG_MODE_IDS,
   checkFulltext, checkMask, detectKind, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
   AttrPdfRequest, AttrXlsxRequest, TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
-import type { GatewayAnswer } from '../ports.ts';
 import { appConfig } from '../config.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 import { tgSearchPdf } from '../pdf/tgReport.ts';
 import { attrSearchPdf } from '../pdf/attrReport.ts';
 import { loadAttrJob } from '../export/attrPick.ts';
 import { attrSearchXlsx } from '../xlsx/attrBook.ts';
+import { step2Begin, step2Of, step2Run } from '../search/step2.ts';
+import { waitDone } from '../search/wait.ts';
 
 // Сайт — посредник между браузером и шлюзом: токен пользователя не покидает сервер,
 // опрос job.results ведёт сервер, а результат сохраняется снимком (у шлюза он живёт минуты).
@@ -24,6 +25,8 @@ const StartInput = z.discriminatedUnion('section', [
     kind: z.string(),
     value: z.string().trim().min(1).max(256),
     deep: z.boolean(),
+    /** Дополнительный поиск вторым шагом: какие атрибуты брать из его записей (STEP2_FIELDS). Не вместе с deep. */
+    step2: z.array(z.string().max(32)).max(64).optional(),
   }),
   z.object({
     section: z.literal('tg'),
@@ -62,18 +65,6 @@ async function token(ctx: Ctx): Promise<string> {
   return t;
 }
 
-/** Дожидается ответа шлюза (для служебных запросов вроде телефон → tgid). */
-async function waitDone(ctx: Ctx, tok: string, service: 'ruleaks' | 'tgcmnts', first: GatewayAnswer, timeoutMs = 60_000): Promise<unknown> {
-  let ans = first;
-  const until = Date.now() + timeoutMs;
-  while (ans.state === 'running' && Date.now() < until) {
-    await new Promise((r) => setTimeout(r, appConfig.api.pollIntervalMs));
-    ans = await ctx.deps.gateway.poll(tok, service, ans.jobId);
-  }
-  if (ans.state === 'done') return ans.result;
-  throw new Error(ans.state === 'failed' ? ans.error : 'Шлюз не ответил вовремя');
-}
-
 /** Пользователь Telegram из ID / @ника / телефона — как _parse_identifier и _resolve_tgid_* бота. */
 async function resolveTgUser(ctx: Ctx, tok: string, raw: string): Promise<{ tgid: string; via: string } | { candidates: string[] } | { error: string }> {
   const parsed = parseTgUser(raw);
@@ -87,7 +78,7 @@ async function resolveTgUser(ctx: Ctx, tok: string, raw: string): Promise<{ tgid
   }
   const kind = findKind('phone')!;
   const first = await ctx.deps.gateway.start(tok, kind.raw, { [kind.param]: parsed.value });
-  const res = (await waitDone(ctx, tok, 'ruleaks', first)) as { job?: { leaks?: LeakCard[] } } | null;
+  const res = (await waitDone(ctx.deps.gateway, tok, 'ruleaks', first)) as { job?: { leaks?: LeakCard[] } } | null;
   const tgid = res?.job?.leaks?.flatMap((l) => l.tuples ?? []).flatMap((t) => t.tgids ?? [])[0];
   if (!tgid) return { error: 'Не удалось найти пользователя Telegram с таким номером телефона' };
   return { tgid, via: `тел. ${raw.trim()}` };
@@ -97,8 +88,15 @@ function planAttr(input: Extract<StartInput, { section: 'attr' }>): Plan {
   const kind = findKind(input.kind);
   if (!kind) throw new TRPCError({ code: 'BAD_REQUEST', message: 'UNKNOWN_KIND' });
   const deep = input.deep && !!kind.deep;
+  const extra: Record<string, string> = {};
+  // Второй шаг — только после простого поиска; отобранные атрибуты хранятся в params снимка.
+  if (input.step2 && !deep) {
+    const fields = STEP2_FIELDS.filter((f) => input.step2!.includes(f));
+    if (!fields.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Отметьте атрибуты для второго шага поиска' });
+    extra.step2 = fields.join(',');
+  }
   // Значение нормализуется и раскладывается по параметрам, как в боте (ФИО → name1..3 + day/month/year).
-  return { path: deep ? kind.deep! : kind.raw, params: searchParams(kind, input.value), service: 'ruleaks', kind: kind.id, deep, extra: {} };
+  return { path: deep ? kind.deep! : kind.raw, params: searchParams(kind, input.value), service: 'ruleaks', kind: kind.id, deep, extra };
 }
 
 function planFuzzy(input: Extract<StartInput, { section: 'fuzzy' }>): Plan {
@@ -116,10 +114,22 @@ function planFuzzy(input: Extract<StartInput, { section: 'fuzzy' }>): Plan {
   return { path: mode.path, params, service: 'ruleaks', kind: mode.id, deep: false, extra };
 }
 
+/** Ответ первого шага с планом второго: задача остаётся running, пока второй шаг идёт фоном. */
+function withStep2(job: { kind: string; query: string; params: Record<string, string> }, result: unknown) {
+  if (!job.params.step2) return null;
+  const res = step2Begin(result, job.params.step2.split(','), { kind: job.kind, value: job.query });
+  return { result: res, state: res.step2.queries.length ? ('running' as const) : ('done' as const) };
+}
+
 async function advance(ctx: Ctx, id: string) {
   const job = await ctx.deps.searches.get(id, ctx.user!.id);
   if (!job) throw new TRPCError({ code: 'NOT_FOUND' });
-  if (job.state !== 'running' || !job.gatewayJobId) return job;
+  if (job.state !== 'running') return job;
+  if (!job.gatewayJobId) {
+    // Второй шаг идёт фоном; после перезапуска сервера опрос продолжает его.
+    if (step2Of(job.result)) step2Run(ctx.deps, id, ctx.user!.id, await token(ctx));
+    return job;
+  }
   if (Date.now() - new Date(job.startedAt).getTime() > appConfig.api.jobTimeoutMs) {
     const error = `Поиск не завершился за ${Math.round(appConfig.api.jobTimeoutMs / 1000)} с — повторите запрос позже`;
     await ctx.deps.searches.update(id, { state: 'failed', error });
@@ -127,6 +137,12 @@ async function advance(ctx: Ctx, id: string) {
   }
   const ans = await ctx.deps.gateway.poll(await token(ctx), job.gatewayService, job.gatewayJobId);
   if (ans.state === 'done') {
+    const step2 = withStep2(job, ans.result);
+    if (step2) {
+      await ctx.deps.searches.update(id, { ...step2, gatewayJobId: null });
+      if (step2.state === 'running') step2Run(ctx.deps, id, ctx.user!.id, await token(ctx));
+      return { ...job, ...step2, gatewayJobId: null };
+    }
     await ctx.deps.searches.update(id, { state: 'done', result: ans.result });
     return { ...job, state: 'done' as const, result: ans.result };
   }
@@ -135,6 +151,21 @@ async function advance(ctx: Ctx, id: string) {
     return { ...job, state: 'failed' as const, error: ans.error };
   }
   return job;
+}
+
+/**
+ * Опросы одной задачи не идут параллельно (вкладки, повтор запроса): иначе конец первого шага обработали бы
+ * дважды и второй мог бы затереть ход второго шага.
+ */
+const advancing = new Map<string, ReturnType<typeof advance>>();
+function advanceOnce(ctx: Ctx, id: string): ReturnType<typeof advance> {
+  const key = `${ctx.user!.id}:${id}`;
+  let p = advancing.get(key);
+  if (!p) {
+    p = advance(ctx, id).finally(() => advancing.delete(key));
+    advancing.set(key, p);
+  }
+  return p;
 }
 
 const publicJob = ({ userId: _u, gatewayJobId: _g, gatewayService: _s, ...job }: SearchJob & { userId: string; gatewayJobId: string | null; gatewayService: string }): SearchJob => job;
@@ -198,6 +229,14 @@ export const searchRouter = router({
     }
 
     const ans = await ctx.deps.gateway.start(tok, plan.path, plan.params);
+    const step2 = ans.state === 'done' ? withStep2({ kind: plan.kind, query: base.query, params: plan.extra }, ans.result) : null;
+    if (step2) {
+      const job = await ctx.deps.searches.create({
+        ...base, ...step2, kind: plan.kind, deep: plan.deep, params: plan.extra, gatewayJobId: null, gatewayService: plan.service,
+      });
+      if (step2.state === 'running') step2Run(ctx.deps, job.id, ctx.user.id, tok);
+      return job;
+    }
     return ctx.deps.searches.create({
       ...base,
       kind: plan.kind,
@@ -212,7 +251,12 @@ export const searchRouter = router({
   }),
 
   /** Клиент опрашивает раз в 1–2 с; позже заменяется на SSE /events. */
-  job: authedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => publicJob(await advance(ctx, input.id))),
+  job: authedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const job = publicJob(await advanceOnce(ctx, input.id));
+    // Пока идёт второй шаг, браузеру нужен только его ход, а не весь (растущий) результат.
+    const step2 = job.state === 'running' ? step2Of(job.result) : null;
+    return step2 ? { ...job, result: { step2 } } : job;
+  }),
 
   recent: authedProcedure
     .input(z.object({ section: SearchSectionSchema }))

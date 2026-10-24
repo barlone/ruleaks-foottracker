@@ -104,6 +104,10 @@ function fakeLeaks(query: string): LeakCard[] {
         tgids: i !== 1 ? [String(100000000 + (h % 900000000))] : undefined,
         plates: i === 0 && h % 2 ? ['А123ВС777'] : undefined,
         works: i === 1 ? ['ООО «Северный ветер»'] : undefined,
+        // Идентификаторы — для дополнительного поиска вторым шагом.
+        inns: i === 0 ? [String(770000000000 + (h % 1000000))] : undefined,
+        snilss: i === 2 ? [String(10000000000 + (h % 90000000))] : undefined,
+        pasps: i === 1 ? [String(4500000000 + (h % 1000000))] : undefined,
       },
       // У первой утечки — вторая запись (в реальных ответах записей в утечке обычно несколько).
       ...(i === 0

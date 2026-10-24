@@ -51,7 +51,8 @@ export function FuzzySearchPage() {
 
   useRunOnMount(
     () => start.mutate({ section: 'fuzzy', mode: params.mode as FuzzyModeId, value: params.q!, vehicpart: params.vehicpart }),
-    !!(params.q && params.mode && me.data?.access.active),
+    !!(params.q && params.mode),
+    !!me.data?.access.active,
   );
 
   const disabled = !me.data?.access.active;

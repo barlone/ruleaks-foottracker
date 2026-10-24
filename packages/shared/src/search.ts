@@ -304,6 +304,8 @@ export type LeakTuple = {
   tuple: number;
   /** uuid сканов документов человека в хранилище scanstore (не атрибут: показываются картинками). */
   scans?: string[];
+  /** Найдена дополнительным поиском вторым шагом (не от шлюза — сайт сливает записи сам). */
+  step?: 2;
 } & Partial<Record<LeakField, string[]>>;
 
 export interface LeakCard {
@@ -414,6 +416,80 @@ export const FIELD_TO_KIND: Partial<Record<LeakField, SearchKindId>> = {
   weblinks: 'link',
   names: 'name',
 };
+
+// ---------- Дополнительный поиск вторым шагом ----------
+// После обычного (raw) поиска по найденным атрибутам, которые с высокой вероятностью определяют человека,
+// делаются ещё простые поиски; из их записей берутся только отмеченные пользователем атрибуты. Такие записи
+// добавляются в тот же результат (в карточку своей утечки) с пометкой step: 2.
+
+/** По каким найденным атрибутам идёт второй шаг и каким видом поиска. */
+export const STEP2_SOURCES = [
+  { field: 'inns', kind: 'inn', re: RE.inn },
+  { field: 'snilss', kind: 'snils', re: RE.snils },
+  { field: 'pasps', kind: 'pasp', re: RE.pasp },
+  { field: 'forpasps', kind: 'fpasp', re: /^\d{9}$/ },
+  { field: 'bsvids', kind: 'bsvid', re: RE.bsvid },
+] as const satisfies readonly { field: LeakField; kind: SearchKindId; re: RegExp }[];
+
+/** Больше поисков второй шаг не делает: запросы к шлюзу идут не чаще раза в секунду. */
+export const STEP2_MAX_SEARCHES = 30;
+
+/** Ключ сканов документов среди атрибутов (фильтр результата, выбор для второго шага). */
+export const SCANS_FIELD = 'scans';
+
+/** Что можно отобрать из записей второго шага: атрибуты записи и сканы документов. */
+export const STEP2_FIELDS: string[] = [...Object.keys(LEAK_FIELDS), SCANS_FIELD];
+
+export interface Step2Query {
+  kind: SearchKindId;
+  value: string;
+  state: 'pending' | 'done' | 'failed';
+  error?: string;
+  /** Сколько записей добавил этот поиск. */
+  added?: number;
+}
+
+/** Ход и итог второго шага — в result.step2 снимка. */
+export interface Step2Info {
+  /** Отобранные атрибуты (STEP2_FIELDS). */
+  fields: string[];
+  queries: Step2Query[];
+  /** Найдено идентификаторов сверх STEP2_MAX_SEARCHES — по ним не искали. */
+  skipped: number;
+}
+
+/**
+ * Поиски второго шага по записям первого: значения нормализуются как запрос, проверяются по маске вида поиска,
+ * не повторяются и не совпадают с исходным запросом. Порядок — по STEP2_SOURCES, затем по порядку в ответе.
+ */
+export function step2Queries(leaks: LeakCard[], first: { kind: string; value: string }): { queries: Step2Query[]; skipped: number } {
+  const all: Step2Query[] = [];
+  const seen = new Set<string>([`${first.kind}:${normalizeQuery(first.kind, first.value)}`]);
+  for (const src of STEP2_SOURCES) for (const card of leaks) for (const t of card.tuples ?? []) for (const raw of t[src.field] ?? []) {
+    const value = normalizeQuery(src.kind, raw);
+    const key = `${src.kind}:${value}`;
+    // Свидетельство проверяется до нормализации: она переводит латинские X, C, M римской серии в кириллицу.
+    if (!(src.re.test(value) || src.re.test(raw.trim())) || seen.has(key)) continue;
+    seen.add(key);
+    all.push({ kind: src.kind, value, state: 'pending' });
+  }
+  return { queries: all.slice(0, STEP2_MAX_SEARCHES), skipped: Math.max(0, all.length - STEP2_MAX_SEARCHES) };
+}
+
+/** Итог второго шага одной строкой: «12 поисков (ИНН, СНИЛС), добавлено записей: 7, ошибок: 1». */
+export function step2Summary(info: Step2Info): string {
+  const done = info.queries.filter((q) => q.state !== 'pending');
+  if (!info.queries.length) return 'по ИНН, СНИЛС и документам искать нечего';
+  const labels = [...new Set(info.queries.map((q) => SEARCH_KINDS.find((k) => k.id === q.kind)?.label ?? q.kind))];
+  const failed = done.filter((q) => q.state === 'failed').length;
+  const added = done.reduce((n, q) => n + (q.added ?? 0), 0);
+  return [
+    `${done.length} из ${info.queries.length} поисков (${labels.join(', ')})`,
+    `добавлено записей: ${added}`,
+    failed ? `ошибок: ${failed}` : '',
+    info.skipped ? `сверх лимита не искали: ${info.skipped}` : '',
+  ].filter(Boolean).join(' · ');
+}
 
 // ======================================================================
 // Разделы поиска (как разделы меню бота)

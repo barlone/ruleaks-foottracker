@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { FolderPlus, History, Trash2 } from 'lucide-react';
-import { FUZZY_MODES, GEO_MODES, SEARCH_KINDS, TG_MODES, type SearchSection } from '@ft/shared';
+import { FUZZY_MODES, GEO_MODES, SEARCH_KINDS, TG_MODES, type SearchSection, type Step2Info } from '@ft/shared';
 import { Button, Card, Empty, Spinner } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
@@ -78,6 +78,7 @@ function HistoryCard({ section, activeId, onOpen }: { section: SearchSection; ac
             <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-mute">
               <span className="truncate">{kindLabel(section, s.kind)}</span>
               {s.deep && <span className="text-mint">deep</span>}
+              {s.params.step2 && <span className="text-mint">шаг²</span>}
               {s.state === 'failed' && <span className="text-danger">ошибка</span>}
               <span className="shrink-0">· {ago(s.startedAt)}</span>
               {s.state === 'running' && <Spinner className="size-2.5" />}
@@ -126,6 +127,20 @@ export function useSearchJob(jobId: string | null) {
 export function JobStatus({ job, loading, error }: { job: RouterOutputs['search']['job'] | undefined; loading: boolean; error?: string | null }) {
   if (error) return <Card><div className="text-danger">{error}</div></Card>;
   if (loading || !job) return <Empty><Spinner /></Empty>;
+  const step2 = (job.result as { step2?: Step2Info } | null)?.step2;
+  if (job.state === 'running' && step2) {
+    const done = step2.queries.filter((q) => q.state !== 'pending').length;
+    return (
+      <Card>
+        <div className="flex items-center gap-3 font-mono text-sm text-mint">
+          <Spinner /> Второй шаг: поиск по найденным ИНН, СНИЛС и документам — {done} из {step2.queries.length}
+        </div>
+        <div className="mt-3 h-1 overflow-hidden rounded bg-line-soft">
+          <div className="h-full bg-mint transition-all" style={{ width: `${(done / Math.max(1, step2.queries.length)) * 100}%` }} />
+        </div>
+      </Card>
+    );
+  }
   if (job.state === 'running') {
     return (
       <Card>
@@ -170,13 +185,16 @@ export function ResultBar({
 /**
  * Однократный запуск поиска из параметров ссылки (?q=…) при открытии страницы.
  * Ref защищает от двойного вызова эффекта в StrictMode — иначе в истории два одинаковых запроса.
+ * requested берётся только с первого рендера: обычный поиск со страницы сам пишет параметры в адрес, и без этого
+ * следом уходил бы второй, такой же запрос. ready — можно запускать (загружен доступ пользователя).
  */
-export function useRunOnMount(fn: () => void, enabled: boolean) {
+export function useRunOnMount(fn: () => void, requested: boolean, ready: boolean) {
+  const atMount = useRef(requested);
   const done = useRef(false);
   useEffect(() => {
-    if (!enabled || done.current) return;
+    if (!atMount.current || !ready || done.current) return;
     done.current = true;
     fn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]);
+  }, [ready]);
 }

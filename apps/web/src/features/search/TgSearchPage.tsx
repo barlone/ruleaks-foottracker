@@ -51,7 +51,7 @@ export function TgSearchPage() {
     start.mutate({ section: 'tg', mode: m, value: v.trim() });
   }
 
-  useRunOnMount(() => run(params.mode as TgModeId, params.q!), !!(params.q && params.mode && me.data?.access.active));
+  useRunOnMount(() => run(params.mode as TgModeId, params.q!), !!(params.q && params.mode), !!me.data?.access.active);
 
   const who = info.input === 'user' && value.trim() ? parseTgUser(value) : null;
   // Полнотекстовый: как выражение поймёт поиск (websearch_to_tsquery в PostgreSQL) и что в нём не сработает.

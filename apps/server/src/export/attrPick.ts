@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import {
-  GEO_MODES, LEAK_FIELDS, SEARCH_KINDS, attrDisplayValue,
+  GEO_MODES, LEAK_FIELDS, SEARCH_KINDS, attrDisplayValue, step2Summary, type Step2Info,
   type AttrPdfRequest, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type SearchJob,
 } from '@ft/shared';
 import type { Deps } from '../ports.ts';
@@ -14,6 +14,8 @@ export const FIELD_ORDER = Object.keys(LEAK_FIELDS) as LeakField[];
 /** Ключ сканов документов в фильтре атрибутов (как на странице). */
 export const SCANS_FIELD = 'scans';
 export const fieldLabel = (f: string) => LEAK_FIELDS[f as LeakField] ?? f;
+/** Подпись атрибута записи: у найденных вторым шагом — с «²», как на странице. */
+export const tupleFieldLabel = (f: string, t: LeakTuple) => `${fieldLabel(f)}${t.step === 2 ? '²' : ''}`;
 
 export interface AttrPick {
   job: SearchJob;
@@ -30,6 +32,8 @@ export interface AttrPick {
   summary: string;
   /** Что вошло в файл — для шапки. */
   scope: string;
+  /** Итог дополнительного поиска вторым шагом; null — его не было. */
+  step2: string | null;
 }
 
 /** Свой завершённый поиск по атрибутам или геоданным. */
@@ -42,6 +46,7 @@ export async function loadAttrJob(deps: Deps, userId: string, jobId: string): Pr
 
 export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fields'>): AttrPick {
   const res = (job.result as { job?: { leaks?: LeakCard[]; rows?: DeepRow[] } } | null)?.job;
+  const step2 = (job.result as { step2?: Step2Info } | null)?.step2 ?? null;
   const allLeaks = res?.leaks ?? [];
   const allRows = res?.rows ?? [];
   const only = req.only?.length ? new Set(req.only) : null;
@@ -52,7 +57,7 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
   for (const card of job.deep ? [] : allLeaks) {
     const tuples: LeakTuple[] = [];
     for (const t of card.tuples ?? []) {
-      const out: LeakTuple = { tuple: t.tuple };
+      const out: LeakTuple = { tuple: t.tuple, ...(t.step ? { step: t.step } : {}) };
       let any = false;
       for (const f of FIELD_ORDER) {
         const vs = (t[f] ?? []).filter((v) => take(f, v));
@@ -79,6 +84,7 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
     byId: new Map(allRows.map((r) => [r.val_id, r] as const)),
     scanLeaks: !job.deep && !only && (!fields || fields.has(SCANS_FIELD)) ? allLeaks : [],
     summary: job.deep ? `${allRows.length} связанных значений` : `${allLeaks.length} утечек`,
+    step2: step2 ? step2Summary(step2) : null,
     scope: parts.filter(Boolean).join('; '),
   };
 }
@@ -100,11 +106,12 @@ export function headerRows(p: AttrPick, dateTime: (iso: string) => string): [str
   const { job } = p;
   const who = job.params.via ? `Telegram ID ${job.params.tgid} (найден по ${job.params.via})` : null;
   return [
-    ['Вид поиска', `${kindTitle(job)}${job.deep ? ' · глубокий поиск со связями' : ''}`],
+    ['Вид поиска', `${kindTitle(job)}${job.deep ? ' · глубокий поиск со связями' : ''}${p.step2 !== null ? ' · дополнительный поиск вторым шагом' : ''}`],
     ['Запрос', job.query],
     ...(who ? [['Пользователь', who] as [string, string]] : []),
     ['Поиск выполнен', dateTime(job.startedAt)],
     ['Найдено', p.summary],
+    ...(p.step2 !== null ? [['Второй шаг (²)', p.step2] as [string, string]] : []),
     ['В файле', p.scope],
   ];
 }

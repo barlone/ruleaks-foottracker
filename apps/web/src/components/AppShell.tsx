@@ -184,7 +184,7 @@ function Sidebar() {
           {solo
             ? '● персональный режим'
             : user.access.active
-            ? user.access.unlimited ? '● безлимитный доступ' : `● подписка до ${fmtDate(user.access.until)}`
+            ? user.access.forced ? '● полный доступ' : user.access.unlimited ? '● безлимитный доступ' : `● подписка до ${fmtDate(user.access.until)}`
             : '○ подписка неактивна'}
         </div>
         {mode.data !== 'none' && (

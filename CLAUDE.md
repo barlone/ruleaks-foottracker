@@ -294,7 +294,10 @@ thumbnail re-fetches its URL and shows the HTTP status/type. The startup log and
 ### Bot DB access
 
 `BotDbBridge` opens the pool with `default_transaction_read_only=on` and duplicates the bot's `access_error()` rules
-(no token → «Токен не установлен», disabled token, unlimited, `users.subscribed_to`). Users are matched by
+(no token → «Токен не установлен», disabled token, unlimited, `users.subscribed_to`). On top of them
+`tokens.forcefoottracker = true` (bot migration 033) gives full site access regardless of the subscription unless the
+token is disabled (`Access.forced`, sidebar «● полный доступ»); the column is probed via `information_schema` and
+rechecked every 5 min while absent, so the query works on a bot DB without the migration. Users are matched by
 `users.provider = 'tg' AND provider_id = <chat id>`. Production login is the signed link the bot sends
 (ARCHITECTURE.md §4.0; nothing in the bot DB). Planned (§4.1): the bot adds `site_login_requests` +
 `site_user_access()` and confirms `/start login_<nonce>`, replacing dev-login and the duplicated rules.

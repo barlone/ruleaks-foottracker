@@ -43,7 +43,7 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
     });
     pool.on('error', (e) => log(`[bot-db] ошибка соединения: ${e.message}`));
     log(`[bot-db] подключено${tls ? ' (TLS)' : ' (без TLS)'}, только чтение`);
-    bot = new BotDbBridge(pool, { devLogin: cfg.server.devLogin && cfg.server.loopback });
+    bot = new BotDbBridge(pool, { devLogin: cfg.server.devLogin && cfg.server.loopback, log });
   }
 
   return { bot, soloUserId: null, gateway: gateway(cfg), scans: scans(cfg), ...store };

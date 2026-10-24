@@ -60,6 +60,8 @@ export const Access = z.object({
   until: z.string().nullable(),
   /** Причина отказа словами бота (access_error), если active=false. */
   reason: z.string().nullable(),
+  /** Полный доступ к сайту без подписки: tokens.forcefoottracker в базе бота. */
+  forced: z.boolean().optional(),
 });
 
 export const User = z.object({

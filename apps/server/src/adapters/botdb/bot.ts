@@ -9,6 +9,8 @@ import { LoginRequestStore } from '../login-requests.ts';
 //   нет пользователя или токена → «Токен не установлен»; tokens.disabled → «Токен отключен администратором»;
 //   tokens.unlimited → доступ есть; users.subscribed_to пусто → «Подписка не оформлена»;
 //   subscribed_to в прошлом → «Подписка истекла ДД.ММ.ГГГГ».
+// Сверх правил бота: tokens.forcefoottracker (миграция 033 бота) — полный доступ к сайту без подписки,
+// если токен не отключён (отключённый токен — бан, как и в боте).
 // TODO: когда бот добавит функцию site_user_access(chat_id), вызывать её вместо копии правил.
 //
 // Вход: пока бот не подтверждает /start login_<nonce>, запросы входа живут в памяти сервера,
@@ -22,26 +24,50 @@ interface Row {
   token: string | null;
   disabled: boolean | null;
   unlimited: boolean | null;
+  forcefoottracker: boolean | null;
 }
 
-const SQL = `
-  select u.subscribed_to, t.token, t.disabled, t.unlimited
+const sql = (force: boolean) => `
+  select u.subscribed_to, t.token, t.disabled, t.unlimited, ${force ? 't.forcefoottracker' : 'false as forcefoottracker'}
   from users u
   left join tokens t on t.id = u.tokenid
   where u.provider = 'tg' and u.provider_id = $1
   limit 1`;
 
+/** Пока миграция 033 не применена к базе бота, колонки нет; наличие перепроверяется раз в это время. */
+const FORCE_COLUMN_RECHECK_MS = 5 * 60_000;
+
 export class BotDbBridge implements BotBridge {
   readonly devLogin: 'tgid' | null;
   private logins = new LoginRequestStore();
 
-  constructor(private pool: pg.Pool, opts: { devLogin: boolean }) {
+  private forceColumn: { has: boolean; at: number } | null = null;
+  private log: (msg: string) => void;
+
+  constructor(private pool: pg.Pool, opts: { devLogin: boolean; log?: (msg: string) => void }) {
     this.devLogin = opts.devLogin ? 'tgid' : null;
+    this.log = opts.log ?? (() => {});
+  }
+
+  /** Есть ли tokens.forcefoottracker (без неё запрос с колонкой упал бы у всех). */
+  private async hasForceColumn(): Promise<boolean> {
+    const c = this.forceColumn;
+    if (c && (c.has || Date.now() - c.at < FORCE_COLUMN_RECHECK_MS)) return c.has;
+    const r = await this.pool.query(
+      `select 1 from information_schema.columns
+       where table_schema = current_schema() and table_name = 'tokens' and column_name = 'forcefoottracker'`,
+    );
+    const has = !!r.rowCount;
+    if (!c || c.has !== has) {
+      this.log(has ? '[bot-db] tokens.forcefoottracker есть — полный доступ по флагу токена' : '[bot-db] нет колонки tokens.forcefoottracker (миграция 033 бота) — флаг не учитывается');
+    }
+    this.forceColumn = { has, at: Date.now() };
+    return has;
   }
 
   private async row(tgId: string): Promise<Row | null> {
     if (!/^\d{1,20}$/.test(tgId)) return null;
-    const r = await this.pool.query<Row>(SQL, [tgId]);
+    const r = await this.pool.query<Row>(sql(await this.hasForceColumn()), [tgId]);
     return r.rows[0] ?? null;
   }
 
@@ -64,6 +90,7 @@ export class BotDbBridge implements BotBridge {
     });
     if (!r || !r.token) return deny(NO_TOKEN);
     if (r.disabled) return deny(DISABLED, !!r.unlimited, r.subscribed_to);
+    if (r.forcefoottracker) return { active: true, unlimited: !!r.unlimited, until: r.subscribed_to?.toISOString() ?? null, reason: null, forced: true };
     if (r.unlimited) return { active: true, unlimited: true, until: null, reason: null };
     if (!r.subscribed_to) return deny('Подписка не оформлена');
     if (r.subscribed_to.getTime() < Date.now()) {

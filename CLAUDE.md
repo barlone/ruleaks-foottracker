@@ -312,3 +312,8 @@ thumbnail re-fetches its URL and shows the HTTP status/type. The startup log and
 - Dialogs center without CSS transforms and editor popups are positioned relative to the editor wrapper: `fixed`
   positioning breaks inside ancestors with `transform`/`backdrop-filter`.
 - URL-triggered searches use `useRunOnMount` (ref guard) — React StrictMode would otherwise start them twice.
+- React Fast Refresh: a `.tsx` module exports only components (types are fine); hooks, helpers and constants go to a
+  sibling `.ts` (`features/search/job.ts`, `selection.ts`, `foundScans.ts`, `components/process.ts`, `lib/listView.ts`…).
+  Pages read route params with `useSearch({ from: '/search' })` / `useParams({ from: … })`, never by importing route
+  objects from `router.tsx` (that cycle through `main.tsx`). Either mistake turns every edit into a full page reload,
+  which also re-runs a search whose query is in the URL against the real gateway.

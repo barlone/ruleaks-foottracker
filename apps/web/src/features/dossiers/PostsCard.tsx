@@ -5,16 +5,13 @@ import { POST_KIND_LABELS, type DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { Button, Card, ConfirmDeleteBtn, Empty, Segmented, Tag } from '../../components/ui.tsx';
 import { fmtUtc } from '../../lib/format.ts';
+import { PLATFORM_LABELS } from './labels.ts';
 
 // «Посты и реакции» досье персоны: посты, комментарии, ответы и реакции в соцсетях.
 // Переносятся из «Поиска в Telegram» (отмеченные сообщения) или добавляются вручную.
 
 type Post = Extract<DossierItem, { type: 'post' }>;
 type Kind = Post['kind'];
-
-export const PLATFORM_LABELS: Record<string, string> = {
-  vk: 'VK', telegram: 'Telegram', ok: 'OK', instagram: 'Instagram', facebook: 'Facebook', x: 'X', youtube: 'YouTube', web: 'Веб', other: 'Другое',
-};
 
 const KIND_TONE: Record<Kind, 'mint' | 'info' | 'warn' | 'dim'> = { post: 'mint', comment: 'info', reply: 'dim', reaction: 'warn' };
 

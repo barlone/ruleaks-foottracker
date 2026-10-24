@@ -6,7 +6,8 @@ import { Button, Card, Dialog, Empty, Field, Input, Spinner, Tag } from '../../c
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { JobView } from './AttrSearchPage.tsx';
-import { SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
+import { SearchLayout } from './common.tsx';
+import { useRunOnMount, useSearchJob } from './job.ts';
 import { GeoPicker, type GeoConfig, type GeoPoint } from './GeoPicker.tsx';
 import { isShortMapLink, parseMapLink } from './mapLinks.ts';
 

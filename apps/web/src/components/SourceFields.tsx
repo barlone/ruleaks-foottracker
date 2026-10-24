@@ -1,13 +1,7 @@
 import { CREDIBILITY_LABELS, RELIABILITY_LABELS, type Source } from '@ft/shared';
 import { Field, Input, Select } from './ui.tsx';
+import type { SourceDraft } from './source.ts';
 
-export type SourceDraft = Omit<Source, 'capturedAt'>;
-
-export const emptySource = (): SourceDraft => ({ kind: 'manual', reliability: 'F', credibility: '6' });
-
-export const finishSource = (s: SourceDraft): Source => ({ ...s, ref: s.ref || undefined, capturedAt: new Date().toISOString() });
-
-/** Происхождение сведений + оценка по системе Адмиралтейства. */
 export function SourceFields({ value, onChange }: { value: SourceDraft; onChange: (s: SourceDraft) => void }) {
   return (
     <div className="grid grid-cols-2 gap-3 rounded-xl border border-line-soft p-3">

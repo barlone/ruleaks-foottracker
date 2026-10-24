@@ -1,18 +1,19 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
   ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
 import { LEAK_FIELDS, attrCopyValue, attrDisplayValue, FIELD_TO_KIND, POST_KIND_LABELS, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
-import { kindLabel } from '../search/common.tsx';
+import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
 import { ExportDialog } from '../../components/ExportDialog.tsx';
 import { ObjectActions } from '../../components/ObjectActions.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
-import { SourceFields, emptySource, finishSource, type SourceDraft } from '../../components/SourceFields.tsx';
+import { SourceFields } from '../../components/SourceFields.tsx';
+import { emptySource, finishSource, type SourceDraft } from '../../components/source.ts';
 import { TagsBar } from '../../components/Tags.tsx';
 import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, FilePicker, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
@@ -20,10 +21,10 @@ import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
 import { guessPlatform } from '../../lib/platform.ts';
 import { toast } from '../../lib/toast.ts';
-import { dossierRoute } from '../../router.tsx';
 import { MediaGallery } from './MediaGallery.tsx';
-import { CoverBox, PHOTO_ALBUM } from './PhotosDialog.tsx';
-import { PLATFORM_LABELS, PostsCard } from './PostsCard.tsx';
+import { CoverBox } from './PhotosDialog.tsx';
+import { PostsCard } from './PostsCard.tsx';
+import { PHOTO_ALBUM, PLATFORM_LABELS } from './labels.ts';
 import { RelationsCard } from './RelationsCard.tsx';
 
 type Of<T extends DossierItem['type']> = Extract<DossierItem, { type: T }>;
@@ -42,7 +43,7 @@ const attrRank = (key: string) => {
 const sortAttributes = (list: Of<'attribute'>[]) => list.map((a, i) => ({ a, i })).sort((x, y) => attrRank(x.a.key) - attrRank(y.a.key) || x.i - y.i).map((x) => x.a);
 
 export function DossierPage() {
-  const { id } = dossierRoute.useParams();
+  const { id } = useParams({ from: '/dossiers/$id' });
   const navigate = useNavigate();
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();

@@ -6,7 +6,8 @@ import { trpc, type RouterOutputs } from '../lib/trpc.ts';
 import { errorCode, errorText } from '../lib/errors.ts';
 import { fmtDate } from '../lib/format.ts';
 import { toast } from '../lib/toast.ts';
-import { isCancelled, ProcessDialog, useProcess, type ProcessHandle } from './ProgressDialog.tsx';
+import { ProcessDialog } from './ProgressDialog.tsx';
+import { isCancelled, useProcess, type ProcessHandle } from './process.ts';
 import { Button, Dialog, Field, FilePicker, Input, Spinner, Tag } from './ui.tsx';
 
 // Окно «Импорт из файла»: выбрать файл экспорта (.ftx) и, если нужно, пароль → сервер показывает, что внутри

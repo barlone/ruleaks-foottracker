@@ -1,13 +1,14 @@
 import * as RDialog from '@radix-ui/react-dialog';
 import clsx from 'clsx';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from './ui.tsx';
+import type { Process } from './process.ts';
 
 // Окно длительного процесса: шкала выполнения (gauge), что происходит, сколько прошло времени, «Отмена».
 // Пока процесс идёт, окно не закрыть щелчком мимо или Esc — только отменить (если можно).
 // Два способа использования:
 //   <ProgressDialog …/>        — состояние ведёт вызывающая сторона (опрос задания на сервере);
-//   useProcess() + <ProcessDialog process={…}/> — для асинхронного кода в браузере: run() показывает окно
+//   useProcess() (process.ts) + <ProcessDialog process={…}/> — для асинхронного кода в браузере: run() показывает окно
 //                                на время промиса, p.set() двигает шкалу, cancel() прерывает через AbortSignal.
 
 export interface ProgressProps {
@@ -97,65 +98,6 @@ export function ProgressDialog({ open, title, value, status, detail, startedAt, 
     </RDialog.Root>
   );
 }
-
-// ---------- Процесс в браузере ----------
-
-export interface ProcessHandle {
-  /** Срабатывает по «Отмена» — передавать в запросы (tRPC: client.x.mutate(input, { signal })). */
-  signal: AbortSignal;
-  /** Обновить шкалу и подписи; value: null — неизвестная длительность. */
-  set(p: { value?: number | null; status?: ReactNode; detail?: ReactNode }): void;
-}
-
-interface ProcessState {
-  title: ReactNode;
-  value: number | null;
-  status: ReactNode;
-  detail: ReactNode;
-  startedAt: number;
-  cancellable: boolean;
-}
-
-/** Промис run() отклоняется этой ошибкой после «Отмена». */
-export class ProcessCancelled extends Error {
-  constructor() {
-    super('Отменено');
-  }
-}
-
-export const isCancelled = (e: unknown) => e instanceof ProcessCancelled;
-
-export function useProcess() {
-  const [state, setState] = useState<ProcessState | null>(null);
-  const ctrl = useRef<AbortController | null>(null);
-
-  /** Показывает окно на время fn; cancellable — с кнопкой «Отмена» (fn получает signal). */
-  const run = useCallback(async <T,>(title: ReactNode, fn: (p: ProcessHandle) => Promise<T>, opts: { cancellable?: boolean } = {}): Promise<T> => {
-    ctrl.current?.abort();
-    const c = new AbortController();
-    ctrl.current = c;
-    setState({ title, value: null, status: null, detail: null, startedAt: Date.now(), cancellable: !!opts.cancellable });
-    const handle: ProcessHandle = {
-      signal: c.signal,
-      set: (p) => setState((s) => (s ? { ...s, ...p } : s)),
-    };
-    try {
-      return await fn(handle);
-    } catch (e) {
-      throw c.signal.aborted ? new ProcessCancelled() : e;
-    } finally {
-      if (ctrl.current === c) {
-        ctrl.current = null;
-        setState(null);
-      }
-    }
-  }, []);
-
-  const cancel = useCallback(() => ctrl.current?.abort(), []);
-  return { state, run, cancel };
-}
-
-export type Process = ReturnType<typeof useProcess>;
 
 export function ProcessDialog({ process }: { process: Process }) {
   const s = process.state;

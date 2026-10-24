@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { FileSpreadsheet, FileText } from 'lucide-react';
 import { LEAK_FIELDS, type LeakField, type SearchSection } from '@ft/shared';
-import { download } from '../../components/ExportDialog.tsx';
-import { isCancelled, ProcessDialog, useProcess } from '../../components/ProgressDialog.tsx';
+import { download } from '../../lib/download.ts';
+import { ProcessDialog } from '../../components/ProgressDialog.tsx';
+import { isCancelled, useProcess } from '../../components/process.ts';
 import { Button, Dialog, Field, Input, Segmented, Spinner, Textarea } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';

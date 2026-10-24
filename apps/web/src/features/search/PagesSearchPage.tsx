@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { ExternalLink, FolderPlus, History, UserSearch } from 'lucide-react';
 import { BLACKBIRD_URL, HOLEHE_URL, isPagesQuery, PAGES_EMAIL_RE, PAGES_QUERY_MAX, SHERLOCK_URL } from '@ft/shared';
@@ -9,9 +9,9 @@ import { errorText } from '../../lib/errors.ts';
 import { ago } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
-import { pagesSearchRoute } from '../../router.tsx';
 import { AddPagesDialog, type PendingPage } from './AddPagesDialog.tsx';
-import { SearchLayout, useRunOnMount } from './common.tsx';
+import { SearchLayout } from './common.tsx';
+import { useRunOnMount } from './job.ts';
 
 // «Поиск личных страниц»: имя пользователя → страницы на сайтах и в соцсетях из списка проекта Sherlock.
 // Сайты опрашивает сервер (pages.start), страница раз в секунду спрашивает ход работы (pages.job)
@@ -62,7 +62,7 @@ export function PagesSearchPage() {
 }
 
 function PagesSearch({ sites, emailSites }: { sites: number; emailSites: number }) {
-  const params = pagesSearchRoute.useSearch();
+  const params = useSearch({ from: '/search/pages' });
   const navigate = useNavigate({ from: '/search/pages' });
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();

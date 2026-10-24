@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { trpc } from '../lib/trpc.ts';
 import { errorText } from '../lib/errors.ts';
-import { loginRoute } from '../router.tsx';
 import { Button, Spinner } from './ui.tsx';
 
 // /login?tg=…&ts=…&n=…&sig=… — ссылка входа из бота. Страница один раз отдаёт параметры серверу
@@ -10,7 +9,7 @@ import { Button, Spinner } from './ui.tsx';
 // хранить её в истории браузера незачем.
 
 export function LoginLinkPage() {
-  const params = loginRoute.useSearch();
+  const params = useSearch({ from: '/login' });
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const me = trpc.auth.me.useQuery();

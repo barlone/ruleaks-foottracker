@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { AtSign, FileText, Send, UserRound } from 'lucide-react';
 import {
@@ -9,17 +9,18 @@ import {
 import { Button, Card, Empty, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
-import { tgSearchRoute } from '../../router.tsx';
 import { TgPdfDialog } from './TgPdfDialog.tsx';
 import { AddToDossierDialog, type PendingPost, type PendingValue } from './AddToDossierDialog.tsx';
-import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
-import { CommentList, MonthActivity, MultiUserList, WeekActivity, ckey, commentToPost } from './TgResults.tsx';
+import { JobStatus, ResultBar, SearchLayout } from './common.tsx';
+import { useRunOnMount, useSearchJob } from './job.ts';
+import { CommentList, MonthActivity, MultiUserList, WeekActivity } from './TgResults.tsx';
+import { ckey, commentToPost } from './tgPosts.ts';
 
 type Job = RouterOutputs['search']['job'];
 
 /** «Поиск в Telegram» — /tgsearch бота. */
 export function TgSearchPage() {
-  const params = tgSearchRoute.useSearch();
+  const params = useSearch({ from: '/search/telegram' });
   const navigate = useNavigate({ from: '/search/telegram' });
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();

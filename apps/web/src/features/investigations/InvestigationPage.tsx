@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { ArrowLeft, Lightbulb, ListChecks, Network, Pencil } from 'lucide-react';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
@@ -11,7 +11,6 @@ import { Button, Empty, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
-import { investigationRoute } from '../../router.tsx';
 import { FactsPanel } from './FactsPanel.tsx';
 import { HypothesesPanel } from './HypothesesPanel.tsx';
 
@@ -24,8 +23,8 @@ const TABS = [
 ] as const;
 
 export function InvestigationPage() {
-  const { id } = investigationRoute.useParams();
-  const { tab = 'graph', focus } = investigationRoute.useSearch();
+  const { id } = useParams({ from: '/investigations/$id' });
+  const { tab = 'graph', focus } = useSearch({ from: '/investigations/$id' });
   const navigate = useNavigate({ from: '/investigations/$id' });
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();

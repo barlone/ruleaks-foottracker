@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, ListChecks, Search as SearchIcon, SearchCheck, ShieldCheck, Zap } from 'lucide-react';
 import {
@@ -9,32 +9,20 @@ import {
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
-import { searchRoute } from '../../router.tsx';
 import { AddToDossierDialog, type PendingValue } from './AddToDossierDialog.tsx';
 import { AttrExportDialog } from './AttrExportDialog.tsx';
-import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
+import { JobStatus, ResultBar, SearchLayout } from './common.tsx';
+import { useRunOnMount, useSearchJob } from './job.ts';
 import { ValueActions } from './ValueActions.tsx';
 import type { FoundGeoPoint } from './GeoPointsMap.tsx';
-import { ScansBox, useFoundScans } from './ScansBox.tsx';
+import { ScansBox } from './ScansBox.tsx';
+import { useFoundScans } from './foundScans.ts';
 
 type Job = RouterOutputs['search']['job'];
 
-/** Отметка значений для переноса в досье: ключ `${поле}:${значение}`. */
-export function useSelection() {
-  const [selected, setSelected] = useState<Map<string, PendingValue>>(new Map());
-  const toggle = (key: string, label: string, value: string) => {
-    const id = `${key}:${value}`;
-    const next = new Map(selected);
-    if (next.has(id)) next.delete(id);
-    else next.set(id, { key, label, value });
-    setSelected(next);
-  };
-  return { selected, toggle, reset: () => setSelected(new Map()) };
-}
-
 /** «Поиск по атрибутам» — /search и /deepsearch бота. */
 export function AttrSearchPage() {
-  const params = searchRoute.useSearch();
+  const params = useSearch({ from: '/search' });
   const navigate = useNavigate({ from: '/search' });
   const me = trpc.auth.me.useQuery();
   const [value, setValue] = useState(params.q ?? '');

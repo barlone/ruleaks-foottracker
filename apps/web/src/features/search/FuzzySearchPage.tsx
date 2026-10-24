@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Asterisk, Car } from 'lucide-react';
 import { FUZZY_MODES, checkMask, findFuzzyMode, normalizePlateMask, type FuzzyMatch, type FuzzyModeId } from '@ft/shared';
 import { Button, Card, Empty, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
-import { fuzzySearchRoute } from '../../router.tsx';
 import { AddToDossierDialog } from './AddToDossierDialog.tsx';
-import { ValueRow, useSelection } from './AttrSearchPage.tsx';
-import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
+import { ValueRow } from './AttrSearchPage.tsx';
+import { useSelection } from './selection.ts';
+import { JobStatus, ResultBar, SearchLayout } from './common.tsx';
+import { useRunOnMount, useSearchJob } from './job.ts';
 
 type Job = RouterOutputs['search']['job'];
 
@@ -21,7 +22,7 @@ const MATCH_FIELDS: [keyof FuzzyMatch, string][] = [
 
 /** «Нечёткий поиск» — /regsearch бота: маски email и госномеров. */
 export function FuzzySearchPage() {
-  const params = fuzzySearchRoute.useSearch();
+  const params = useSearch({ from: '/search/fuzzy' });
   const navigate = useNavigate({ from: '/search/fuzzy' });
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();

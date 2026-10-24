@@ -1,19 +1,19 @@
 import { useState } from 'react';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { FileUp, Network, Plus } from 'lucide-react';
 import { ImportDialog } from '../../components/ImportDialog.tsx';
 import { VisibilityTag } from '../../components/Sharing.tsx';
-import { ViewToggle, tableCls, useListView } from '../../components/ListView.tsx';
+import { ViewToggle } from '../../components/ListView.tsx';
+import { tableCls, useListView } from '../../lib/listView.ts';
 import { TagFilter, TagList } from '../../components/Tags.tsx';
 import { Button, Dialog, Empty, Field, Input, Segmented, Spinner, Tag } from '../../components/ui.tsx';
 import { MarkdownEditor } from '../../components/Markdown.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { ago, fmtDate } from '../../lib/format.ts';
 import { errorText } from '../../lib/errors.ts';
-import { investigationsRoute } from '../../router.tsx';
 
 export function InvestigationsPage() {
-  const { scope = 'mine' } = investigationsRoute.useSearch();
+  const { scope = 'mine' } = useSearch({ from: '/investigations' });
   const navigate = useNavigate({ from: '/investigations' });
   const [title, setTitle] = useState('');
   const [tagIds, setTagIds] = useState<string[]>([]);

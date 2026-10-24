@@ -6,11 +6,10 @@ import { Button, ConfirmDeleteBtn, Dialog, Empty, FilePicker, Input } from '../.
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
+import { PHOTO_ALBUM } from './labels.ts';
 
 // Фото персоны (группы): медиа-элементы досье в альбоме PHOTO_ALBUM. Основное фото — обложка досье
 // (coverMediaUrl), оно показывается в боксе слева от названия, в списках досье и в связях.
-
-export const PHOTO_ALBUM = 'Фото персоны';
 
 type Media = Extract<DossierItem, { type: 'media' }>;
 

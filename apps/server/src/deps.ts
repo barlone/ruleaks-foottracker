@@ -35,7 +35,8 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
     return { bot: new SoloBridge(soloApiToken(cfg.api)), soloUserId: id, gateway: gateway(cfg), scans: scans(cfg), ...store };
   }
 
-  let bot: Deps['bot'] = new MemoryBotBridge();
+  const devLogin = cfg.server.devLogin && cfg.server.loopback;
+  let bot: Deps['bot'] = new MemoryBotBridge({ devLogin });
   if (cfg.botDb.enabled) {
     const d = cfg.botDb;
     const { pool, tls } = await openPool(d, { readOnly: true }).catch((e: Error) => {
@@ -43,7 +44,7 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
     });
     pool.on('error', (e) => log(`[bot-db] ошибка соединения: ${e.message}`));
     log(`[bot-db] подключено${tls ? ' (TLS)' : ' (без TLS)'}, только чтение`);
-    bot = new BotDbBridge(pool, { devLogin: cfg.server.devLogin && cfg.server.loopback, log });
+    bot = new BotDbBridge(pool, { devLogin, log });
   }
 
   return { bot, soloUserId: null, gateway: gateway(cfg), scans: scans(cfg), ...store };

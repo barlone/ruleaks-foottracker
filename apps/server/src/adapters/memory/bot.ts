@@ -36,8 +36,13 @@ export const DEV_PROFILES: Record<'active' | 'expired' | 'colleague', FakeTgUser
 
 /** Имитация бота: вход по одной из демо-учёток, подписка и токен — вымышленные. */
 export class MemoryBotBridge implements BotBridge {
-  readonly devLogin = 'profiles' as const;
+  /** Демо-учётки — только при [server] dev-login на localhost; иначе кнопок нет и devConfirm отказывает. */
+  readonly devLogin: 'profiles' | null;
   private logins = new LoginRequestStore();
+
+  constructor(opts: { devLogin: boolean }) {
+    this.devLogin = opts.devLogin ? 'profiles' : null;
+  }
 
   async createLoginRequest() {
     return this.logins.create();
@@ -62,6 +67,7 @@ export class MemoryBotBridge implements BotBridge {
 
   /** dev: то, что в проде сделает бот по /start login_<nonce>. */
   async devConfirm(nonce: string, who: DevLoginTarget) {
+    if (!this.devLogin) return { ok: false as const, error: 'Вход без бота выключен ([server] dev-login)' };
     if (!('profile' in who)) return { ok: false as const, error: 'В демо-режиме вход по демо-учётке' };
     const { tgId, displayName, username } = DEV_PROFILES[who.profile];
     return this.logins.confirm(nonce, { tgId, displayName, username }) ? { ok: true as const } : { ok: false as const, error: 'Ссылка входа устарела' };

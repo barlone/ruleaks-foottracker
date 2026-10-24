@@ -129,7 +129,7 @@ function BotLogin() {
           </h2>
           <ol className="space-y-2 text-dim">
             <li><span className="font-mono text-mint">01</span> Нажмите кнопку или отсканируйте QR-код</li>
-            <li><span className="font-mono text-mint">02</span> В боте нажмите <b className="text-text">«Войти на сайт»</b></li>
+            <li><span className="font-mono text-mint">02</span> В боте через кнопку меню выберите пункт <b className="text-text">«Войти в RuLeaks.Следопыт»</b></li>
             <li><span className="font-mono text-mint">03</span> Эта страница откроется автоматически</li>
           </ol>
           <div className="mt-7">

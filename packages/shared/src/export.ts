@@ -253,6 +253,53 @@ export const TgPdfRequest = z.object({
   timeZone: z.string().max(64).default('UTC'),
 });
 
+// ---------- Экспорт результата поиска по атрибутам / геоданным ----------
+// Из сохранённого снимка поиска (шлюз не вызывается): PDF — как на странице, Excel — построчно или поколоночно.
+
+/** Что из результата войдёт в файл. */
+const AttrExportPick = {
+  jobId: z.string(),
+  /** Только отмеченные значения — ключи «поле:значение» (как отметки на странице); нет — все. */
+  only: z.array(z.string().max(8192)).max(50_000).optional(),
+  /** Только эти атрибуты (фильтр «Атрибуты» на странице; 'scans' — сканы документов); нет — все. */
+  fields: z.array(z.string().max(64)).max(100).optional(),
+  timeZone: z.string().max(64).default('UTC'),
+};
+
+/** Печать PDF без пароля владельца: запрещена, в низком качестве, без ограничений. */
+export const PDF_PRINTING = ['none', 'low', 'high'] as const;
+
+export const AttrPdfRequest = z.object({
+  ...AttrExportPick,
+  author: z.string().trim().max(256),
+  note: z.string().trim().max(4000),
+  /** Пароль на открытие; пусто — PDF открывается без пароля. */
+  password: z.string().max(256),
+  options: z.object({
+    printing: z.enum(PDF_PRINTING),
+    /** Копирование и извлечение текста. */
+    copying: z.boolean(),
+    /** Сканы документов картинками (как бокс «Сканы документов»). */
+    scans: z.boolean(),
+    landscape: z.boolean(),
+    /** Текст водяного знака по диагонали каждой страницы; пусто — без него. */
+    watermark: z.string().trim().max(60),
+  }),
+});
+
+/** rows — как на странице (утечка → записи → «атрибут: значение»); columns — атрибут = колонка, запись = строка. */
+export const XLSX_LAYOUTS = ['rows', 'columns'] as const;
+
+export const AttrXlsxRequest = z.object({
+  ...AttrExportPick,
+  layout: z.enum(XLSX_LAYOUTS),
+});
+
+/** Сканов в одном PDF не больше: каждый — картинка в сотни КБ из хранилища. */
+export const ATTR_PDF_SCANS_MAX = 100;
+
+export type AttrPdfRequest = z.infer<typeof AttrPdfRequest>;
+export type AttrXlsxRequest = z.infer<typeof AttrXlsxRequest>;
 export type TgPdfRequest = z.infer<typeof TgPdfRequest>;
 export type PdfOptions = z.infer<typeof PdfOptions>;
 export type PdfRequest = z.infer<typeof PdfRequest>;

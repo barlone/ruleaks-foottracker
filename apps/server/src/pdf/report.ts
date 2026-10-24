@@ -8,7 +8,7 @@ import { exportFileName } from '../export/build.ts';
 import type { Deps } from '../ports.ts';
 import { graphSvg } from './graph.ts';
 import { clean, markdownToPdf, type MdContext } from './markdown.ts';
-import { renderPdf } from './render.ts';
+import { renderPdf, type PdfJob } from './render.ts';
 import { APP } from './theme.ts';
 
 // PDF-отчёт по досье или расследованию. Здесь собирается содержимое (pdfmake Content[]), сама вёрстка —
@@ -320,15 +320,19 @@ export class Report {
 
   // ---------- Документ ----------
 
-  /** extra — дополнительные строки шапки (у отчёта поиска: запрос, пользователь, итог). */
+  /**
+   * extra — дополнительные строки шапки (у отчёта поиска: запрос, пользователь, итог);
+   * page — ограничения, ориентация и водяной знак (отчёт по результату поиска по атрибутам).
+   */
   async render(
     title: string,
-    kind: 'dossier' | 'investigation' | 'search',
+    kind: 'dossier' | 'investigation' | 'search' | 'attr' | 'geo',
     body: Content[],
     extra: [string, Content][] = [],
+    page: Pick<PdfJob, 'permissions' | 'landscape' | 'watermark'> = {},
   ): Promise<{ fileName: string; data: string }> {
     const { author, note, password } = this.req;
-    const label = { dossier: 'досье', investigation: 'расследование', search: 'поиск в Telegram' }[kind];
+    const label = { dossier: 'досье', investigation: 'расследование', search: 'поиск в Telegram', attr: 'поиск по атрибутам', geo: 'поиск по геоданным' }[kind];
     const meta: Content = {
       table: {
         widths: [80, '*'],
@@ -345,8 +349,8 @@ export class Report {
       margin: [0, 0, 0, 14],
     };
     // Стили, колонтитул и правила переноса страниц — в воркере (pdf/worker.ts): туда уходит только содержимое.
-    const buf = await renderPdf({ title, footerTitle: clean(title), author, note, password, content: [meta, ...body] });
-    return { fileName: exportFileName(title, kind, 'pdf'), data: buf.toString('base64') };
+    const buf = await renderPdf({ title, footerTitle: clean(title), author, note, password, content: [meta, ...body], ...page });
+    return { fileName: exportFileName(title, kind === 'attr' || kind === 'geo' ? 'search' : kind, 'pdf'), data: buf.toString('base64') };
   }
 }
 

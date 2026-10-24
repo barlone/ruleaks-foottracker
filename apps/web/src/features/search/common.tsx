@@ -140,12 +140,14 @@ export function JobStatus({ job, loading, error }: { job: RouterOutputs['search'
 }
 
 export function ResultBar({
-  summary, selected, onAdd, label, extra,
+  summary, selected, onAdd, label, lead, extra,
 }: {
   summary: string;
   selected: number;
   onAdd: () => void;
   label?: string;
+  /** Кнопки слева от «Снимок в досье» (экспорт в PDF и Excel в поиске по атрибутам). */
+  lead?: ReactNode;
   /** Кнопки справа от «Снимок в досье» (PDF в поиске по Telegram). */
   extra?: ReactNode;
 }) {
@@ -155,6 +157,7 @@ export function ResultBar({
         <span className="text-mint">{summary}</span> · отмечено: {selected}
       </div>
       <div className="flex items-center gap-2">
+        {lead}
         <Button variant="primary" size="sm" onClick={onAdd}>
           <FolderPlus size={15} /> {label ?? (selected ? 'Отмеченное в досье' : 'Снимок в досье')}
         </Button>

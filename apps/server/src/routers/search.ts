@@ -3,12 +3,15 @@ import { z } from 'zod';
 import {
   FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, SearchSectionSchema, TG_MODE_IDS,
   checkFulltext, checkMask, detectKind, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
-  TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
+  AttrPdfRequest, AttrXlsxRequest, TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import type { GatewayAnswer } from '../ports.ts';
 import { appConfig } from '../config.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 import { tgSearchPdf } from '../pdf/tgReport.ts';
+import { attrSearchPdf } from '../pdf/attrReport.ts';
+import { loadAttrJob } from '../export/attrPick.ts';
+import { attrSearchXlsx } from '../xlsx/attrBook.ts';
 
 // Сайт — посредник между браузером и шлюзом: токен пользователя не покидает сервер,
 // опрос job.results ведёт сервер, а результат сохраняется снимком (у шлюза он живёт минуты).
@@ -226,4 +229,12 @@ export const searchRouter = router({
     if (job.state !== 'done') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Поиск ещё не завершён' });
     return tgSearchPdf(ctx.deps, ctx.user.id, job, input);
   }),
+
+  /** PDF по своему завершённому поиску по атрибутам / геоданным — как страница результата (из снимка). */
+  exportAttrPdf: authedProcedure.input(AttrPdfRequest).mutation(async ({ ctx, input }) =>
+    attrSearchPdf(ctx.deps, ctx.user.id, await loadAttrJob(ctx.deps, ctx.user.id, input.jobId), input)),
+
+  /** Excel по своему завершённому поиску по атрибутам / геоданным: построчно (как страница) или поколоночно. */
+  exportAttrXlsx: authedProcedure.input(AttrXlsxRequest).mutation(async ({ ctx, input }) =>
+    attrSearchXlsx(await loadAttrJob(ctx.deps, ctx.user.id, input.jobId), input)),
 });

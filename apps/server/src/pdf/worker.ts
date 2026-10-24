@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { parentPort } from 'node:worker_threads';
@@ -21,10 +22,36 @@ pdfmake.addTableLayouts(TABLE_LAYOUTS);
 pdfmake.setUrlAccessPolicy(() => false);
 pdfmake.setLocalAccessPolicy((p) => resolve(p).startsWith(FONT_DIR) || resolve(p).startsWith(EMOJI_DIR));
 
+const PRINTING = { none: undefined, low: 'lowResolution', high: 'highResolution' } as const;
+
+/**
+ * Пароль — штатное шифрование PDF (AES-256, PDF 1.7 ext 3); без пароля и без ограничений PDF не шифруется.
+ * Ограничения печати и копирования соблюдают программы просмотра, а не шифр: поэтому пароль владельца, снимающий
+ * их, случайный и нигде не сохраняется (совпади он с паролем на открытие — тот снимал бы и ограничения).
+ */
+function security({ password, permissions: p }: PdfJob): Partial<TDocumentDefinitions> {
+  const restricted = !!p && (p.printing !== 'high' || !p.copying);
+  if (!password && !restricted) return {};
+  return {
+    userPassword: password || undefined,
+    ownerPassword: restricted ? randomBytes(24).toString('base64url') : password,
+    version: '1.7ext3',
+    permissions: {
+      printing: p ? PRINTING[p.printing] : 'highResolution',
+      copying: p?.copying ?? true,
+      contentAccessibility: p?.copying ?? true,
+      modifying: false,
+      annotating: true,
+    },
+  };
+}
+
 function document(job: PdfJob): TDocumentDefinitions {
-  const { title, footerTitle, author, note, password, content } = job;
+  const { title, footerTitle, author, note, content } = job;
   return {
     pageSize: 'A4',
+    pageOrientation: job.landscape ? 'landscape' : 'portrait',
+    ...(job.watermark ? { watermark: { text: job.watermark, color: '#888888', opacity: 0.1, bold: true } } : {}),
     pageMargins: [40, 40, 40, 50],
     info: { title, author: author || undefined, subject: note || undefined, creator: APP, producer: APP },
     defaultStyle: { font: 'Roboto', fontSize: 9.5, lineHeight: 1.2 },
@@ -46,10 +73,7 @@ function document(job: PdfJob): TDocumentDefinitions {
     content,
     // Заголовок раздела, после которого на странице ничего не помещается, переносится на следующую.
     pageBreakBefore: (node, following) => node.headlineLevel === 1 && following.getFollowingNodesOnPage().length === 0,
-    // Пароль — штатное шифрование PDF (AES-256, PDF 1.7 ext 3); без пароля PDF не шифруется.
-    ...(password
-      ? { userPassword: password, ownerPassword: password, version: '1.7ext3' as const, permissions: { printing: 'highResolution' as const, copying: true, modifying: false, annotating: true } }
-      : {}),
+    ...security(job),
   };
 }
 

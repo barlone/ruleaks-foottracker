@@ -1,13 +1,14 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Check, ChevronDown, ChevronUp, CornerDownRight, Filter, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
 import { FIELD_TO_KIND, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds, isUkrainianPhone, type DeepRow, type LeakCard, type LeakField } from '@ft/shared';
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { searchRoute } from '../../router.tsx';
 import { AddToDossierDialog, type PendingValue } from './AddToDossierDialog.tsx';
+import { AttrExportDialog } from './AttrExportDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout, useRunOnMount, useSearchJob } from './common.tsx';
 import { ValueActions } from './ValueActions.tsx';
 import type { FoundGeoPoint } from './GeoPointsMap.tsx';
@@ -150,6 +151,12 @@ export function AttrSearchPage() {
 export function JobView({ job, loading, error, onPivot }: { job: Job | undefined; loading: boolean; error?: string | null; onPivot: (kind: string, value: string) => void }) {
   const [selected, setSelected] = useState<Map<string, PendingValue>>(new Map());
   const [dialog, setDialog] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'xlsx'>('pdf');
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportAs = (f: 'pdf' | 'xlsx') => {
+    setExportFormat(f);
+    setExportOpen(true);
+  };
   // Сканы — до ранних return: хуки. Ссылка на leaks стабильна между опросами (structural sharing react-query).
   const scanLeaks = job?.state === 'done' && !job.deep ? ((job.result as { job?: { leaks?: LeakCard[] } } | null)?.job?.leaks ?? null) : null;
   const scans = useFoundScans(scanLeaks);
@@ -225,7 +232,21 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
           Telegram ID <span className="text-mint">{job.params.tgid}</span> · найден по {job.params.via}
         </div>
       )}
-      <ResultBar summary={summary} selected={selected.size} onAdd={() => setDialog(true)} />
+      <ResultBar
+        summary={summary}
+        selected={selected.size}
+        onAdd={() => setDialog(true)}
+        lead={
+          <>
+            <Button size="sm" onClick={() => exportAs('pdf')} title={selected.size ? 'Отмеченное — в PDF' : 'Весь результат — в PDF'}>
+              <FileText size={15} /> PDF
+            </Button>
+            <Button size="sm" onClick={() => exportAs('xlsx')} title={selected.size ? 'Отмеченное — в Excel' : 'Весь результат — в Excel'}>
+              <FileSpreadsheet size={15} /> Excel
+            </Button>
+          </>
+        }
+      />
 
       {found.length > 0 && (
         <FieldFilter found={found} counts={counts} active={active} onToggle={toggleField} onReset={() => setFields(new Set())} />
@@ -283,6 +304,15 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
         </div>
       )}
 
+      <AttrExportDialog
+        format={exportFormat}
+        job={job}
+        selected={[...selected.keys()]}
+        fields={[...active]}
+        scans={scans.count}
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+      />
       <AddToDossierDialog
         open={dialog}
         onOpenChange={setDialog}

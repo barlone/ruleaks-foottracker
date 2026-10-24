@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import * as RDialog from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import { Check, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FileImage, FolderPlus, RotateCcw, RotateCw, X } from 'lucide-react';
-import type { LeakCard } from '@ft/shared';
+import { scanDoctypeLabel, type LeakCard } from '@ft/shared';
 import { Card, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { SaveScanDialog } from './SaveScanDialog.tsx';
@@ -13,20 +13,7 @@ import { SaveScanDialog } from './SaveScanDialog.tsx';
 
 type Meta = NonNullable<RouterOutputs['scans']['meta'][string]>;
 
-/** Коды типов DocScanSort (TYPE_CODES в docsplit.py) → подписи. */
-const DOCTYPES: Record<string, string> = {
-  passport: 'Паспорт',
-  passport_reg: 'Паспорт · прописка',
-  passport_other: 'Паспорт · разворот',
-  snils: 'СНИЛС',
-  inn: 'ИНН',
-  driverlic: 'Водительское удостоверение',
-  driverlic_back: 'ВУ · оборот',
-  drivercard: 'Карта водителя',
-  card: 'Карта',
-  unknown: 'Документ',
-};
-const doctypeLabel = (t: string | undefined) => (t ? DOCTYPES[t] ?? t : 'Документ');
+const doctypeLabel = scanDoctypeLabel;
 
 /** Сканы одной записи утечки (одна папка документов одного человека). */
 interface ScanGroup {

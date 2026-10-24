@@ -177,7 +177,12 @@ table layouts are referenced by name and registered from `pdf/theme.ts` (`addTab
 locked down; only data-URL JPEG/PNG/SVG images render.
 Optional password = native PDF AES-256 encryption. The web uses the same `ExportDialog` with `format="pdf"`.
 `search.exportTgPdf` (`pdf/tgReport.ts`) builds a report from a saved Telegram search snapshot (all or only the selected
-messages, at most `TG_PDF_MAX` = 5000), like the bot's HTML reports. Emoji render with monochrome Noto Emoji
+messages, at most `TG_PDF_MAX` = 5000), like the bot's HTML reports. `search.exportAttrPdf` / `search.exportAttrXlsx` export an attribute/geo search result (only the marked values if any,
+narrowed by the active attribute filter; `export/attrPick.ts`): `pdf/attrReport.ts` mirrors the result page and adds
+print/copy restrictions, orientation, watermark (`PdfJob.permissions` — restrictions need encryption, so they are set
+under a random owner password even without an open password), `xlsx/` is an own minimal OOXML writer (rows / columns
+layout; ARCHITECTURE.md §7.3).
+Emoji render with monochrome Noto Emoji
 (`@fontsource/noto-emoji`, the WOFF file — pdfkit fails on WOFF2) via `pdf/emoji.ts`; the dossier report's `clean()`
 strips emoji instead. Keep messages longer than a page breakable: an `unbreakable` block taller than a page is lost.
 

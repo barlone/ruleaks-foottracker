@@ -377,6 +377,21 @@ export function attrDisplayValue(field: string, value: string): string {
   return value;
 }
 
+/** Коды типов сканов DocScanSort (TYPE_CODES в docsplit.py) → подписи. */
+export const SCAN_DOCTYPES: Record<string, string> = {
+  passport: 'Паспорт',
+  passport_reg: 'Паспорт · прописка',
+  passport_other: 'Паспорт · разворот',
+  snils: 'СНИЛС',
+  inn: 'ИНН',
+  driverlic: 'Водительское удостоверение',
+  driverlic_back: 'ВУ · оборот',
+  drivercard: 'Карта водителя',
+  card: 'Карта',
+  unknown: 'Документ',
+};
+export const scanDoctypeLabel = (t: string | undefined) => (t ? SCAN_DOCTYPES[t] ?? t : 'Документ');
+
 /** Значение атрибута для буфера обмена: у геолокации — только координаты, без радиуса. */
 export function attrCopyValue(field: string, value: string): string {
   return field === 'geolocs' ? parseGeoloc(value).coords : value;

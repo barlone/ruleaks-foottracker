@@ -15,6 +15,14 @@ export interface PdfJob {
   note: string;
   password: string;
   content: Content[];
+  /**
+   * Ограничения для читателя (печать, копирование текста). Нет — печать и копирование разрешены.
+   * С ограничениями PDF шифруется и без пароля на открытие: ограничения записаны под случайным паролем владельца.
+   */
+  permissions?: { printing: 'none' | 'low' | 'high'; copying: boolean };
+  landscape?: boolean;
+  /** Водяной знак по диагонали каждой страницы. */
+  watermark?: string;
 }
 
 export type WorkerRequest = { id: number; job: PdfJob };

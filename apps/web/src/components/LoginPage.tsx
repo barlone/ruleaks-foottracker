@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { ReactNode } from 'react';
 import { KeyRound, Send } from 'lucide-react';
+import { APP_VERSION } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
 import { errorText } from '../lib/errors.ts';
 import { Button, Input, Spinner } from './ui.tsx';
@@ -42,6 +43,7 @@ function LoginFrame({ footer, children }: { footer: string; children: ReactNode 
         <div className="rounded-2xl border border-line bg-gradient-to-b from-mint/[0.05] to-mint/[0.01] p-8">{children}</div>
 
         <p className="mt-8 border-t border-line pt-5 text-center font-mono text-xs tracking-wide text-mute">{footer}</p>
+        <p className="mt-2 text-center font-mono text-[11px] tracking-wide text-mute/60">v{APP_VERSION}</p>
       </div>
     </div>
   );

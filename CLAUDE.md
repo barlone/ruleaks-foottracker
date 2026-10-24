@@ -289,7 +289,8 @@ field filter. The browser never talks to scanstore: `scan-files.ts` proxies `GET
 `[scanstore-api] token` (session required, subscription not checked; ETag/304 passed through), `scans.config` /
 `scans.meta` (`routers/scans.ts`, metadata without `metainfo`, cached forever — scans are immutable) give captions.
 Vite proxies `/scans`; the production proxy must too. Every `/scans` request is logged as `scans <uuid> → <status> …` (401 reason, upstream error, bytes sent); a failed
-thumbnail re-fetches its URL and shows the HTTP status/type. The startup log and `/health` carry the version and commit (`version.ts`).
+thumbnail re-fetches its URL and shows the HTTP status/type. The startup log and `/health` carry the version and commit (`version.ts`); the version is `APP_VERSION` in
+`packages/shared/src/version.ts` (bumped by hand on release, also shown on the login screen), not the package.json versions.
 
 ### Bot DB access
 

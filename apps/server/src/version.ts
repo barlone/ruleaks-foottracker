@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { APP_VERSION } from '@ft/shared';
 
-// Версия приложения для лога и /health: версия пакета и коммит, из которого запущен сервер.
+// Версия приложения для лога и /health: APP_VERSION из @ft/shared и коммит, из которого запущен сервер.
 // Коммит читается из .git напрямую, без вызова git: служба может работать под другим пользователем,
 // и git откажется работать с чужим репозиторием («dubious ownership»). FT_COMMIT — переопределение
 // (сборка без .git).
@@ -36,11 +37,10 @@ function headCommit(): string | null {
   }
 }
 
-const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')) as { version: string };
 const commit = process.env.FT_COMMIT || headCommit();
 
 export const appVersion = {
-  version: pkg.version,
+  version: APP_VERSION,
   commit: commit ? commit.slice(0, 7) : null,
   startedAt: new Date().toISOString(),
 };

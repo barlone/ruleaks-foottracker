@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import {
-  GEO_MODES, LEAK_FIELDS, SEARCH_KINDS, attrDisplayValue, step2Summary, type Step2Info,
+  GEO_MODES, LEAK_FIELDS, SEARCH_KINDS, attrDisplayValue, step2ByText, step2Summary, type Step2Info, type Step2Value,
   type AttrPdfRequest, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type SearchJob,
 } from '@ft/shared';
 import type { Deps } from '../ports.ts';
@@ -14,8 +14,8 @@ export const FIELD_ORDER = Object.keys(LEAK_FIELDS) as LeakField[];
 /** Ключ сканов документов в фильтре атрибутов (как на странице). */
 export const SCANS_FIELD = 'scans';
 export const fieldLabel = (f: string) => LEAK_FIELDS[f as LeakField] ?? f;
-/** Подпись атрибута записи: у найденных вторым шагом — с «²», как на странице. */
-export const tupleFieldLabel = (f: string, t: LeakTuple) => `${fieldLabel(f)}${t.step === 2 ? '²' : ''}`;
+/** Подпись значения второго шага, как на странице: «ТЕЛЕФОН² (найден по паспорту)». */
+export const step2Label = (x: Step2Value) => `${fieldLabel(x.f).toUpperCase()}² (${step2ByText(x.by)})`;
 
 export interface AttrPick {
   job: SearchJob;
@@ -57,7 +57,7 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
   for (const card of job.deep ? [] : allLeaks) {
     const tuples: LeakTuple[] = [];
     for (const t of card.tuples ?? []) {
-      const out: LeakTuple = { tuple: t.tuple, ...(t.step ? { step: t.step } : {}) };
+      const out: LeakTuple = { tuple: t.tuple };
       let any = false;
       for (const f of FIELD_ORDER) {
         const vs = (t[f] ?? []).filter((v) => take(f, v));
@@ -65,6 +65,11 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
           out[f] = vs;
           any = true;
         }
+      }
+      const step2 = t.step2?.filter((x) => take(x.f, x.v));
+      if (step2?.length) {
+        out.step2 = step2;
+        any = true;
       }
       if (any) tuples.push(out);
     }

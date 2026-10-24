@@ -1,5 +1,5 @@
-import type { AttrXlsxRequest, DeepRow, LeakCard, SearchJob } from '@ft/shared';
-import { FIELD_ORDER, fieldLabel, headerRows, pickAttr, sectionTitle, shownValue, tupleFieldLabel, type AttrPick } from '../export/attrPick.ts';
+import { step2ByText, type AttrXlsxRequest, type DeepRow, type LeakCard, type SearchJob } from '@ft/shared';
+import { FIELD_ORDER, fieldLabel, headerRows, pickAttr, sectionTitle, shownValue, step2Label, type AttrPick } from '../export/attrPick.ts';
 import { exportFileName } from '../export/build.ts';
 import { APP } from '../pdf/theme.ts';
 import { writeXlsx, type XCell, type XSheet, type XStyle } from './xlsx.ts';
@@ -22,6 +22,7 @@ const S = {
   key: { bold: true, color: '555555', valign: 'top' },
 } satisfies Record<string, XStyle>;
 const SEP = 'D9D9D9';
+const STEP2_SEP = 'BFBFBF';
 
 const cell = (v: string, s?: XStyle): XCell => ({ v, s });
 /** Первая строка записи (кроме первой в утечке) — с чертой сверху, как на странице. */
@@ -49,13 +50,22 @@ function leakRows(leaks: LeakCard[]): XSheet {
     rows.push([cell(card.leak.toUpperCase(), S.leak), cell(`${tuples.length} зап.${card.trusted ? ' · проверенная база' : ''}`, S.count)]);
     tuples.forEach((t, ti) => {
       let first = ti > 0;
+      let own = false;
       for (const f of FIELD_ORDER) for (const v of t[f] ?? []) {
-        rows.push([cell(tupleFieldLabel(f, t).toUpperCase(), sep(S.label, first)), cell(shownValue(f, v), sep(S.value, first))]);
+        rows.push([cell(fieldLabel(f).toUpperCase(), sep(S.label, first)), cell(shownValue(f, v), sep(S.value, first))]);
         first = false;
+        own = true;
+      }
+      // Найденное вторым шагом — под пунктирной чертой.
+      for (const x of t.step2 ?? []) {
+        const s = (st: XStyle): XStyle => (own ? { ...st, borderTop: STEP2_SEP, dashed: true } : sep(st, first));
+        rows.push([cell(step2Label(x), s(S.label)), cell(shownValue(x.f, x.v), s(S.value))]);
+        own = first = false;
       }
     });
   }
-  return { name: 'Результат', cols: [24, 90], rows };
+  const step2 = leaks.some((c) => c.tuples?.some((t) => t.step2?.length));
+  return { name: 'Результат', cols: [step2 ? 46 : 24, 90], rows };
 }
 
 function deepRows(p: AttrPick): XSheet {
@@ -78,19 +88,21 @@ function widthOf(texts: string[]): number {
 }
 
 function leakColumns(leaks: LeakCard[]): XSheet {
-  const used = FIELD_ORDER.filter((f) => leaks.some((c) => c.tuples?.some((t) => t[f]?.length)));
-  // Колонка «Шаг» (1 или 2) — только когда есть записи дополнительного поиска вторым шагом.
-  const steps = leaks.some((c) => c.tuples?.some((t) => t.step === 2));
-  const header = ['Утечка', 'Проверенная', ...(steps ? ['Шаг'] : []), ...used.map(fieldLabel)];
+  const used = FIELD_ORDER.filter((f) => leaks.some((c) => c.tuples?.some((t) => t[f]?.length || t.step2?.some((x) => x.f === f))));
+  const header = ['Утечка', 'Проверенная', ...used.map(fieldLabel)];
+  // Значения второго шага — в той же ячейке после своих: «+7… ² (найден по паспорту)».
   const data = leaks.flatMap((c) =>
     (c.tuples ?? []).map((t) => [
-      c.leak, c.trusted ? 'да' : '', ...(steps ? [String(t.step ?? 1)] : []),
-      ...used.map((f) => (t[f] ?? []).map((v) => shownValue(f, v)).join('\n')),
+      c.leak, c.trusted ? 'да' : '',
+      ...used.map((f) => [
+        ...(t[f] ?? []).map((v) => shownValue(f, v)),
+        ...(t.step2 ?? []).filter((x) => x.f === f).map((x) => `${shownValue(f, x.v)} ² (${step2ByText(x.by)})`),
+      ].join('\n')),
     ]),
   );
   return {
     name: 'Результат',
-    cols: header.map((h, i) => (i === 1 ? 13 : steps && i === 2 ? 6 : widthOf([h, ...data.map((r) => r[i]!)]))),
+    cols: header.map((h, i) => (i === 1 ? 13 : widthOf([h, ...data.map((r) => r[i]!)]))),
     rows: [header.map((h) => cell(h, S.head)), ...data.map((r) => r.map((v) => cell(v, S.value)))],
     freeze: { rows: 1, cols: 1 },
     autoFilter: true,

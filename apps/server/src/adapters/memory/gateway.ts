@@ -136,8 +136,8 @@ function fakeDeep(query: string): DeepRow[] {
   for (const card of leaks) {
     for (const t of card.tuples ?? []) {
       for (const [prm, vals] of Object.entries(t)) {
-        if (prm === 'tuple' || !Array.isArray(vals)) continue;
-        for (const val of vals) rows.push({ prm, val, val_id: id++, link4: query, link4_id: 0 });
+        if (prm === 'tuple' || prm === 'step2' || !Array.isArray(vals)) continue;
+        for (const val of vals as string[]) rows.push({ prm, val, val_id: id++, link4: query, link4_id: 0 });
       }
     }
   }

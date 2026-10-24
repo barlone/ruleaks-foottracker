@@ -2,7 +2,7 @@ import type { Content, TableCell } from 'pdfmake/interfaces';
 import {
   ATTR_PDF_SCANS_MAX, isUuid, scanDoctypeLabel, type AttrPdfRequest, type DeepRow, type LeakCard, type LeakTuple, type SearchJob,
 } from '@ft/shared';
-import { FIELD_ORDER, fieldLabel, headerRows, pickAttr, sectionTitle, shownValue, tupleFieldLabel } from '../export/attrPick.ts';
+import { FIELD_ORDER, fieldLabel, headerRows, pickAttr, sectionTitle, shownValue, step2Label } from '../export/attrPick.ts';
 import type { Deps, ScanMeta } from '../ports.ts';
 import { withEmoji } from './emoji.ts';
 import { clean } from './markdown.ts';
@@ -22,7 +22,7 @@ const UNBREAKABLE_VALUES = 40;
 const SCAN_MAX_BYTES = 8 * 1024 * 1024;
 const SCAN_CONCURRENCY = 4;
 
-const label = (text: string): Content => ({ text: text.toUpperCase(), fontSize: 6.5, color: '#888', characterSpacing: 0.4, margin: [0, 1.3, 0, 0] });
+const label = (text: string): Content => ({ text, fontSize: 6.5, color: '#888', characterSpacing: 0.4, margin: [0, 1.3, 0, 0] });
 
 /** Иконка «найдено через» (lucide corner-down-right): стрелок ↪ ↳ в Roboto нет. */
 const VIA = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#999999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>`;
@@ -47,18 +47,27 @@ function cardHead(title: string, count: string, trusted = false): TableCell {
   };
 }
 
-/** Значения одной записи: «атрибут — значение» в одну или две колонки (по строкам, как сетка на странице). */
-function tuplePairs(t: LeakTuple, twoCols: boolean): Content {
-  const pairs = FIELD_ORDER.flatMap((f) => (t[f] ?? []).map((v) => [label(tupleFieldLabel(f, t)), value(f, v)] as [Content, Content]));
+/** Пары «атрибут — значение» в одну или две колонки (по строкам, как сетка на странице). */
+function pairsTable(pairs: [Content, Content][], twoCols: boolean): Content {
   const body: Content[][] = [];
   if (!twoCols) for (const p of pairs) body.push(p);
   else for (let i = 0; i < pairs.length; i += 2) body.push([...pairs[i]!, ...(pairs[i + 1] ?? [{ text: '' }, { text: '' }])]);
   return { table: { widths: twoCols ? [92, '*', 92, '*'] : [110, '*'], body }, layout: 'ftPairs' };
 }
 
+/** Значения одной записи; найденные вторым шагом — под пунктирной чертой, с подписью «найден по …». */
+function tuplePairs(t: LeakTuple, twoCols: boolean): Content {
+  const own = FIELD_ORDER.flatMap((f) => (t[f] ?? []).map((v) => [label(fieldLabel(f).toUpperCase()), value(f, v)] as [Content, Content]));
+  const step2 = (t.step2 ?? []).map((x) => [label(step2Label(x)), value(x.f, x.v)] as [Content, Content]);
+  // Пустая таблица pdfmake не рисует (падает) — у отобранной записи может не остаться одной из частей.
+  if (!step2.length || !own.length) return pairsTable(own.length ? own : step2, twoCols);
+  const rule: Content = { table: { widths: ['*'], body: [[{ text: '', fontSize: 1 }]] }, layout: 'ftRule', margin: [0, 3, 0, 2] };
+  return { stack: [pairsTable(own, twoCols), rule, pairsTable(step2, twoCols)] };
+}
+
 function leakCard(card: LeakCard, twoCols: boolean): Content {
   const tuples = card.tuples ?? [];
-  const small = tuples.every((t) => FIELD_ORDER.reduce((n, f) => n + (t[f]?.length ?? 0), 0) <= UNBREAKABLE_VALUES);
+  const small = tuples.every((t) => FIELD_ORDER.reduce((n, f) => n + (t[f]?.length ?? 0), t.step2?.length ?? 0) <= UNBREAKABLE_VALUES);
   return {
     table: {
       widths: ['*'],

@@ -42,6 +42,17 @@ export const TABLE_LAYOUTS: Record<string, CustomTableLayout> = {
     paddingTop: (i) => (i === 0 ? 5 : i === 1 ? 5 : 1.5),
     paddingBottom: (i, node) => (i === 0 ? 5 : i === node.table.body.length - 1 ? 5 : 1.5),
   },
+  /** Пунктирная черта между значениями записи и найденными вторым шагом (таблица из одной пустой ячейки). */
+  ftRule: {
+    hLineWidth: (i) => (i === 0 ? 0.5 : 0),
+    vLineWidth: () => 0,
+    hLineColor: () => '#c8c8c8',
+    hLineStyle: () => ({ dash: { length: 2, space: 2 } }),
+    paddingLeft: () => 0,
+    paddingRight: () => 0,
+    paddingTop: () => 0,
+    paddingBottom: () => 0,
+  },
   /** Строки «атрибут — значение» внутри записи: без линий, плотно. */
   ftPairs: {
     hLineWidth: () => 0,

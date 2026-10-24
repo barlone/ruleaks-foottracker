@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, ListChecks, Search as SearchIcon, ShieldCheck, Zap } from 'lucide-react';
 import {
   FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_MAX_SEARCHES, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
-  isUkrainianPhone, step2Summary, type DeepRow, type LeakCard, type LeakField, type Step2Info,
+  isUkrainianPhone, step2ByText, step2Summary, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type Step2Info,
 } from '@ft/shared';
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
@@ -230,13 +230,13 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
   const step2Added = step2?.queries.reduce((n, q) => n + (q.added ?? 0), 0) ?? 0;
   const summary = job.deep
     ? `${rows.length} связанных значений`
-    : `${leaks.length} утечек${step2 ? `, вторым шагом добавлено записей: ${step2Added}` : ''}`;
+    : `${leaks.length} утечек${step2 ? `, вторым шагом добавлено значений: ${step2Added}` : ''}`;
 
   // Атрибуты, которые есть в результатах, и сколько у каждого значений.
   const counts = new Map<string, number>();
   if (job.deep) for (const r of rows) counts.set(r.prm, (counts.get(r.prm) ?? 0) + 1);
   else for (const c of leaks) for (const t of c.tuples ?? []) for (const f of Object.keys(LEAK_FIELDS) as LeakField[]) {
-    const n = t[f]?.length ?? 0;
+    const n = (t[f]?.length ?? 0) + (t.step2?.filter((x) => x.f === f).length ?? 0);
     if (n) counts.set(f, (counts.get(f) ?? 0) + n);
   }
   // Сканы документов — не атрибут, а картинки (отдельный бокс), но в фильтре включаются так же.
@@ -251,7 +251,9 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
     else next.add(f);
     setFields(next);
   };
-  const visibleLeaks = leaks.filter((c) => c.tuples?.some((t) => fieldOrder.some((f) => shown(f) && t[f as LeakField]?.length)));
+  // В записи есть что показать: свои значения или найденные вторым шагом.
+  const tupleShown = (t: LeakTuple) => fieldOrder.some((f) => shown(f) && t[f as LeakField]?.length) || !!t.step2?.some((x) => shown(x.f));
+  const visibleLeaks = leaks.filter((c) => c.tuples?.some(tupleShown));
 
   const toggle = (key: string, label: string, value: string) => {
     const id = `${key}:${value}`;
@@ -328,15 +330,24 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
                     достаточно широк (container query), иначе значения с иконками действий не помещаются. */}
                 {!folded && (
                   <div className="@container divide-y divide-white/10">
-                    {card.tuples?.filter((t) => fieldOrder.some((f) => shown(f) && t[f as LeakField]?.length)).map((t) => (
-                      <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 py-3 first:pt-0 last:pb-0 @4xl:grid-cols-2">
-                        {(Object.keys(LEAK_FIELDS) as LeakField[]).filter(shown).flatMap((f) =>
-                          (t[f] ?? []).map((v) => (
-                            <ValueRow key={f + v} field={f} value={v} step={t.step} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
-                          )),
-                        )}
-                      </div>
-                    ))}
+                    {card.tuples?.filter(tupleShown).map((t) => {
+                      const own = (Object.keys(LEAK_FIELDS) as LeakField[]).filter(shown).flatMap((f) =>
+                        (t[f] ?? []).map((v) => (
+                          <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
+                        )),
+                      );
+                      const extra = (t.step2 ?? []).filter((x) => shown(x.f));
+                      return (
+                        <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 py-3 first:pt-0 last:pb-0 @4xl:grid-cols-2">
+                          {own}
+                          {/* Найденное вторым шагом по идентификаторам этой записи — под пунктирной чертой. */}
+                          {extra.length > 0 && own.length > 0 && <div className="col-span-full my-1 border-t border-dashed border-white/15" />}
+                          {extra.map((x) => (
+                            <ValueRow key={`2:${x.f}${x.v}`} field={x.f} value={x.v} by={x.by} checked={selected.has(`${x.f}:${x.v}`)} onToggle={toggle} onPivot={onPivot} />
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </Card>
@@ -573,12 +584,12 @@ function FieldFilter({
 }
 
 export function ValueRow({
-  field, value, step, checked, onToggle, onPivot, via,
+  field, value, by, checked, onToggle, onPivot, via,
 }: {
   field: string;
   value: string;
-  /** 2 — значение найдено дополнительным поиском вторым шагом: у подписи «²». */
-  step?: number;
+  /** Значение найдено вторым шагом по этим идентификаторам записи: у подписи «²» и «найден по …». */
+  by?: readonly string[];
   checked: boolean;
   onToggle: (key: string, label: string, value: string) => void;
   onPivot: (kind: string, value: string) => void;
@@ -597,7 +608,12 @@ export function ValueRow({
       </button>
       <span className="w-32 shrink-0 font-mono text-[11px] uppercase tracking-wide text-mute">
         {label}
-        {step === 2 && <sup className="ml-0.5 text-mint" title="Найдено дополнительным поиском вторым шагом">2</sup>}
+        {by && (
+          <>
+            <sup className="ml-0.5 text-mint" title="Найдено дополнительным поиском вторым шагом">2</sup>
+            <span className="block text-[10px] normal-case tracking-normal text-mute/80">({step2ByText(by)})</span>
+          </>
+        )}
       </span>
       <span className="min-w-[7rem] flex-1 break-words font-mono text-sm">{field === 'geolocs' ? attrDisplayValue(field, value) : value}</span>
       {via && <span className="hidden truncate font-mono text-[10px] text-mute md:inline">через {via}</span>}

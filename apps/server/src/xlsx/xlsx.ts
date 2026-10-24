@@ -17,6 +17,8 @@ export interface XStyle {
   fill?: string;
   /** Тонкая черта сверху, RRGGBB. */
   borderTop?: string;
+  /** Черта сверху пунктиром. */
+  dashed?: boolean;
   /** Перенос по словам; без него длинные значения уходят за край. */
   wrap?: boolean;
   valign?: 'top' | 'center';
@@ -95,7 +97,7 @@ class Styles {
       ? this.index(this.fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${st.fill}"/><bgColor indexed="64"/></patternFill></fill>`)
       : 0;
     const border = st.borderTop
-      ? this.index(this.borders, `<border><left/><right/><top style="thin"><color rgb="FF${st.borderTop}"/></top><bottom/><diagonal/></border>`)
+      ? this.index(this.borders, `<border><left/><right/><top style="${st.dashed ? 'dashed' : 'thin'}"><color rgb="FF${st.borderTop}"/></top><bottom/><diagonal/></border>`)
       : 0;
     const align = st.wrap || st.valign ? `<alignment${st.valign ? ` vertical="${st.valign}"` : ''}${st.wrap ? ' wrapText="1"' : ''}/>` : '';
     const xf =

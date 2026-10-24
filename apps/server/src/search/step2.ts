@@ -1,5 +1,6 @@
 import {
-  LEAK_FIELDS, SCANS_FIELD, findKind, searchParams, step2Queries, type LeakCard, type LeakField, type LeakTuple, type Step2Info,
+  LEAK_FIELDS, SCANS_FIELD, STEP2_SOURCES, findKind, normalizeQuery, searchParams, step2Queries,
+  type LeakCard, type LeakField, type Step2Info, type Step2Query,
 } from '@ft/shared';
 import { appConfig } from '../config.ts';
 import type { Deps } from '../ports.ts';
@@ -7,7 +8,8 @@ import { waitDone } from './wait.ts';
 
 // Дополнительный поиск вторым шагом (поиск по атрибутам): после обычного поиска — простые поиски по найденным
 // ИНН, СНИЛС, паспортам, загранпаспортам и свидетельствам о рождении (STEP2_SOURCES); из их записей берутся
-// отмеченные пользователем атрибуты и сливаются в карточки утечек первого шага с пометкой step: 2.
+// отмеченные пользователем атрибуты и дописываются в те записи первого шага, где был найден идентификатор
+// (LeakTuple.step2 — с тем, по чему найдено; база утечки второго шага не важна).
 // Идёт фоном на сервере, а не по опросу браузера: поисков десятки, а шлюз пропускает запрос в секунду. Ход пишется
 // в снимок после каждого поиска (result.step2, слитые записи — в result.job.leaks); задача всё это время running
 // без gatewayJobId. После перезапуска сервера опрос задачи (search.job) продолжает с первого невыполненного поиска.
@@ -28,30 +30,38 @@ export function step2Begin(result: unknown, fields: string[], first: { kind: str
 
 export const step2Of = (result: unknown): Step2Info | null => (result as Partial<Step2Result> | null)?.step2 ?? null;
 
-/** Записи второго шага — в карточки утечек (новые утечки — в конец). Возвращает число добавленных записей. */
-export function step2Merge(leaks: LeakCard[], found: LeakCard[], fields: Set<string>): number {
+/**
+ * Ответ поиска второго шага → в записи первого шага, где есть его идентификатор. Значение, которое в записи уже
+ * есть (своё или найденное раньше), не повторяется — у найденного раньше дописывается ещё один «найден по».
+ * Сканы — прямо в scans записи (у них нет подписи атрибута). Возвращает число добавленных значений.
+ */
+export function step2Merge(leaks: LeakCard[], q: Pick<Step2Query, 'kind' | 'value'>, found: LeakCard[], fields: Set<string>): number {
+  const src = STEP2_SOURCES.find((s) => s.kind === q.kind);
+  if (!src) return 0;
+  const targets = leaks.flatMap((c) => c.tuples ?? []).filter((t) => t[src.field]?.some((v) => normalizeQuery(q.kind, v) === q.value));
+  const values = found.flatMap((c) => c.tuples ?? []);
   let added = 0;
-  for (const card of found) {
-    let target = leaks.find((c) => c.leak === card.leak);
-    for (const t of card.tuples ?? []) {
-      // Та же запись уже есть (из первого шага или найдена другим поиском второго).
-      if (target?.tuples?.some((x) => x.tuple === t.tuple)) continue;
-      const out: LeakTuple = { tuple: t.tuple, step: 2 };
-      let any = false;
-      for (const f of FIELDS) {
-        if (fields.has(f) && t[f]?.length) {
-          out[f] = t[f];
-          any = true;
+  for (const t of targets) {
+    const add = (f: LeakField, v: string) => {
+      if (t[f]?.includes(v)) return;
+      const list = (t.step2 ??= []);
+      const had = list.find((x) => x.f === f && x.v === v);
+      if (had) {
+        if (!had.by.includes(q.kind)) had.by.push(q.kind);
+        return;
+      }
+      list.push({ f, v, by: [q.kind] });
+      added++;
+    };
+    for (const ft of values) {
+      for (const f of FIELDS) if (fields.has(f)) for (const v of ft[f] ?? []) add(f, v);
+      if (fields.has(SCANS_FIELD)) {
+        for (const id of ft.scans ?? []) {
+          if (t.scans?.includes(id)) continue;
+          (t.scans ??= []).push(id);
+          added++;
         }
       }
-      if (fields.has(SCANS_FIELD) && t.scans?.length) {
-        out.scans = t.scans;
-        any = true;
-      }
-      if (!any) continue;
-      if (!target) leaks.push((target = { leak: card.leak, trusted: card.trusted, tuples: [] }));
-      (target.tuples ??= []).push(out);
-      added++;
     }
   }
   return added;
@@ -90,7 +100,7 @@ async function run(deps: Deps, id: string, userId: string, token: string) {
     try {
       const first = await deps.gateway.start(token, kind.raw, searchParams(kind, q.value));
       const body = (await waitDone(deps.gateway, token, 'ruleaks', first, appConfig.api.jobTimeoutMs)) as Body | null;
-      q.added = step2Merge(leaks, body?.job?.leaks ?? [], fields);
+      q.added = step2Merge(leaks, q, body?.job?.leaks ?? [], fields);
       q.state = 'done';
       fails = 0;
     } catch (e) {

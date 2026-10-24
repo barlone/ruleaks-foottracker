@@ -304,8 +304,8 @@ export type LeakTuple = {
   tuple: number;
   /** uuid сканов документов человека в хранилище scanstore (не атрибут: показываются картинками). */
   scans?: string[];
-  /** Найдена дополнительным поиском вторым шагом (не от шлюза — сайт сливает записи сам). */
-  step?: 2;
+  /** Значения, найденные дополнительным поиском вторым шагом по идентификаторам этой записи (не от шлюза). */
+  step2?: Step2Value[];
 } & Partial<Record<LeakField, string[]>>;
 
 export interface LeakCard {
@@ -419,17 +419,31 @@ export const FIELD_TO_KIND: Partial<Record<LeakField, SearchKindId>> = {
 
 // ---------- Дополнительный поиск вторым шагом ----------
 // После обычного (raw) поиска по найденным атрибутам, которые с высокой вероятностью определяют человека,
-// делаются ещё простые поиски; из их записей берутся только отмеченные пользователем атрибуты. Такие записи
-// добавляются в тот же результат (в карточку своей утечки) с пометкой step: 2.
+// делаются ещё простые поиски; из их записей берутся только отмеченные пользователем атрибуты и добавляются в ту
+// запись первого шага, где был найден идентификатор (LeakTuple.step2), с пометкой, по чему найдены. База утечки,
+// где нашлось значение второго шага, не важна и не хранится.
 
 /** По каким найденным атрибутам идёт второй шаг и каким видом поиска. */
 export const STEP2_SOURCES = [
-  { field: 'inns', kind: 'inn', re: RE.inn },
-  { field: 'snilss', kind: 'snils', re: RE.snils },
-  { field: 'pasps', kind: 'pasp', re: RE.pasp },
-  { field: 'forpasps', kind: 'fpasp', re: /^\d{9}$/ },
-  { field: 'bsvids', kind: 'bsvid', re: RE.bsvid },
-] as const satisfies readonly { field: LeakField; kind: SearchKindId; re: RegExp }[];
+  { field: 'inns', kind: 'inn', re: RE.inn, by: 'ИНН' },
+  { field: 'snilss', kind: 'snils', re: RE.snils, by: 'СНИЛС' },
+  { field: 'pasps', kind: 'pasp', re: RE.pasp, by: 'паспорту' },
+  { field: 'forpasps', kind: 'fpasp', re: /^\d{9}$/, by: 'загранпаспорту' },
+  { field: 'bsvids', kind: 'bsvid', re: RE.bsvid, by: 'свидетельству о рождении' },
+] as const satisfies readonly { field: LeakField; kind: SearchKindId; re: RegExp; by: string }[];
+
+/** Значение второго шага в записи первого: поле, значение и по каким её идентификаторам найдено. */
+export interface Step2Value {
+  /** Поле LEAK_FIELDS (сканы второго шага дописываются прямо в scans записи). */
+  f: LeakField;
+  v: string;
+  by: SearchKindId[];
+}
+
+/** «найден по паспорту, ИНН» */
+export function step2ByText(by: readonly string[]): string {
+  return `найден по ${by.map((k) => STEP2_SOURCES.find((s) => s.kind === k)?.by ?? k).join(', ')}`;
+}
 
 /** Больше поисков второй шаг не делает: запросы к шлюзу идут не чаще раза в секунду. */
 export const STEP2_MAX_SEARCHES = 30;
@@ -445,7 +459,7 @@ export interface Step2Query {
   value: string;
   state: 'pending' | 'done' | 'failed';
   error?: string;
-  /** Сколько записей добавил этот поиск. */
+  /** Сколько значений добавил этот поиск (по всем записям, где был идентификатор). */
   added?: number;
 }
 
@@ -476,7 +490,7 @@ export function step2Queries(leaks: LeakCard[], first: { kind: string; value: st
   return { queries: all.slice(0, STEP2_MAX_SEARCHES), skipped: Math.max(0, all.length - STEP2_MAX_SEARCHES) };
 }
 
-/** Итог второго шага одной строкой: «12 поисков (ИНН, СНИЛС), добавлено записей: 7, ошибок: 1». */
+/** Итог второго шага одной строкой: «12 из 12 поисков (ИНН, СНИЛС) · добавлено значений: 7 · ошибок: 1». */
 export function step2Summary(info: Step2Info): string {
   const done = info.queries.filter((q) => q.state !== 'pending');
   if (!info.queries.length) return 'по ИНН, СНИЛС и документам искать нечего';
@@ -485,7 +499,7 @@ export function step2Summary(info: Step2Info): string {
   const added = done.reduce((n, q) => n + (q.added ?? 0), 0);
   return [
     `${done.length} из ${info.queries.length} поисков (${labels.join(', ')})`,
-    `добавлено записей: ${added}`,
+    `добавлено значений: ${added}`,
     failed ? `ошибок: ${failed}` : '',
     info.skipped ? `сверх лимита не искали: ${info.skipped}` : '',
   ].filter(Boolean).join(' · ');

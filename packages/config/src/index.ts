@@ -330,6 +330,10 @@ export function loadConfig(): AppConfig {
   // Без бота его база и dev-вход не нужны, а токен API задаётся в конфиге.
   if (cfg.auth.mode === 'bot-db') {
     if (cfg.api.token) warnings.push('[api] token не используется при [config] auth = bot-db — токен берётся из базы бота');
+    // Вход по ссылке из настоящего бота при имитации бота: подписка, токен и forcefoottracker не читаются.
+    if (cfg.telegram.loginSecret && !cfg.botDb.enabled) {
+      warnings.push('[telegram] login-secret задан, а [bot-db] enabled = false: пользователи бота входят, но подписка и флаг forcefoottracker не читаются — у всех «Подписка не оформлена» (только чтение)');
+    }
   } else {
     if (cfg.botDb.enabled) warnings.push(`[bot-db] не используется при [config] auth = ${cfg.auth.mode}`);
     cfg.botDb.enabled = false;

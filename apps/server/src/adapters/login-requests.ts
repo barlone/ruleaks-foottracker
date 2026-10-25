@@ -2,9 +2,8 @@ import { nanoid } from 'nanoid';
 import type { LoginRequestStatus } from '../ports.ts';
 import { config } from '../config.ts';
 
-// Одноразовые запросы входа (nonce → подтверждение). Пока бот не умеет подтверждать вход
-// (/start login_<nonce> и таблица site_login_requests в его БД), запросы живут в памяти сервера,
-// а подтверждает их dev-вход. После доработки бота это хранилище заменит таблица в БД бота.
+// Одноразовые запросы входа (nonce → подтверждение) для dev-входа: их подтверждает auth.devConfirm.
+// Настоящий вход идёт по подписанной ссылке из бота (adapters/login-link.ts) и nonce не использует.
 
 interface Confirmed {
   tgId: string;
@@ -23,11 +22,7 @@ export class LoginRequestStore {
     const nonce = nanoid(24);
     const expiresAt = Date.now() + config.loginTtlMs;
     this.requests.set(nonce, { status: 'pending', expiresAt });
-    return {
-      nonce,
-      deepLink: `https://t.me/${config.botUsername}?start=login_${nonce}`,
-      expiresAt: new Date(expiresAt).toISOString(),
-    };
+    return { nonce, expiresAt: new Date(expiresAt).toISOString() };
   }
 
   get(nonce: string): LoginRequestStatus {

@@ -119,6 +119,11 @@ Telegram Login Widget не используется: он требует `/setdo
 в течение `[telegram] login-link-ttl-sec` (180 с), тот и входит. Подпись доказывает, что ссылку выдал бот, а
 Telegram — что команду дал владелец `chat_id`. Ни API-сервера авторизации, ни таблицы в базе не нужно.
 
+Страница входа сайта ведёт в бота кнопкой «Перейти в бот для авторизации» и QR-кодом на
+`t.me/<bot>?start=command_auth_foottracker` (`auth.botLink`): по этому параметру бот сам выполняет `/auth_foottracker`
+и присылает кнопку с одноразовой ссылкой. Ссылка в бота постоянная, nonce сайта в ней нет. Пока страница входа открыта,
+она опрашивает `auth.me` раз в 3 с: если ссылку открыли в другой вкладке того же браузера, страница войдёт сама.
+
 ```
 https://investigator.ruleaks.link/login?tg=<Telegram ID>&ts=<unix-секунды>&n=<случайная строка>&sig=<подпись>[&name=<имя>][&nick=<ник без @>]
 
@@ -148,7 +153,10 @@ def login_link(secret: str, site: str, tg_id: int, name: str = "", nick: str = "
     return f"{site}/login?{urllib.parse.urlencode(q, quote_via=urllib.parse.quote)}"   # пробел → %20, не «+»
 ```
 
-### 4.1. Запасной путь — deep-link с подтверждением в боте (код есть, бот пока не подтверждает)
+### 4.1. Запасной путь — deep-link с подтверждением в боте (план)
+
+Сейчас от этой схемы остались только nonce, `ft_login` и опрос `auth.status` для dev-входа (`devConfirm`);
+ссылку `login_<nonce>` сайт не выдаёт — кнопка ведёт на `command_auth_foottracker` (§4.0).
 
 ```
 браузер              сайт (BFF)                         БД бота / бот

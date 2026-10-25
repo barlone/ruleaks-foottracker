@@ -88,38 +88,42 @@ function PasswordLogin() {
 
 function BotLogin() {
   const utils = trpc.useUtils();
-  const start = trpc.auth.start.useMutation();
+  const botLink = trpc.auth.botLink.useQuery();
   const devLogin = trpc.auth.devLogin.useQuery();
+  // Вход идёт по одноразовой ссылке из бота, часто в другой вкладке того же браузера: опрашиваем сессию,
+  // чтобы и эта страница сама открыла сайт, как только cookie появится.
+  trpc.auth.me.useQuery(undefined, { refetchInterval: 3000, refetchIntervalInBackground: true });
+
+  // dev-вход: запрос входа (nonce), который подтверждает devConfirm вместо бота.
+  const start = trpc.auth.start.useMutation();
   const [tgId, setTgId] = useState('');
   const devConfirm = trpc.auth.devConfirm.useMutation();
-  const [expired, setExpired] = useState(false);
   const nonce = start.data?.nonce;
+  const dev = !!devLogin.data?.mode;
 
-  // Один запрос входа на монтирование: сервер привязывает nonce к cookie браузера, и второй запрос
+  // Один запрос входа: сервер привязывает nonce к cookie браузера, и второй запрос
   // (StrictMode вызывает эффект дважды) перебил бы cookie первого — опрос статуса получал бы «expired».
   const started = useRef(false);
   useEffect(() => {
-    if (started.current) return;
+    if (!dev || started.current) return;
     started.current = true;
     start.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dev]);
 
   const status = trpc.auth.status.useQuery(
     { nonce: nonce ?? '' },
-    // Опрос и в фоне: пользователь в это время в Telegram, вкладка часто скрыта.
-    { enabled: !!nonce && !expired, refetchInterval: 1500, refetchIntervalInBackground: true, gcTime: 0 },
+    { enabled: !!nonce, refetchInterval: 1500, refetchIntervalInBackground: true, gcTime: 0 },
   );
 
   useEffect(() => {
     if (status.data?.status === 'confirmed') void utils.auth.me.invalidate();
-    if (status.data?.status === 'expired') setExpired(true);
+    // Запрос устарел (5 минут) — тихо заводим новый.
+    if (status.data?.status === 'expired' && !start.isPending) start.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status.data?.status, utils]);
 
-  const restart = () => {
-    setExpired(false);
-    start.mutate();
-  };
+  const link = botLink.data;
 
   return (
     <LoginFrame footer="Доступ по действующей подписке бота RuLeaks">
@@ -130,35 +134,32 @@ function BotLogin() {
             Вход через Telegram-бот
           </h2>
           <ol className="space-y-2 text-dim">
-            <li><span className="font-mono text-mint">01</span> Нажмите кнопку или отсканируйте QR-код</li>
-            <li><span className="font-mono text-mint">02</span> В боте через кнопку меню выберите пункт <b className="text-text">«Войти в RuLeaks.Следопыт»</b></li>
+            <li>
+              <span className="font-mono text-mint">01</span> Нажмите кнопку или отсканируйте QR-код
+              <div className="mt-3 mb-4">
+                {link ? (
+                  <a href={link} target="_blank" rel="noreferrer">
+                    <Button variant="primary" size="lg">
+                      <Send size={22} /> Перейти в бот для авторизации
+                    </Button>
+                  </a>
+                ) : (
+                  <Spinner />
+                )}
+              </div>
+            </li>
+            <li><span className="font-mono text-mint">02</span> Нажмите в боте кнопку генерации ссылки авторизации и перейдите по ней</li>
             <li><span className="font-mono text-mint">03</span> Вход под вашей учетной записью будет выполнен автоматически</li>
           </ol>
-          <div className="mt-7">
-            {start.data && !expired ? (
-              <a href={start.data.deepLink} target="_blank" rel="noreferrer">
-                <Button variant="primary" size="lg">
-                  <Send size={22} /> Открыть бота
-                </Button>
-              </a>
-            ) : (
-              <Button variant="primary" size="lg" onClick={restart} disabled={start.isPending}>
-                {start.isPending ? <Spinner /> : 'Получить новую ссылку'}
-              </Button>
-            )}
-          </div>
-          <p className="mt-4 font-mono text-xs text-mute">
-            {expired ? 'Ссылка устарела.' : start.data ? <>Ожидаю подтверждения в боте <Spinner className="ml-1 size-3 align-middle" /></> : ' '}
-          </p>
         </div>
-        {start.data && !expired && (
+        {link && (
           <div className="rounded-xl border border-line bg-black p-3">
-            <QRCodeSVG value={start.data.deepLink} size={168} bgColor="#000000" fgColor="#2EE0AC" level="M" />
+            <QRCodeSVG value={link} size={168} bgColor="#000000" fgColor="#2EE0AC" level="M" />
           </div>
         )}
       </div>
 
-      {devLogin.data?.mode === 'profiles' && nonce && !expired && (
+      {devLogin.data?.mode === 'profiles' && nonce && (
         <div className="mt-8 border-t border-dashed border-line pt-5">
           <div className="mb-3 font-mono text-[11px] uppercase tracking-widest text-warn">dev · имитация подтверждения ботом</div>
           <div className="flex flex-wrap gap-2">
@@ -170,7 +171,7 @@ function BotLogin() {
       )}
 
       {/* Реальная БД бота, но бот ещё не подтверждает вход: входим как существующий пользователь бота. */}
-      {devLogin.data?.mode === 'tgid' && nonce && !expired && (
+      {devLogin.data?.mode === 'tgid' && nonce && (
         <form
           className="mt-8 border-t border-dashed border-line pt-5"
           onSubmit={(e) => {

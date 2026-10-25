@@ -6,9 +6,11 @@ import { config } from '../config.ts';
 import { authedProcedure, loadAccess, publicProcedure, router, type Ctx } from '../trpc.ts';
 
 // Способ входа — [config] auth:
-// bot-db — через бота:
-//   1) start → nonce + ссылка t.me/<bot>?start=login_<nonce>;
-//   2) бот подтверждает вход (в dev — devConfirm);
+// bot-db — через бота: кнопка и QR-код ведут на t.me/<bot>?start=command_auth_foottracker (botLink), бот в ответ
+//   присылает кнопку с подписанной одноразовой ссылкой /login?… → loginWithLink создаёт сессию.
+//   dev-вход без бота:
+//   1) start → nonce;
+//   2) devConfirm подтверждает его вместо бота;
 //   3) status опрашивается страницей входа; на confirmed сервер создаёт сессию и ставит cookie.
 //   Nonce виден в ссылке и QR-коде, поэтому сам по себе сессию не даёт: start ставит браузеру httpOnly-cookie
 //   с HMAC(nonce), и status принимает nonce только вместе с ней — чужой браузер, узнавший nonce, получает «expired».
@@ -88,6 +90,11 @@ export const authRouter = router({
     await startSession(ctx, ctx.deps.soloUserId);
     return true;
   }),
+
+  /** Ссылка в бота: по параметру command_auth_foottracker бот сам присылает одноразовую ссылку входа. */
+  botLink: publicProcedure.query(() =>
+    config.authMode === 'bot-db' ? `https://t.me/${config.botUsername}?start=command_auth_foottracker` : null,
+  ),
 
   start: botProcedure.mutation(async ({ ctx }) => {
     const r = await ctx.deps.bot.createLoginRequest({ userAgent: ctx.req.headers['user-agent'] });

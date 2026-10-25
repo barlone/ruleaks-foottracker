@@ -27,8 +27,8 @@ export interface BotBridge {
   readonly devLogin: 'profiles' | 'tgid' | null;
   /** dev: подтвердить вход вместо бота. */
   devConfirm(nonce: string, who: DevLoginTarget): Promise<{ ok: true } | { ok: false; error: string }>;
-  /** Регистрирует одноразовый вход; ссылка ведёт в бота: t.me/<bot>?start=login_<nonce>. */
-  createLoginRequest(meta: { userAgent?: string }): Promise<{ nonce: string; deepLink: string; expiresAt: string }>;
+  /** Регистрирует одноразовый вход для dev-подтверждения (devConfirm). */
+  createLoginRequest(meta: { userAgent?: string }): Promise<{ nonce: string; expiresAt: string }>;
   getLoginRequest(nonce: string): Promise<LoginRequestStatus>;
   /** Помечает запрос использованным — повторно по тому же nonce не войти. */
   consumeLoginRequest(nonce: string): Promise<void>;

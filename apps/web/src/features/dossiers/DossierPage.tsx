@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2,
+  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
 import { LEAK_FIELDS, attrCopyValue, attrDisplayValue, FIELD_TO_KIND, POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
@@ -58,6 +58,7 @@ export function DossierPage() {
   };
   const update = trpc.dossiers.update.useMutation(onDone);
   const addItem = trpc.dossiers.addItem.useMutation(onDone);
+  const updateItem = trpc.dossiers.updateItem.useMutation(onDone);
   const removeItem = trpc.dossiers.removeItem.useMutation(onDone);
   const reorder = trpc.dossiers.reorderItems.useMutation(onDone);
   const setVisibility = trpc.dossiers.setVisibility.useMutation(onDone);
@@ -216,16 +217,13 @@ export function DossierPage() {
             <div className="space-y-[0.8rem]">
               {items('note').length === 0 && <Empty>Заметок нет</Empty>}
               {items('note').map((n) => (
-                <article key={n.id} className="rounded-xl border border-line-soft p-[0.8rem]">
-                  <div className="mb-2 flex items-center justify-between gap-2 font-mono text-[11px] text-mute">
-                    <span>{fmtDate(n.createdAt, true)}</span>
-                    <span className="flex items-center gap-2">
-                      <SourceBadge source={n.source} />
-                      {editable && <DeleteBtn onClick={() => removeItem.mutate({ id, itemId: n.id })} />}
-                    </span>
-                  </div>
-                  <MarkdownView source={n.markdown} />
-                </article>
+                <NoteCard
+                  key={n.id}
+                  note={n}
+                  editable={editable}
+                  onSave={(markdown) => updateItem.mutateAsync({ id, item: { ...n, markdown } }).then(() => undefined)}
+                  onRemove={() => removeItem.mutate({ id, itemId: n.id })}
+                />
               ))}
             </div>
           </Card>
@@ -331,6 +329,78 @@ function RepeatSearchLink({ section, kind, query, deep }: { section: SearchSecti
   if (section === 'fuzzy') return <Link to="/search/fuzzy" search={{ mode: kind, q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
   if (section === 'geo') return <Link to="/search/geo" search={{ q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
   return <Link to="/search" search={{ kind, q: query, deep }} title="Повторить поиск" className={cls}>{icon}</Link>;
+}
+
+/** Заметка: свёрнутой остаётся строка с датой и началом текста; карандаш открывает редактор на месте. */
+function NoteCard({ note, editable, onSave, onRemove }: { note: Of<'note'>; editable: boolean; onSave: (markdown: string) => Promise<void>; onRemove: () => void }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const firstLine = note.markdown.split('\n').map((l) => l.replace(/^[#>*\-\s]+/, '').trim()).find(Boolean) ?? '';
+
+  async function save() {
+    if (draft === null) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(draft);
+      setDraft(null);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <article className="rounded-xl border border-line-soft p-[0.8rem]">
+      <div className={clsx('flex items-center justify-between gap-2 font-mono text-[11px] text-mute', !collapsed && 'mb-2')}>
+        {/* В узкой колонке места мало: дата и превью усекаются, значки справа — нет. */}
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="truncate">{fmtDate(note.createdAt, true)}</span>
+          {collapsed && <span className="hidden truncate text-dim sm:inline">{firstLine}</span>}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <SourceBadge source={note.source} />
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            title={collapsed ? 'Развернуть' : 'Свернуть'}
+            className="cursor-pointer text-mute hover:text-mint"
+          >
+            {collapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+          </button>
+          {editable && draft === null && (
+            <button
+              type="button"
+              onClick={() => {
+                setCollapsed(false);
+                setDraft(note.markdown);
+              }}
+              title="Править"
+              className="cursor-pointer text-mute hover:text-mint"
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+          {editable && <DeleteBtn onClick={onRemove} />}
+        </span>
+      </div>
+      {collapsed ? null : draft !== null ? (
+        <div className="space-y-3">
+          <MarkdownEditor value={draft} onChange={setDraft} autoFocus className="min-h-32" />
+          {error && <WarnNote>{error}</WarnNote>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setDraft(null)} disabled={saving}>Отмена</Button>
+            <Button variant="primary" size="sm" onClick={save} disabled={saving || draft === note.markdown}>Сохранить</Button>
+          </div>
+        </div>
+      ) : (
+        <MarkdownView source={note.markdown} />
+      )}
+    </article>
+  );
 }
 
 function DeleteBtn({ onClick }: { onClick: () => void }) {

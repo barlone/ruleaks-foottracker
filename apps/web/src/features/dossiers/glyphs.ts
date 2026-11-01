@@ -19,7 +19,8 @@ export const GLYPHS: { id: GlyphId; label: string; url: string }[] = [
   {
     id: 'man',
     label: 'Мужчина',
-    url: dataUrl('man', `<circle cx="60" cy="44" r="21" fill="${FIGURE}"/><path d="M18 120 C18 88 36 74 60 74 C84 74 102 88 102 120 Z" fill="${FIGURE}"/>`),
+    // Усы — вырез цветом фона (как и всё в силуэте): иначе мужской и детский значки различаются только размером.
+    url: dataUrl('man', `<circle cx="60" cy="44" r="21" fill="${FIGURE}"/><path d="M60 53 C57 48 47.5 48.5 43.5 53.5 C48 58 56 58.5 60 55 C64 58.5 72 58 76.5 53.5 C72.5 48.5 63 48 60 53 Z" fill="${BACKGROUND}"/><path d="M18 120 C18 88 36 74 60 74 C84 74 102 88 102 120 Z" fill="${FIGURE}"/>`),
   },
   {
     id: 'woman',

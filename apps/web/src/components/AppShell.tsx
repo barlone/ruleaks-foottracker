@@ -212,7 +212,7 @@ function UserSettingsFields() {
   const { settings, update } = useUserSettings();
   return (
     <div className="mb-4">
-      <Field label="Оформление">
+      <Field label="Тема оформления">
         <Segmented<Theme>
           value={settings.theme}
           onChange={(theme) => update({ theme })}

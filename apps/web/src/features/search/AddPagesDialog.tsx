@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { Button, Dialog, Field, Input, Select, Segmented } from '../../components/ui.tsx';
+import { markDuplicates } from '@ft/shared';
+import { Button, Dialog, Field, Input, Select, Segmented, WarnNote } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { guessPlatform } from '../../lib/platform.ts';
 import { toast } from '../../lib/toast.ts';
+import { useTargetItems } from './dossierTarget.ts';
 
 // Найденные страницы пользователя → элементы «Соцсети и ссылки» досье (существующего или нового).
 // Источник — сама ссылка (kind url) с пометкой, что её нашёл поиск личных страниц; оценка C-3, как у снимков
-// поиска: вердикт эвристический, страницу стоит проверить глазами. Ссылка, уже имеющаяся в досье, сервером пропускается.
+// поиска: вердикт эвристический, страницу стоит проверить глазами. Ссылка, уже имеющаяся в досье, сервером пропускается,
+// а окно показывает такие заранее.
 
 export interface PendingPage {
   site: string;
@@ -41,6 +44,11 @@ export function AddPagesDialog({
 
   const editable = (options.data ?? []).filter((d) => d.role !== 'viewer');
 
+  const target = useTargetItems(open && mode === 'existing' && dossierId ? dossierId : null);
+  const duplicates = markDuplicates(target.items, pages.map((p) => ({ type: 'link' as const, url: p.url })));
+  const duplicateCount = duplicates.filter(Boolean).length;
+  const nothingNew = pages.length > 0 && duplicateCount === pages.length;
+
   async function submit() {
     setBusy(true);
     try {
@@ -52,7 +60,7 @@ export function AddPagesDialog({
       if (!id) return;
       const capturedAt = new Date().toISOString();
       // Все ссылки одним запросом; уже имеющиеся в досье сервер пропускает.
-      await addItems.mutateAsync({
+      const { skipped } = await addItems.mutateAsync({
         id,
         items: pages.map((p) => ({
           type: 'link' as const,
@@ -63,7 +71,7 @@ export function AddPagesDialog({
         })),
       });
       await utils.dossiers.invalidate();
-      toast(`Добавлено в досье: ссылок ${pages.length}`);
+      toast(`Добавлено в досье: ссылок ${pages.length - skipped}${skipped ? ` из ${pages.length}, дубликаты пропущены` : ''}`);
       onOpenChange(false);
       void navigate({ to: '/dossiers/$id', params: { id } });
     } catch (e) {
@@ -77,13 +85,19 @@ export function AddPagesDialog({
     <Dialog open={open} onOpenChange={onOpenChange} title="Добавить в досье">
       <div className="space-y-5">
         <div className="max-h-40 space-y-1 overflow-auto rounded-lg border border-line-soft bg-bg-soft p-3 font-mono text-xs">
-          {pages.map((p) => (
+          {pages.map((p, i) => (
             <div key={p.url} className="flex gap-2">
               <span className="w-32 shrink-0 truncate text-mute">{p.site}</span>
-              <span className="truncate text-text">{p.url}</span>
+              <span className={duplicates[i] ? 'truncate text-mute line-through' : 'truncate text-text'}>{p.url}</span>
+              {duplicates[i] && <span className="ml-auto shrink-0 text-warn">дубликат</span>}
             </div>
           ))}
         </div>
+        {duplicateCount > 0 && (
+          <WarnNote>
+            {nothingNew ? 'Все эти ссылки уже есть в досье — добавлять нечего.' : `Дубликаты: ${duplicateCount} из ${pages.length} — повторно добавлены не будут.`}
+          </WarnNote>
+        )}
         <Segmented value={mode} onChange={setMode} options={[{ value: 'existing', label: 'В существующее' }, { value: 'new', label: 'Новое досье' }]} />
         {mode === 'existing' ? (
           <Field label="Досье">
@@ -99,10 +113,10 @@ export function AddPagesDialog({
             <Input value={title} placeholder={username} onChange={(e) => setTitle(e.target.value)} />
           </Field>
         )}
-        <p className="text-xs text-mute">Ссылки попадут в раздел «Соцсети и ссылки»; уже имеющиеся в досье не дублируются.</p>
+        <p className="text-xs text-mute">Ссылки попадут в раздел «Соцсети и ссылки».</p>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
-          <Button variant="primary" onClick={() => void submit()} disabled={busy || !pages.length || (mode === 'existing' && !dossierId)}>Добавить</Button>
+          <Button variant="primary" onClick={() => void submit()} disabled={busy || target.loading || nothingNew || !pages.length || (mode === 'existing' && !dossierId)}>Добавить</Button>
         </div>
       </div>
     </Dialog>

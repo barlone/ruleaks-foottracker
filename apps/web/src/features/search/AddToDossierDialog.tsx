@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { Button, Dialog, Field, Input, Select, Segmented } from '../../components/ui.tsx';
+import { Button, Dialog, Field, Input, Select, Segmented, WarnNote } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
-import { POST_KIND_LABELS, type DossierItem, type SearchSection } from '@ft/shared';
+import { POST_KIND_LABELS, findDuplicate, markDuplicates, type DossierItem, type SearchSection } from '@ft/shared';
+import { useTargetItems } from './dossierTarget.ts';
 
 export interface PendingValue {
   key: string;
@@ -41,6 +42,16 @@ export function AddToDossierDialog({
   const editable = (options.data ?? []).filter((d) => d.role !== 'viewer');
   const nameGuess = values.find((v) => v.key === 'names')?.value ?? '';
 
+  const target = useTargetItems(open && mode === 'existing' && dossierId ? dossierId : null);
+  const pending = [...posts.map((p) => ({ ...p, type: 'post' as const })), ...values.map((v) => ({ ...v, type: 'attribute' as const }))];
+  const duplicates = markDuplicates(target.items, pending);
+  const postDuplicates = duplicates.slice(0, posts.length);
+  const valueDuplicates = duplicates.slice(posts.length);
+  const duplicateCount = duplicates.filter(Boolean).length;
+  const hasSnapshot = !!findDuplicate(target.items, { type: 'snapshot', searchId: search.id });
+  // Снимок того же поиска уже в досье и новых значений нет — добавлять нечего.
+  const nothingNew = hasSnapshot && duplicateCount === pending.length;
+
   async function submit() {
     setBusy(true);
     try {
@@ -52,8 +63,9 @@ export function AddToDossierDialog({
       if (!id) return;
       const capturedAt = new Date().toISOString();
       const source = { kind: 'search' as const, ref: search.id, reliability: 'C' as const, credibility: '3' as const, capturedAt };
-      // Всё одним запросом: снимок, значения, посты (в хронологическом порядке; уже перенесённые сервер пропускает).
-      await addItems.mutateAsync({
+      // Всё одним запросом: снимок, значения, посты (в хронологическом порядке). Дубликаты сервер пропускает сам:
+      // за время, пока открыто окно, досье мог изменить коллега.
+      const { skipped } = await addItems.mutateAsync({
         id,
         items: [
           { type: 'snapshot', searchId: search.id, section: search.section, kind: search.kind, query: search.query, deep: search.deep, summary: search.summary },
@@ -64,7 +76,9 @@ export function AddToDossierDialog({
         ],
       });
       await utils.dossiers.invalidate();
-      toast(`Добавлено в досье: ${values.length} знач.${posts.length ? `, ${posts.length} пост.` : ''} + снимок поиска`);
+      toast(skipped
+        ? `Добавлено в досье: ${pending.length - skipped} из ${pending.length}, дубликаты пропущены`
+        : `Добавлено в досье: ${values.length} знач.${posts.length ? `, ${posts.length} пост.` : ''}${hasSnapshot ? '' : ' + снимок поиска'}`);
       onOpenChange(false);
       void navigate({ to: '/dossiers/$id', params: { id } });
     } catch (e) {
@@ -81,16 +95,27 @@ export function AddToDossierDialog({
           {values.length === 0 && posts.length === 0 && <div className="text-mute">Только снимок поиска</div>}
           {posts.map((p, i) => (
             <div key={`p${i}`} className="line-clamp-2 border-l-2 border-mint/40 pl-2 text-dim">
+              {postDuplicates[i] && <span className="text-warn">дубликат · </span>}
               <span className="text-mint">{POST_KIND_LABELS[p.kind]}{p.emoji ? ` ${p.emoji}` : ''}</span> · {p.text}
             </div>
           ))}
           {values.map((v, i) => (
             <div key={i} className="flex gap-2">
               <span className="w-32 shrink-0 text-mute">{v.label}</span>
-              <span className="text-text">{v.value}</span>
+              <span className={valueDuplicates[i] ? 'text-mute line-through' : 'text-text'}>{v.value}</span>
+              {valueDuplicates[i] && <span className="ml-auto shrink-0 text-warn">дубликат</span>}
             </div>
           ))}
         </div>
+        {(duplicateCount > 0 || nothingNew) && (
+          <WarnNote>
+            {nothingNew
+              ? 'Всё это уже есть в досье — добавлять нечего.'
+              : duplicateCount === pending.length
+              ? 'Всё это уже есть в досье — добавится только снимок поиска.'
+              : `Дубликаты: ${duplicateCount} из ${pending.length} — повторно добавлены не будут.`}
+          </WarnNote>
+        )}
         <Segmented value={mode} onChange={setMode} options={[{ value: 'existing', label: 'В существующее' }, { value: 'new', label: 'Новое досье' }]} />
         {mode === 'existing' ? (
           <Field label="Досье">
@@ -108,7 +133,7 @@ export function AddToDossierDialog({
         )}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
-          <Button variant="primary" onClick={submit} disabled={busy || (mode === 'existing' && !dossierId)}>Добавить</Button>
+          <Button variant="primary" onClick={submit} disabled={busy || target.loading || nothingNew || (mode === 'existing' && !dossierId)}>Добавить</Button>
         </div>
       </div>
     </Dialog>

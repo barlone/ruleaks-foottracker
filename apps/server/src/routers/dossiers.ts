@@ -2,11 +2,12 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   AttributeItem, DossierItem, DossierKind, DossierVisibility, ExportRequest, LinkItem, PdfRequest, MediaItem, NoteItem, PostItem, ShareRole,
-  SnapshotItem, newId, type Dossier,
+  SnapshotItem, findDuplicate, itemIdentity, markDuplicates, newId, type Dossier,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { exportDossier } from '../export/build.ts';
 import { dossierPdf } from '../pdf/report.ts';
+import { Conflict } from '../ports.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
 import { TagIds, checkTagIds } from './tags.ts';
 
@@ -31,27 +32,21 @@ async function load(ctx: Ctx, id: string, action: Action): Promise<Dossier> {
 const withRole = (ctx: Ctx, d: Dossier) => ({ ...d, role: roleOf(ctx.user!.id, d)! });
 
 /**
- * Новые элементы досье: id, позиция за последней, время. Тот же пост/реакция (по внешнему id) или та же ссылка,
- * уже имеющиеся в досье или повторяющиеся в самом списке, пропускаются.
+ * Новые элементы досье: id, позиция за последней, время. Дубликаты (itemIdentity) имеющихся в досье или элементов
+ * самого списка пропускаются. skipped — сколько пропущено без снимков: снимок того же поиска не значение, а источник,
+ * и повторный перенос из одного поиска просто не добавляет его второй раз.
  */
-function prepareItems(d: Dossier, inputs: z.infer<typeof NewItem>[]): DossierItem[] {
-  const exts = new Set(d.items.flatMap((i) => (i.type === 'post' && i.extId ? [i.extId] : [])));
-  const urls = new Set(d.items.flatMap((i) => (i.type === 'link' ? [i.url] : [])));
+function prepareItems(d: Dossier, inputs: z.infer<typeof NewItem>[]): { items: DossierItem[]; skipped: number } {
+  const duplicates = markDuplicates(d.items, inputs);
   let position = Math.max(-1, ...d.items.map((i) => i.position));
   const createdAt = new Date().toISOString();
-  const out: DossierItem[] = [];
-  for (const input of inputs) {
-    if (input.type === 'post' && input.extId) {
-      if (exts.has(input.extId)) continue;
-      exts.add(input.extId);
-    }
-    if (input.type === 'link') {
-      if (urls.has(input.url)) continue;
-      urls.add(input.url);
-    }
-    out.push(DossierItem.parse({ ...input, id: newId(), position: ++position, createdAt }));
-  }
-  return out;
+  const items: DossierItem[] = [];
+  let skipped = 0;
+  inputs.forEach((input, i) => {
+    if (!duplicates[i]) items.push(DossierItem.parse({ ...input, id: newId(), position: ++position, createdAt }));
+    else if (input.type !== 'snapshot') skipped++;
+  });
+  return { items, skipped };
 }
 
 export const dossiersRouter = router({
@@ -116,21 +111,31 @@ export const dossiersRouter = router({
       return withRole(ctx, await ctx.deps.dossiers.update(input.id, input.version, patch));
     }),
 
+  /** Один элемент (ручное добавление): дубликат — ошибка, чтобы окно осталось открытым и показало причину. */
   addItem: activeProcedure.input(z.object({ id: z.string(), item: NewItem })).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'edit');
-    const items = prepareItems(d, [input.item]);
-    return withRole(ctx, items.length ? await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id) : d);
+    const { items } = prepareItems(d, [input.item]);
+    if (!items.length) throw new Conflict('DUPLICATE_ITEM');
+    return withRole(ctx, await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id));
   }),
 
-  /** Несколько элементов за один запрос (перенос из поиска): одна транзакция, один ответ. */
+  /**
+   * Несколько элементов за один запрос (перенос из поиска): одна транзакция, один ответ.
+   * Дубликаты пропускаются, остальное добавляется; skipped — сколько пропущено.
+   */
   addItems: activeProcedure.input(z.object({ id: z.string(), items: z.array(NewItem).min(1).max(500) })).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'edit');
-    const items = prepareItems(d, input.items);
-    return withRole(ctx, items.length ? await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id) : d);
+    const { items, skipped } = prepareItems(d, input.items);
+    return { ...withRole(ctx, items.length ? await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id) : d), skipped };
   }),
 
   updateItem: activeProcedure.input(z.object({ id: z.string(), item: DossierItem })).mutation(async ({ ctx, input }) => {
-    await load(ctx, input.id, 'edit');
+    const d = await load(ctx, input.id, 'edit');
+    const before = d.items.find((i) => i.id === input.item.id);
+    // Значение не менялось — не дубликат: старые повторы, появившиеся до этой проверки, можно править.
+    if (before && itemIdentity(before) !== itemIdentity(input.item) && findDuplicate(d.items, input.item)) {
+      throw new Conflict('DUPLICATE_ITEM');
+    }
     return withRole(ctx, await ctx.deps.dossiers.updateItem(input.id, input.item));
   }),
 

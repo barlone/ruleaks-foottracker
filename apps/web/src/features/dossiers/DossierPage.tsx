@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
   ArrowLeft, Camera, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
-import { LEAK_FIELDS, attrCopyValue, attrDisplayValue, FIELD_TO_KIND, POST_KIND_LABELS, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
+import { LEAK_FIELDS, attrCopyValue, attrDisplayValue, FIELD_TO_KIND, POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
@@ -15,7 +15,7 @@ import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields } from '../../components/SourceFields.tsx';
 import { emptySource, finishSource, type SourceDraft } from '../../components/source.ts';
 import { TagsBar } from '../../components/Tags.tsx';
-import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, FilePicker, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
+import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, FilePicker, Input, Select, Spinner, Tag, Textarea, WarnNote } from '../../components/ui.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
@@ -304,7 +304,7 @@ export function DossierPage() {
         </div>
       </div>
 
-      <AddItemDialog kind={adding} onClose={() => setAdding(null)} onAdd={add} />
+      <AddItemDialog kind={adding} existing={d.items} onClose={() => setAdding(null)} onAdd={add} />
 
       <ExportDialog kind="dossier" format={exporting ?? 'file'} id={id} open={!!exporting} onOpenChange={(v) => !v && setExporting(null)} />
 
@@ -374,16 +374,16 @@ function MembersEditor({
   );
 }
 
-function AddItemDialog({ kind, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'media' | 'note' | 'post'; onClose: () => void; onAdd: (i: NewItem) => Promise<void> }) {
+function AddItemDialog({ kind, existing, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'media' | 'note' | 'post'; existing: DossierItem[]; onClose: () => void; onAdd: (i: NewItem) => Promise<void> }) {
   const titles = { attribute: 'Новый атрибут', link: 'Ссылка на профиль', media: 'Медиафайл', note: 'Заметка', post: 'Пост или реакция' };
   return (
     <Dialog open={!!kind} onOpenChange={(v) => !v && onClose()} title={kind ? titles[kind] : ''} wide={kind === 'note'}>
-      {kind && <AddItemForm key={kind} kind={kind} onAdd={onAdd} />}
+      {kind && <AddItemForm key={kind} kind={kind} existing={existing} onAdd={onAdd} />}
     </Dialog>
   );
 }
 
-function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | 'note' | 'post'; onAdd: (i: NewItem) => Promise<void> }) {
+function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | 'media' | 'note' | 'post'; existing: DossierItem[]; onAdd: (i: NewItem) => Promise<void> }) {
   const [key, setKey] = useState<string>('phones');
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
@@ -398,13 +398,18 @@ function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | '
   const [replyTo, setReplyTo] = useState('');
   const [source, setSource] = useState<SourceDraft>(emptySource());
   const [error, setError] = useState<string | null>(null);
+  const attrLabel = key === 'custom' ? label : LEAK_FIELDS[key as LeakField];
+  // Предупреждение сразу при вводе; окончательно дубликат не пропустит сервер (досье мог изменить другой пользователь).
+  const duplicate = kind === 'attribute'
+    ? findDuplicate(existing, { type: 'attribute', key, label: attrLabel, value })
+    : kind === 'link' && value.trim() ? findDuplicate(existing, { type: 'link', url: value }) : undefined;
 
   async function submit() {
     setError(null);
     const src = finishSource(source);
     try {
       if (kind === 'attribute') {
-        await onAdd({ type: 'attribute', key, label: key === 'custom' ? label : LEAK_FIELDS[key as LeakField], value, source: src });
+        await onAdd({ type: 'attribute', key, label: attrLabel, value, source: src });
       } else if (kind === 'link') {
         const url = /^https?:\/\//.test(value) ? value : `https://${value}`;
         await onAdd({ type: 'link', url, title: title || undefined, platform: guessPlatform(url), source: src });
@@ -514,9 +519,14 @@ function AddItemForm({ kind, onAdd }: { kind: 'attribute' | 'link' | 'media' | '
     >
       {body}
       <SourceFields value={source} onChange={setSource} />
+      {duplicate && (
+        <WarnNote>
+          Уже есть в досье: {duplicate.type === 'attribute' ? `${duplicate.label} — ${attrDisplayValue(duplicate.key, duplicate.value)}` : duplicate.type === 'link' ? duplicate.url : ''}
+        </WarnNote>
+      )}
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
       <div className="flex justify-end">
-        <Button type="submit" variant="primary" disabled={!value.trim()}>Добавить</Button>
+        <Button type="submit" variant="primary" disabled={!value.trim() || !!duplicate}>Добавить</Button>
       </div>
     </form>
   );

@@ -157,6 +157,11 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   );
 }
 
+/** Предупреждение в форме или окне: действие сейчас не выполнится или выполнится не полностью. */
+export function WarnNote({ children }: { children: ReactNode }) {
+  return <div role="alert" className="rounded-md border border-warn/30 bg-warn/10 px-2.5 py-1.5 font-mono text-xs text-warn">{children}</div>;
+}
+
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="rounded-xl border border-dashed border-line p-8 text-center font-mono text-sm text-mute">{children}</div>;
 }

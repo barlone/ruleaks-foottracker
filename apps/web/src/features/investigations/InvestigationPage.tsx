@@ -7,9 +7,10 @@ import { ExportDialog } from '../../components/ExportDialog.tsx';
 import { ObjectActions } from '../../components/ObjectActions.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { TagsBar } from '../../components/Tags.tsx';
-import { Button, Empty, Spinner, Tag } from '../../components/ui.tsx';
+import { Button, Empty, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { fmtDate } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
 import { FactsPanel } from './FactsPanel.tsx';
 import { HypothesesPanel } from './HypothesesPanel.tsx';
@@ -44,6 +45,7 @@ export function InvestigationPage() {
   const remove = trpc.investigations.remove.useMutation({ onSuccess: () => navigate({ to: '/investigations' }) });
   const [sharing, setSharing] = useState(false);
   const [exporting, setExporting] = useState<'file' | 'pdf' | null>(null);
+  const [editTitle, setEditTitle] = useState<string | null>(null);
   const [editDesc, setEditDesc] = useState<string | null>(null);
   const [showDesc, setShowDesc] = useState(false);
 
@@ -74,25 +76,43 @@ export function InvestigationPage() {
             onExportPdf={me.data ? () => setExporting('pdf') : undefined}
           />
         </div>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-extrabold tracking-tight">{inv.title}</h1>
-              <VisibilityTag v={inv.visibility} />
-              {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? 'правка' : 'чтение'}</Tag>}
-              <button onClick={() => setShowDesc((v) => !v)} className="cursor-pointer font-mono text-[11px] text-mute hover:text-mint">
-                {showDesc ? 'скрыть описание' : 'описание'}
-              </button>
-            </div>
-            <div className="mt-2">
-              <TagsBar
-                tags={inv.tags}
-                editable={editable}
-                busy={update.isPending}
-                onChange={(tagIds) => update.mutate({ id, version: inv.version, patch: { tagIds } })}
-              />
-            </div>
+        {/* Как в шапке досье: метки, название с карандашом, теги. */}
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <VisibilityTag v={inv.visibility} />
+            {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? 'вы можете править' : 'только чтение'}</Tag>}
+            <span className="font-mono text-[11px] text-mute">v{inv.version} · изменено {fmtDate(inv.updatedAt, true)}</span>
+            <button onClick={() => setShowDesc((v) => !v)} className="cursor-pointer font-mono text-[11px] text-mute hover:text-mint">
+              {showDesc ? 'скрыть описание' : 'показать описание'}
+            </button>
           </div>
+          {editTitle !== null ? (
+            <form
+              className="max-w-3xl"
+              onSubmit={(e) => {
+                e.preventDefault();
+                update.mutate({ id, version: inv.version, patch: { title: editTitle } });
+                setEditTitle(null);
+              }}
+            >
+              <Input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onBlur={() => setEditTitle(null)} className="text-2xl! font-extrabold" />
+            </form>
+          ) : (
+            <h1 className="group flex items-center gap-2 text-2xl font-extrabold tracking-tight">
+              {inv.title}
+              {editable && (
+                <button onClick={() => setEditTitle(inv.title)} title="Изменить название" className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+                  <Pencil size={16} />
+                </button>
+              )}
+            </h1>
+          )}
+          <TagsBar
+            tags={inv.tags}
+            editable={editable}
+            busy={update.isPending}
+            onChange={(tagIds) => update.mutate({ id, version: inv.version, patch: { tagIds } })}
+          />
         </div>
 
         {showDesc && (

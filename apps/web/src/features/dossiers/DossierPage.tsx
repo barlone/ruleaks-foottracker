@@ -121,7 +121,7 @@ export function DossierPage() {
                     setEditTitle(null);
                   }}
                 >
-                  <Input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onBlur={() => setEditTitle(null)} className="h-12 text-2xl font-extrabold" />
+                  <Input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onBlur={() => setEditTitle(null)} className="h-12 text-2xl! font-extrabold" />
                 </form>
               ) : (
                 <h1 className="group flex items-center gap-2 text-3xl font-extrabold tracking-tight">

@@ -6,7 +6,7 @@ import Lightbox from 'yet-another-react-lightbox';
 import Captions from 'yet-another-react-lightbox/plugins/captions';
 import 'yet-another-react-lightbox/styles.css';
 import 'yet-another-react-lightbox/plugins/captions.css';
-import { GripVertical, Star, Trash2 } from 'lucide-react';
+import { GripVertical, Pencil, Star, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
@@ -18,7 +18,7 @@ type Media = Extract<DossierItem, { type: 'media' }>;
  * группировка по альбомам. Загрузка в S3 появится вместе с адаптером хранилища.
  */
 export function MediaGallery({
-  items, editable, coverUrl, onReorder, onRemove, onCover,
+  items, editable, coverUrl, onReorder, onRemove, onCover, onEdit,
 }: {
   items: Media[];
   editable: boolean;
@@ -26,6 +26,8 @@ export function MediaGallery({
   onReorder: (orderedIds: string[]) => void;
   onRemove: (id: string) => void;
   onCover: (url: string) => void;
+  /** Правка подписи, альбома и источника (сама картинка не меняется). */
+  onEdit: (m: Media) => void;
 }) {
   const [order, setOrder] = useState<string[] | null>(null);
   const [open, setOpen] = useState(-1);
@@ -56,6 +58,7 @@ export function MediaGallery({
                 onOpen={() => setOpen(i)}
                 onRemove={() => onRemove(m.id)}
                 onCover={() => onCover(m.url)}
+                onEdit={() => onEdit(m)}
               />
             ))}
           </div>
@@ -74,8 +77,8 @@ export function MediaGallery({
 }
 
 function Tile({
-  m, editable, isCover, onOpen, onRemove, onCover,
-}: { m: Media; editable: boolean; isCover: boolean; onOpen: () => void; onRemove: () => void; onCover: () => void }) {
+  m, editable, isCover, onOpen, onRemove, onCover, onEdit,
+}: { m: Media; editable: boolean; isCover: boolean; onOpen: () => void; onRemove: () => void; onCover: () => void; onEdit: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: m.id, disabled: !editable });
   return (
     <figure
@@ -98,6 +101,9 @@ function Tile({
         <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
           <button onClick={onCover} title="Сделать обложкой" className={clsx('grid size-7 cursor-pointer place-items-center rounded bg-bg/70', isCover ? 'text-mint' : 'text-dim hover:text-mint')}>
             <Star size={13} fill={isCover ? 'currentColor' : 'none'} />
+          </button>
+          <button onClick={onEdit} title="Править" className="grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-mint">
+            <Pencil size={13} />
           </button>
           <button onClick={onRemove} title="Удалить" className="grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-danger">
             <Trash2 size={13} />

@@ -69,6 +69,7 @@ export function DossierPage() {
   const [editSummary, setEditSummary] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string | null>(null);
   const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'media' | 'note' | 'post'>(null);
+  const [editingMedia, setEditingMedia] = useState<Of<'media'> | null>(null);
   const [sharing, setSharing] = useState(false);
   const [exporting, setExporting] = useState<'file' | 'pdf' | null>(null);
 
@@ -195,6 +196,7 @@ export function DossierPage() {
                 onReorder={(ids) => reorder.mutate({ id, orderedIds: ids })}
                 onRemove={(itemId) => removeItem.mutate({ id, itemId })}
                 onCover={(url) => update.mutate({ id, version: d.version, patch: { coverMediaUrl: url } })}
+                onEdit={setEditingMedia}
               />
             ) : (
               <Empty>Медиафайлов нет</Empty>
@@ -302,6 +304,11 @@ export function DossierPage() {
         </div>
       </div>
 
+      <EditMediaDialog
+        media={editingMedia}
+        onClose={() => setEditingMedia(null)}
+        onSave={(item) => updateItem.mutateAsync({ id, item }).then(() => setEditingMedia(null))}
+      />
       <AddItemDialog kind={adding} existing={d.items} onClose={() => setAdding(null)} onAdd={add} />
 
       <ExportDialog kind="dossier" format={exporting ?? 'file'} id={id} open={!!exporting} onOpenChange={(v) => !v && setExporting(null)} />
@@ -441,6 +448,60 @@ function MembersEditor({
         </Select>
       )}
     </div>
+  );
+}
+
+/** Правка медиа: подпись, альбом, источник. Картинка остаётся — для другой проще добавить новый элемент. */
+function EditMediaDialog({ media, onClose, onSave }: { media: Of<'media'> | null; onClose: () => void; onSave: (item: Of<'media'>) => Promise<void> }) {
+  return (
+    <Dialog open={!!media} onOpenChange={(v) => !v && onClose()} title="Медиафайл">
+      {media && <EditMediaForm key={media.id} media={media} onSave={onSave} />}
+    </Dialog>
+  );
+}
+
+function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: Of<'media'>) => Promise<void> }) {
+  const [caption, setCaption] = useState(media.caption ?? '');
+  const [album, setAlbum] = useState(media.album ?? '');
+  // У старых элементов источника может не быть — тогда черновик пустой, а время фиксации поставится при сохранении.
+  const { capturedAt, ...rest } = media.source ?? { capturedAt: undefined, ...emptySource() };
+  const [source, setSource] = useState<SourceDraft>({ ...rest, ref: rest.ref ?? '' });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      // Время фиксации источника остаётся прежним: правится описание, а не сами сведения.
+      const src = finishSource(source);
+      await onSave({ ...media, caption: caption.trim() || undefined, album: album.trim() || undefined, source: capturedAt ? { ...src, capturedAt } : src });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <img src={media.url} alt="" className="max-h-48 rounded-lg border border-line" />
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Подпись"><Input autoFocus value={caption} onChange={(e) => setCaption(e.target.value)} /></Field>
+        <Field label="Альбом"><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder="Соцсети, Наблюдение…" /></Field>
+      </div>
+      <SourceFields value={source} onChange={setSource} />
+      {error && <div className="font-mono text-xs text-danger">{error}</div>}
+      <div className="flex justify-end">
+        <Button type="submit" variant="primary" disabled={saving}>Сохранить</Button>
+      </div>
+    </form>
   );
 }
 

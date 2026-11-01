@@ -1,13 +1,16 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Fragment, useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowUp, Asterisk, FolderSearch, LogOut, MapPin, Network, RefreshCw, Search, Send, ShieldAlert, UserSearch } from 'lucide-react';
+import { ArrowUp, Asterisk, FolderSearch, LogOut, MapPin, Moon, Network, RefreshCw, Search, Send, ShieldAlert, Sun, UserSearch } from 'lucide-react';
+import type { Theme } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
 import { toasts } from '../lib/toast.ts';
 import { useStore } from '../lib/store.ts';
 import { fmtDate } from '../lib/format.ts';
+import { useUserSettings } from '../lib/settings.ts';
+import { applyTheme } from '../lib/theme.ts';
 import { LoginPage } from './LoginPage.tsx';
-import { Button, Dialog, Spinner } from './ui.tsx';
+import { Button, Dialog, Field, Segmented, Spinner } from './ui.tsx';
 
 // feature — раздел есть только если включён в config.ini (geo — [config] geo-search, pages — [config] pages-search).
 const NAV = [
@@ -25,6 +28,12 @@ export function Root() {
   const me = trpc.auth.me.useQuery();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const mainRef = useRef<HTMLElement>(null);
+
+  // Без сессии тема не меняется: страница входа открывается в той, что была у последнего пользователя этого браузера.
+  const theme = me.data?.settings.theme;
+  useEffect(() => {
+    if (theme) applyTheme(theme);
+  }, [theme]);
 
   if (me.isLoading) {
     return (
@@ -187,6 +196,7 @@ function Sidebar() {
             ? user.access.forced ? '● полный доступ' : user.access.unlimited ? '● безлимитный доступ' : `● подписка до ${fmtDate(user.access.until)}`
             : '○ подписка неактивна'}
         </div>
+        <UserSettingsFields />
         {mode.data !== 'none' && (
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setUserOpen(false); logout.mutate(); }}>
             <LogOut size={14} /> Выйти
@@ -194,6 +204,25 @@ function Sidebar() {
         )}
       </Dialog>
     </aside>
+  );
+}
+
+/** Настройки в окне пользователя: хранятся в БД у пользователя и работают и без подписки. */
+function UserSettingsFields() {
+  const { settings, update } = useUserSettings();
+  return (
+    <div className="mb-4">
+      <Field label="Оформление">
+        <Segmented<Theme>
+          value={settings.theme}
+          onChange={(theme) => update({ theme })}
+          options={[
+            { value: 'dark', label: <span className="inline-flex items-center gap-1.5"><Moon size={13} /> Тёмная</span> },
+            { value: 'light', label: <span className="inline-flex items-center gap-1.5"><Sun size={13} /> Светлая</span> },
+          ]}
+        />
+      </Field>
+    </div>
   );
 }
 

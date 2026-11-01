@@ -4,7 +4,7 @@
 
 import type {
   Access, Dossier, DossierItem, DossierSummary, Fact, GraphEdge, GraphNode, Hypothesis,
-  Investigation, InvestigationSummary, DossierRelation, RelationType, SearchJob, SearchSection, Share, Tag, User,
+  Investigation, InvestigationSummary, DossierRelation, RelationType, SearchJob, SearchSection, Share, Tag, User, UserSettings,
 } from '@ft/shared';
 
 // ---------- Бот (владелец пользователей и подписок) ----------
@@ -96,7 +96,9 @@ export interface UserRepo {
   /** null в displayName / username — не менять то, что уже записано (новому пользователю — имя-заглушка). */
   upsertByTgId(u: { tgId: string; displayName: string | null; username: string | null }): Promise<{ id: string }>;
   get(id: string): Promise<Omit<User, 'access'> | null>;
-  findByUsername(username: string): Promise<Omit<User, 'access'> | null>;
+  findByUsername(username: string): Promise<Omit<User, 'access' | 'settings'> | null>;
+  /** set — записать ключи, reset — убрать (вернуть значение по умолчанию). Ответ — полные настройки после изменения. */
+  updateSettings(id: string, set: Record<string, unknown>, reset: string[]): Promise<UserSettings>;
 }
 
 export interface SessionRepo {

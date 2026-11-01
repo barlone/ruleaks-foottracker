@@ -276,10 +276,10 @@ Nonce виден всем, кто видит экран или ссылку (QR-
   для своей подложки. Круг строится многоугольником по большим кругам, поворот и наклон карты выключены.
   Воркер MapLibre подключается через `?worker&url` + `setWorkerUrl`: сам он ищет файл по `import.meta.url`, а после бандлинга Vite файла там нет.
 - **Подложка** (`[geo-search] tiles`):
-  - `raster` — публичные растровые тайлы, затемнённые paint-свойствами слоя (`raster-brightness-min > max` инвертирует яркость).
+  - `raster` — публичные растровые тайлы; в тёмной теме затемнённые paint-свойствами слоя (`raster-brightness-min > max` инвертирует яркость).
     Только для разработки: правила tile.openstreetmap.org и утечка просматриваемых районов стороннему серверу.
   - `pmtiles` — вырезка Европы и России из сборки Protomaps (`tools/geo/`), зум до 14; стиль — `@protomaps/basemaps`
-    (тёмная схема, подписи на `lang`). Отдельного тайл-сервера нет: сервер приложения отдаёт файл `.pmtiles` и `basemaps-assets`
+    (схема по теме сайта, подписи на `lang`). Отдельного тайл-сервера нет: сервер приложения отдаёт файл `.pmtiles` и `basemaps-assets`
     по `/geo/tiles.pmtiles` и `/geo/assets/*` (`geo-files.ts`, `@fastify/static` с `serve: false`), только при наличии
     сессии. Браузер читает файл Range-запросами (протокол `pmtiles://`). Вместо путей можно указать https-адреса
     Protomaps — это для проверки в разработке.
@@ -467,6 +467,30 @@ Nonce виден всем, кто видит экран или ссылку (QR-
 - `manage` (видимость, доступы, удаление) — только владелец.
 - План: RLS в Postgres как второй рубеж; таблица `audit_log` для поисков и открытия чужих объектов.
 
+## 9.1. Настройки пользователя
+
+Индивидуальные настройки лежат в `users.settings` (jsonb) — **только ключи со значением не по умолчанию**: `{}` — всё по
+умолчанию, `{"theme":"light"}` — выбрана светлая тема. Поэтому новая настройка не требует миграции, а смена значения
+по умолчанию доходит до всех, кто его не менял.
+
+- Схема и значения по умолчанию — в `@ft/shared` (`UserSettings`, `DEFAULT_USER_SETTINGS`): новая настройка = поле схемы +
+  значение. `resolveUserSettings` достраивает записанное до полных настроек; ключ, не прошедший схему, считается не заданным.
+- Чтение — вместе с пользователем (`auth.me`), сайту настройки приходят всегда полными. `findByUsername` их не отдаёт:
+  при расшаривании нужны только id и имя.
+- Запись — `settings.update` (`authedProcedure`: оформление не правка данных, подписка для него не нужна). Меняются только
+  переданные ключи, значение по умолчанию убирает ключ (`settingsChanges`). Одним `UPDATE` без чтения, чтобы две
+  вкладки не затирали друг друга. На сайте — `useUserSettings()`: изменение видно сразу, при ошибке откатывается.
+- Правятся в окне пользователя (шестерня в шапке сайдбара, `AppShell`).
+
+**Тема оформления.** `data-theme="light"` на `<html>` переключает CSS-переменные в `styles.css`; тёмная — без атрибута,
+значения из `@theme`. `lib/theme.ts` применяет тему из настроек; копия в `localStorage` (`ft-theme`) нужна только первой
+отрисовке — её читает скрипт в `index.html`, иначе светлая тема мигала бы тёмной до ответа сервера, — и странице входа.
+После входа тема берётся из настроек: чужая копия в браузере на неё не влияет.
+Новые цвета — только токенами: классы `text-*` / `bg-*` палитры, а не `white` / `black` (`border-text/30`, `bg-bg/70`).
+То, что CSS-переменными не красится: MapLibre рисует в canvas, цвета читаются через `cssColor()` и карта создаётся заново
+при смене темы (`GeoPicker` сохраняет вид); `colorMode` у React Flow. У значений `--shadow-*` цвет задан через
+`--ft-mint-rgb`, потому что Tailwind подставляет их прямо в утилиту.
+
 ## 10. Модель данных
 
 Источник истины — SQL-миграции в `packages/db/migrations` (node-pg-migrate, аналог alembic; описание и
@@ -474,7 +498,7 @@ Nonce виден всем, кто видит экран или ссылку (QR-
 `20261005120000_tags-dictionary.sql`:
 
 ```
-users(id, tg_id, display_name, username)                     sessions(id_hash sha256, user_id, expires_at)
+users(id, tg_id, display_name, username, settings jsonb)     sessions(id_hash sha256, user_id, expires_at)
 dossiers(id, uid, owner_id, kind, title, summary_md, visibility, cover_media_id, version, deleted_at, search_tsv)
 dossier_members(group_id, member_id, role_label)             dossier_items(id, dossier_id, type, data jsonb, source jsonb, position, media_id)
 dossier_shares(dossier_id, user_id, role)                    media(id, owner_id, storage_key, sha256, exif)

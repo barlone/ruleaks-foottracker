@@ -64,12 +64,26 @@ export const Access = z.object({
   forced: z.boolean().optional(),
 });
 
+// В users.settings (jsonb) лежат только ключи со значением не по умолчанию: новая настройка не требует миграции,
+// а смена значения по умолчанию доходит до всех, кто его не менял. Сайту настройки приходят всегда полными.
+
+export const Theme = z.enum(['dark', 'light']);
+
+/** Новая настройка = поле здесь + значение в DEFAULT_USER_SETTINGS. */
+export const UserSettings = z.object({
+  theme: Theme,
+});
+
+/** Изменение настроек: только переданные ключи, остальные остаются как есть. */
+export const UserSettingsPatch = UserSettings.partial().strict();
+
 export const User = z.object({
   id: Id,
   tgId: z.string(),
   displayName: z.string(),
   username: z.string().nullable(),
   access: Access,
+  settings: UserSettings,
 });
 
 // ---------- Теги ----------
@@ -372,6 +386,9 @@ export type RelationType = z.infer<typeof RelationType>;
 export type DossierRelation = z.infer<typeof DossierRelation>;
 export type Source = z.infer<typeof Source>;
 export type Access = z.infer<typeof Access>;
+export type Theme = z.infer<typeof Theme>;
+export type UserSettings = z.infer<typeof UserSettings>;
+export type UserSettingsPatch = z.infer<typeof UserSettingsPatch>;
 export type User = z.infer<typeof User>;
 export type DossierItem = z.infer<typeof DossierItem>;
 export type Dossier = z.infer<typeof Dossier>;

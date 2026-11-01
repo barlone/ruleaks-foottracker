@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource } from 'maplibre-gl';
-import { EMPTY, MINT, boundsOf, circle, createMap, type GeoConfig, type GeoPoint } from './geoMap.ts';
+import { useStore } from '../../lib/store.ts';
+import { cssColor, theme as themeStore } from '../../lib/theme.ts';
+import { EMPTY, boundsOf, circle, createMap, type GeoConfig, type GeoPoint } from './geoMap.ts';
 
 export type { GeoConfig, GeoPoint } from './geoMap.ts';
 
@@ -38,20 +40,25 @@ export function GeoPicker({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const pickRef = useRef(onPick);
+  /** Вид карты: при смене темы она создаётся заново, а показывать должна то же место. */
+  const viewRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   // Слой круга можно добавить только после загрузки стиля.
   const [ready, setReady] = useState(false);
+  const theme = useStore(themeStore);
 
   useEffect(() => {
     pickRef.current = onPick;
   }, [onPick]);
 
   useEffect(() => {
-    const map = createMap(box.current!, config, point ? [point.lon, point.lat] : DEFAULT_CENTER, 10);
+    const view = viewRef.current;
+    const map = createMap(box.current!, config, theme, view?.center ?? (point ? [point.lon, point.lat] : DEFAULT_CENTER), view?.zoom ?? 10);
+    const accent = cssColor('--color-mint');
     map.on('click', (e) => pickRef.current(toPoint(e.lngLat)));
     map.on('load', () => {
       map.addSource('pick', { type: 'geojson', data: EMPTY });
-      map.addLayer({ id: 'pick-fill', type: 'fill', source: 'pick', paint: { 'fill-color': MINT, 'fill-opacity': 0.12 } });
-      map.addLayer({ id: 'pick-line', type: 'line', source: 'pick', paint: { 'line-color': MINT, 'line-width': 1.5 } });
+      map.addLayer({ id: 'pick-fill', type: 'fill', source: 'pick', paint: { 'fill-color': accent, 'fill-opacity': 0.12 } });
+      map.addLayer({ id: 'pick-line', type: 'line', source: 'pick', paint: { 'line-color': accent, 'line-width': 1.5 } });
       setReady(true);
     });
 
@@ -61,14 +68,15 @@ export function GeoPicker({
     mapRef.current = map;
     markerRef.current = marker;
     return () => {
+      viewRef.current = { center: map.getCenter().toArray(), zoom: map.getZoom() };
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
       setReady(false);
     };
-    // Стиль и карта создаются заново только при смене настроек; точка дальше двигается эффектами ниже.
+    // Стиль и карта создаются заново только при смене настроек или темы; точка дальше двигается эффектами ниже.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config]);
+  }, [config, theme]);
 
   const lat = point?.lat;
   const lon = point?.lon;
@@ -79,7 +87,7 @@ export function GeoPicker({
     if (!map || !marker) return;
     if (lat === undefined || lon === undefined) marker.remove();
     else marker.setLngLat([lon, lat]).addTo(map);
-  }, [config, lat, lon]);
+  }, [config, theme, lat, lon]);
 
   useEffect(() => {
     if (!ready) return;

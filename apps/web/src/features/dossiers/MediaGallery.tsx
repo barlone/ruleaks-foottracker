@@ -93,16 +93,16 @@ function Tile({
         <span className="min-w-0 flex-1 truncate text-xs text-dim">{m.caption ?? '—'}</span>
         <SourceBadge source={m.source} />
       </figcaption>
-      {m.album && <span className="absolute left-2 top-2 rounded bg-black/70 px-1.5 font-mono text-[10px] text-mint">{m.album}</span>}
+      {m.album && <span className="absolute left-2 top-2 rounded bg-bg/70 px-1.5 font-mono text-[10px] text-mint">{m.album}</span>}
       {editable && (
         <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
-          <button onClick={onCover} title="Сделать обложкой" className={clsx('grid size-7 cursor-pointer place-items-center rounded bg-black/70', isCover ? 'text-mint' : 'text-dim hover:text-mint')}>
+          <button onClick={onCover} title="Сделать обложкой" className={clsx('grid size-7 cursor-pointer place-items-center rounded bg-bg/70', isCover ? 'text-mint' : 'text-dim hover:text-mint')}>
             <Star size={13} fill={isCover ? 'currentColor' : 'none'} />
           </button>
-          <button onClick={onRemove} title="Удалить" className="grid size-7 cursor-pointer place-items-center rounded bg-black/70 text-dim hover:text-danger">
+          <button onClick={onRemove} title="Удалить" className="grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-danger">
             <Trash2 size={13} />
           </button>
-          <span {...attributes} {...listeners} title="Перетащить" className="grid size-7 cursor-grab place-items-center rounded bg-black/70 text-dim hover:text-mint">
+          <span {...attributes} {...listeners} title="Перетащить" className="grid size-7 cursor-grab place-items-center rounded bg-bg/70 text-dim hover:text-mint">
             <GripVertical size={13} />
           </span>
         </div>

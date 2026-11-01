@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { User } from '@ft/shared';
-import { isUuid } from '@ft/shared';
+import { isUuid, resolveUserSettings } from '@ft/shared';
 import { DEFAULT_DISPLAY_NAME, type SessionRepo, type UserRepo } from '../../ports.ts';
-import { tx, type Db } from './db.ts';
+import { json, tx, type Db } from './db.ts';
 
-type StoredUser = Omit<User, 'access'>;
+type StoredUser = Omit<User, 'access' | 'settings'>;
 
 interface UserRow {
   id: string;
@@ -39,8 +39,8 @@ export class PgUsers implements UserRepo {
 
   async get(id: string) {
     if (!isUuid(id)) return null;
-    const r = await this.db.query<UserRow>(`SELECT id, tg_id::text, display_name, username FROM users WHERE id = $1`, [id]);
-    return r.rows[0] ? toUser(r.rows[0]) : null;
+    const r = await this.db.query<UserRow & { settings: unknown }>(`SELECT id, tg_id::text, display_name, username, settings FROM users WHERE id = $1`, [id]);
+    return r.rows[0] ? { ...toUser(r.rows[0]), settings: resolveUserSettings(r.rows[0].settings) } : null;
   }
 
   async findByUsername(username: string) {
@@ -49,6 +49,17 @@ export class PgUsers implements UserRepo {
       [username.replace(/^@/, '')],
     );
     return r.rows[0] ? toUser(r.rows[0]) : null;
+  }
+
+  async updateSettings(id: string, set: Record<string, unknown>, reset: string[]) {
+    if (!isUuid(id)) throw new Error('NOT_FOUND');
+    // Одним UPDATE, без чтения: две вкладки, меняющие разные настройки, не затрут ключи друг друга.
+    const r = await this.db.query<{ settings: unknown }>(
+      `UPDATE users SET settings = (settings || $2::jsonb) - $3::text[] WHERE id = $1 RETURNING settings`,
+      [id, json(set), reset],
+    );
+    if (!r.rows[0]) throw new Error('NOT_FOUND');
+    return resolveUserSettings(r.rows[0].settings);
   }
 }
 

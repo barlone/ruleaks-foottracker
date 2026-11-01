@@ -116,8 +116,8 @@ export function DossiersPage() {
                 </div>
               )}
               <div className="absolute left-3 top-3 flex gap-1.5">
-                <Tag tone="dim" className="bg-black/70">{d.kind === 'group' ? 'группа' : 'персона'}</Tag>
-                {d.role !== 'owner' && <Tag className="bg-black/70">{d.role === 'editor' ? 'правка' : 'чтение'}</Tag>}
+                <Tag tone="dim" className="bg-bg/70">{d.kind === 'group' ? 'группа' : 'персона'}</Tag>
+                {d.role !== 'owner' && <Tag className="bg-bg/70">{d.role === 'editor' ? 'правка' : 'чтение'}</Tag>}
               </div>
             </div>
             <div className="space-y-2 p-4">

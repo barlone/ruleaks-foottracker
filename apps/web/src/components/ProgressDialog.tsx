@@ -51,7 +51,7 @@ export function ProgressDialog({ open, title, value, status, detail, startedAt, 
     <RDialog.Root open={open}>
       <RDialog.Portal>
         {/* Поверх любых других окон (экспорт открывает прогресс из своего диалога). */}
-        <RDialog.Overlay className="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+        <RDialog.Overlay className="fixed inset-0 z-[70] grid place-items-center bg-bg/70 p-4 backdrop-blur-sm">
           <RDialog.Content
             onOpenAutoFocus={(e) => e.preventDefault()}
             onPointerDownOutside={(e) => e.preventDefault()}

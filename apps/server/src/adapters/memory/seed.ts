@@ -5,7 +5,7 @@ import type { Dossier, Investigation, User } from '@ft/shared';
 export const U_ME = 'u-sledopyt';
 export const U_COLLEAGUE = 'u-colleague';
 
-export const seedUsers: Omit<User, 'access'>[] = [
+export const seedUsers: Omit<User, 'access' | 'settings'>[] = [
   { id: U_ME, tgId: '100000001', displayName: 'Следопыт', username: 'sledopyt_dev' },
   { id: 'u-nosub', tgId: '100000002', displayName: 'Без подписки', username: 'nosub_dev' },
   { id: U_COLLEAGUE, tgId: '100000003', displayName: 'Коллега', username: 'colleague_dev' },

@@ -7,7 +7,9 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { Protocol } from 'pmtiles';
 import { layers, namedFlavor } from '@protomaps/basemaps';
+import type { Theme } from '@ft/shared';
 import type { RouterOutputs } from '../../lib/trpc.ts';
+import { cssColor } from '../../lib/theme.ts';
 
 // Общее для карт MapLibre: GeoPicker (выбор точки) и GeoPointsMap (найденные геолокации).
 
@@ -15,11 +17,13 @@ export type GeoPoint = { lat: number; lon: number };
 /** Настройки карты с сервера ([geo-search] в config.ini). */
 export type GeoConfig = NonNullable<RouterOutputs['geo']['config']>;
 
-export const MINT = '#2ee0ac';
 export const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-// Тёмная схема Protomaps, подогнанная под фон сайта.
-const FLAVOR = { ...namedFlavor('dark'), background: '#060b09', earth: '#0b1210' };
+// Схемы Protomaps; тёмная подогнана под фон сайта.
+const FLAVORS = {
+  dark: { ...namedFlavor('dark'), background: '#060b09', earth: '#0b1210' },
+  light: namedFlavor('light'),
+};
 
 /** Адрес от корня сайта → полный (MapLibre и pmtiles требуют абсолютные). new URL не годится: экранирует {fontstack}. */
 const abs = (u: string) => (u.startsWith('/') ? `${location.origin}${u}` : u);
@@ -28,18 +32,20 @@ maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 let pmtilesProtocol = false;
 
-export function buildStyle(cfg: GeoConfig): StyleSpecification {
+export function buildStyle(cfg: GeoConfig, theme: Theme): StyleSpecification {
   const t = cfg.tiles;
   if (t.kind === 'raster') {
     return {
       version: 8,
       sources: { base: { type: 'raster', tiles: [t.url], tileSize: 256, maxzoom: 19, attribution: t.attribution } },
       layers: [
-        { id: 'background', type: 'background', paint: { 'background-color': '#0a0f0d' } },
+        { id: 'background', type: 'background', paint: { 'background-color': cssColor('--color-bg-soft') } },
         // Светлые тайлы OSM → тёмные: min > max инвертирует яркость, поворот оттенка возвращает цвета воды и зелени.
         {
           id: 'base', type: 'raster', source: 'base',
-          paint: { 'raster-brightness-min': 0.85, 'raster-brightness-max': 0.04, 'raster-hue-rotate': 180, 'raster-saturation': -0.4, 'raster-contrast': -0.1 },
+          paint: theme === 'light'
+            ? {}
+            : { 'raster-brightness-min': 0.85, 'raster-brightness-max': 0.04, 'raster-hue-rotate': 180, 'raster-saturation': -0.4, 'raster-contrast': -0.1 },
         },
       ],
     };
@@ -60,15 +66,15 @@ export function buildStyle(cfg: GeoConfig): StyleSpecification {
       },
     },
     // Слои basemaps описаны своей копией style-spec — по смыслу те же типы.
-    layers: layers('protomaps', FLAVOR, { lang: t.lang }) as LayerSpecification[],
+    layers: layers('protomaps', FLAVORS[theme], { lang: t.lang }) as LayerSpecification[],
   };
 }
 
 /** Карта без поворота и наклона (для выбора и просмотра точек они не нужны и только путают), с зумом и масштабной линейкой. */
-export function createMap(container: HTMLElement, cfg: GeoConfig, center: [number, number], zoom: number): maplibregl.Map {
+export function createMap(container: HTMLElement, cfg: GeoConfig, theme: Theme, center: [number, number], zoom: number): maplibregl.Map {
   const map = new maplibregl.Map({
     container,
-    style: buildStyle(cfg),
+    style: buildStyle(cfg, theme),
     center,
     zoom,
     maxZoom: cfg.maxZoom,

@@ -9,9 +9,11 @@ import { importsRouter } from './routers/imports.ts';
 import { geoRouter } from './routers/geo.ts';
 import { scansRouter } from './routers/scans.ts';
 import { pagesRouter } from './routers/pages.ts';
+import { settingsRouter } from './routers/settings.ts';
 
 export const appRouter = router({
   auth: authRouter,
+  settings: settingsRouter,
   search: searchRouter,
   dossiers: dossiersRouter,
   investigations: investigationsRouter,

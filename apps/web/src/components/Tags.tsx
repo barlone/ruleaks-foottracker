@@ -42,7 +42,7 @@ export function TagChip({
   return (
     <span
       className={clsx(
-        'group inline-flex items-stretch overflow-hidden rounded-md border border-white/30 font-mono font-bold tracking-wide',
+        'group inline-flex items-stretch overflow-hidden rounded-md border border-text/30 font-mono font-bold tracking-wide',
         size === 'sm' ? 'h-5 text-[10px]' : 'h-6 text-[11px]',
         selected && 'ring-2 ring-mint ring-offset-1 ring-offset-bg',
       )}
@@ -54,7 +54,7 @@ export function TagChip({
         label
       )}
       {(onEdit || onRemove) && (
-        <span className="hidden items-center gap-2 border-l border-white/30 bg-black/85 px-1.5 group-hover:inline-flex has-[[data-armed]]:inline-flex">
+        <span className="hidden items-center gap-2 border-l border-text/30 bg-bg/85 px-1.5 group-hover:inline-flex has-[[data-armed]]:inline-flex">
           {onEdit && (
             <button type="button" onClick={onEdit} title="Изменить тег" className="cursor-pointer text-mute hover:text-mint">
               <Pencil size={12} />
@@ -64,7 +64,7 @@ export function TagChip({
         </span>
       )}
       {onDismiss && (
-        <button type="button" onClick={onDismiss} title="Убрать" className="flex cursor-pointer items-center border-l border-white/30 bg-black/85 px-1 text-mute hover:text-danger">
+        <button type="button" onClick={onDismiss} title="Убрать" className="flex cursor-pointer items-center border-l border-text/30 bg-bg/85 px-1 text-mute hover:text-danger">
           <X size={12} />
         </button>
       )}
@@ -136,7 +136,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
           type="button"
           onClick={() => onChange(c)}
           title={c}
-          className={clsx('size-6 cursor-pointer rounded-md border border-white/25 transition hover:scale-110', value === c && 'ring-2 ring-mint ring-offset-2 ring-offset-panel')}
+          className={clsx('size-6 cursor-pointer rounded-md border border-text/25 transition hover:scale-110', value === c && 'ring-2 ring-mint ring-offset-2 ring-offset-panel')}
           style={{ background: c }}
         />
       ))}
@@ -144,7 +144,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
       <label
         title="Свой цвет"
         className={clsx(
-          'relative grid size-6 cursor-pointer place-items-center rounded-md border border-dashed border-white/40 text-[10px] text-dim',
+          'relative grid size-6 cursor-pointer place-items-center rounded-md border border-dashed border-text/40 text-[10px] text-dim',
           !TAG_COLORS.includes(value as (typeof TAG_COLORS)[number]) && 'ring-2 ring-mint ring-offset-2 ring-offset-panel',
         )}
         style={TAG_COLORS.includes(value as (typeof TAG_COLORS)[number]) ? undefined : { background: value }}

@@ -307,6 +307,14 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 
 - Theme tokens are in `apps/web/src/styles.css` (`@theme`): black background, mint `#2EE0AC`, JetBrains Mono + Manrope;
   border radii are deliberately 3× smaller than Tailwind defaults. Shared primitives are in `src/components/ui.tsx`.
+- Dark is the default theme; `<html data-theme="light">` overrides the `--color-*` tokens (`:root[data-theme='light']` in
+  `styles.css`). Use tokens, never raw colours: `border-text/30`, `bg-bg/70`, not `white` / `black` (equal in dark, right
+  in light). Hex concatenation (`${color}55`) does not work on tokens — `withAlpha`. MapLibre cannot read `var()`: colours
+  come from `cssColor()` and the map is rebuilt when the `theme` store changes. Tailwind inlines `--shadow-*`, so their
+  colour goes through `--ft-mint-rgb`.
+- User settings: `users.settings` jsonb holds only non-default keys, `@ft/shared` holds the schema and defaults (a new
+  setting needs no migration), they arrive with `auth.me`, `useUserSettings()` updates them optimistically via
+  `settings.update` (`authedProcedure`: works without a subscription). UI: the user dialog in `AppShell`. ARCHITECTURE.md §9.1.
 - Page containers are full-width with `pt-2.5 pl-6 pr-[30px]` (no centered max-width); the 10 px top padding puts the
   first line of the page title level with the visible top of the sidebar logo — keep it when adding a page.
 - Markdown is the storage format for all long text; `@` in the TipTap editor inserts a plain link

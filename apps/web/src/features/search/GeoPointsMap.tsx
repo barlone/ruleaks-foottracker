@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
-import { EMPTY, MINT, boundsOf, circle, createMap, type GeoConfig } from './geoMap.ts';
+import { useStore } from '../../lib/store.ts';
+import { cssColor, theme as themeStore } from '../../lib/theme.ts';
+import { EMPTY, boundsOf, circle, createMap, type GeoConfig } from './geoMap.ts';
 
 /** Найденная геоточка: координаты, необязательный радиус и строки для подписи (значение, утечка, «Прочее»). */
 export type FoundGeoPoint = { lat: number; lon: number; radiusM: number | null; lines: string[] };
@@ -19,22 +21,25 @@ export function GeoPointsMap({ config, points, className }: { config: GeoConfig;
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pointsRef = useRef(points);
   const [ready, setReady] = useState(false);
+  const theme = useStore(themeStore);
 
   useEffect(() => {
     pointsRef.current = points;
   }, [points]);
 
   useEffect(() => {
-    const map = createMap(box.current!, config, [37.6173, 55.7558], 3);
+    const map = createMap(box.current!, config, theme, [37.6173, 55.7558], 3);
     const popup = new maplibregl.Popup({ closeButton: false, maxWidth: '320px', className: 'ft-geo-popup' });
+    const accent = cssColor('--color-mint');
+    const ink = cssColor('--color-mint-ink');
     map.on('load', () => {
       map.addSource('radii', { type: 'geojson', data: EMPTY });
       map.addSource('pts', { type: 'geojson', data: EMPTY });
-      map.addLayer({ id: 'radii-fill', type: 'fill', source: 'radii', paint: { 'fill-color': MINT, 'fill-opacity': 0.08 } });
-      map.addLayer({ id: 'radii-line', type: 'line', source: 'radii', paint: { 'line-color': MINT, 'line-width': 1, 'line-opacity': 0.6 } });
+      map.addLayer({ id: 'radii-fill', type: 'fill', source: 'radii', paint: { 'fill-color': accent, 'fill-opacity': 0.08 } });
+      map.addLayer({ id: 'radii-line', type: 'line', source: 'radii', paint: { 'line-color': accent, 'line-width': 1, 'line-opacity': 0.6 } });
       map.addLayer({
         id: 'pts', type: 'circle', source: 'pts',
-        paint: { 'circle-radius': 5, 'circle-color': MINT, 'circle-stroke-color': '#001a13', 'circle-stroke-width': 2 },
+        paint: { 'circle-radius': 5, 'circle-color': accent, 'circle-stroke-color': ink, 'circle-stroke-width': 2 },
       });
       setReady(true);
     });
@@ -65,7 +70,7 @@ export function GeoPointsMap({ config, points, className }: { config: GeoConfig;
       mapRef.current = null;
       setReady(false);
     };
-  }, [config]);
+  }, [config, theme]);
 
   useEffect(() => {
     const map = mapRef.current;

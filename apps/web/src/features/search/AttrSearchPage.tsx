@@ -342,7 +342,7 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
                 {/* Записи одной утечки разделены тонкой серой чертой. Две колонки — только когда сам бокс
                     достаточно широк (container query), иначе значения с иконками действий не помещаются. */}
                 {!folded && (
-                  <div className="@container divide-y divide-white/10">
+                  <div className="@container divide-y divide-text/10">
                     {card.tuples?.filter(tupleShown).map((t) => {
                       const own = (Object.keys(LEAK_FIELDS) as LeakField[]).filter(shown).flatMap((f) =>
                         (t[f] ?? []).map((v) => (
@@ -354,7 +354,7 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
                         <div key={t.tuple} className="grid gap-x-6 gap-y-1.5 py-3 first:pt-0 last:pb-0 @4xl:grid-cols-2">
                           {own}
                           {/* Найденное вторым шагом по идентификаторам этой записи — под пунктирной чертой. */}
-                          {extra.length > 0 && own.length > 0 && <div className="col-span-full my-1 border-t border-dashed border-white/15" />}
+                          {extra.length > 0 && own.length > 0 && <div className="col-span-full my-1 border-t border-dashed border-text/15" />}
                           {extra.map((x) => (
                             <ValueRow key={`2:${x.f}${x.v}`} field={x.f} value={x.v} by={x.by} checked={selected.has(`${x.f}:${x.v}`)} onToggle={toggle} onPivot={onPivot} />
                           ))}

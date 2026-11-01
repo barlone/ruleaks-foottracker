@@ -48,6 +48,7 @@ psql -h <host> -p <port> -U ruleaksfoottracker -d ruleaksfoottracker -f 002_init
 ## Схема v1 (кратко)
 
 - `users`, `sessions` — пользователь = пользователь бота (`tg_id`); в сессии хранится только sha256 cookie.
+  `users.settings` (jsonb) — индивидуальные настройки, только ключи со значением не по умолчанию.
 - `dossiers` (+ `dossier_members`, `dossier_items`, `dossier_shares`), `media` — досье; элементы — jsonb `data`
   по типу и `source` с оценкой источника; дробная `position` для перетаскивания.
 - `search_jobs` — история поиска и снимки ответов шлюза (`pinned` — прикреплён к досье, `hidden_at` — очищен из истории).

@@ -73,7 +73,7 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
                     <span className="text-mint">за: {pro}</span>
                     <span className="text-danger">против: {con}</span>
                   </div>
-                  <div className="flex h-1.5 overflow-hidden rounded-full bg-white/5">
+                  <div className="flex h-1.5 overflow-hidden rounded-full bg-text/5">
                     <div className="bg-mint" style={{ width: `${(pro / total) * 100}%` }} />
                     <div className="bg-danger" style={{ width: `${(con / total) * 100}%` }} />
                   </div>
@@ -91,7 +91,7 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
                             <button title="Подкрепляет" onClick={() => setStance(h, f.id, stance === 'supports' ? null : 'supports')} className={clsx('grid size-6 cursor-pointer place-items-center rounded border', stance === 'supports' ? 'border-mint bg-mint text-mint-ink' : 'border-line-soft text-mute hover:text-mint')}>
                               <Plus size={12} />
                             </button>
-                            <button title="Противоречит" onClick={() => setStance(h, f.id, stance === 'contradicts' ? null : 'contradicts')} className={clsx('grid size-6 cursor-pointer place-items-center rounded border', stance === 'contradicts' ? 'border-danger bg-danger text-black' : 'border-line-soft text-mute hover:text-danger')}>
+                            <button title="Противоречит" onClick={() => setStance(h, f.id, stance === 'contradicts' ? null : 'contradicts')} className={clsx('grid size-6 cursor-pointer place-items-center rounded border', stance === 'contradicts' ? 'border-danger bg-danger text-bg' : 'border-line-soft text-mute hover:text-danger')}>
                               <Minus size={12} />
                             </button>
                           </span>

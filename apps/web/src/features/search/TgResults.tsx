@@ -250,7 +250,7 @@ export function MultiUserList({
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 const DAYS_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-const heat = (v: number, max: number) => (max ? `rgba(46,224,172,${0.06 + (v / max) * 0.84})` : 'transparent');
+const heat = (v: number, max: number) => (max ? `rgb(var(--ft-mint-rgb) / ${0.06 + (v / max) * 0.84})` : 'transparent');
 
 export function MonthActivity({ years }: { years: TgMonthActivity }) {
   const ys = Object.keys(years).sort();
@@ -277,7 +277,7 @@ export function MonthActivity({ years }: { years: TgMonthActivity }) {
                   {MONTHS.map((_, i) => {
                     const v = row[String(i + 1)] ?? 0;
                     return (
-                      <td key={i} title={`${MONTHS[i]} ${y}: ${v}`} className="h-9 min-w-10 rounded text-center" style={{ background: heat(v, max), color: v > max * 0.55 ? '#001a13' : undefined }}>
+                      <td key={i} title={`${MONTHS[i]} ${y}: ${v}`} className="h-9 min-w-10 rounded text-center" style={{ background: heat(v, max), color: v > max * 0.55 ? 'var(--color-mint-ink)' : undefined }}>
                         {v || ''}
                       </td>
                     );

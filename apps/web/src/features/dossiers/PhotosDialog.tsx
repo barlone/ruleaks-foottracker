@@ -52,7 +52,7 @@ export function CoverBox({
           </span>
         )}
         {photos.length > 0 && (
-          <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/75 px-1.5 font-mono text-[10px] text-dim">
+          <span className="absolute bottom-1.5 right-1.5 rounded-md bg-bg/75 px-1.5 font-mono text-[10px] text-dim">
             {photos.length} фото
           </span>
         )}
@@ -203,7 +203,7 @@ function PhotosDialog({
                   <img src={p.url} alt={p.caption ?? ''} className="size-full object-cover" />
                   {main && <span className="absolute left-1.5 top-1.5 rounded-md bg-mint px-1.5 font-mono text-[10px] font-bold text-mint-ink">основное</span>}
                   {editable && (
-                    <span className="absolute right-1.5 top-1.5 flex items-center gap-2 rounded-md bg-black/80 px-1.5 py-1 opacity-0 transition group-hover:opacity-100 has-[[data-armed]]:opacity-100">
+                    <span className="absolute right-1.5 top-1.5 flex items-center gap-2 rounded-md bg-bg/80 px-1.5 py-1 opacity-0 transition group-hover:opacity-100 has-[[data-armed]]:opacity-100">
                       {!main && (
                         <button type="button" disabled={busy} onClick={() => setMain(p.url)} title="Сделать основным" className="cursor-pointer text-mute hover:text-mint">
                           <Star size={14} />
@@ -212,7 +212,7 @@ function PhotosDialog({
                       <ConfirmDeleteBtn onConfirm={() => remove(p)} title="Удалить фото" />
                     </span>
                   )}
-                  {p.caption && <figcaption className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-2 py-1 text-[11px] text-dim">{p.caption}</figcaption>}
+                  {p.caption && <figcaption className="absolute inset-x-0 bottom-0 truncate bg-bg/70 px-2 py-1 text-[11px] text-dim">{p.caption}</figcaption>}
                 </figure>
               );
             })}

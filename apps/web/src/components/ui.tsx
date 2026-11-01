@@ -94,7 +94,7 @@ export function Tag({ children, tone = 'mint', className }: { children: ReactNod
       className={clsx(
         'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[11px] leading-5',
         tone === 'mint' && 'border-line bg-mint/8 text-mint',
-        tone === 'dim' && 'border-white/10 bg-white/5 text-dim',
+        tone === 'dim' && 'border-text/10 bg-text/5 text-dim',
         tone === 'warn' && 'border-warn/30 bg-warn/10 text-warn',
         tone === 'danger' && 'border-danger/30 bg-danger/10 text-danger',
         tone === 'info' && 'border-info/30 bg-info/10 text-info',
@@ -123,7 +123,7 @@ export function Dialog({
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <RDialog.Portal>
         {/* Центрирование без transform: иначе position:fixed внутри диалога (подсказки редактора) считается от него. */}
-        <RDialog.Overlay className={clsx('fixed inset-0 grid place-items-center overflow-auto bg-black/70 p-4 backdrop-blur-sm', stacked ? 'z-[60]' : 'z-40')}>
+        <RDialog.Overlay className={clsx('fixed inset-0 grid place-items-center overflow-auto bg-bg/70 p-4 backdrop-blur-sm', stacked ? 'z-[60]' : 'z-40')}>
           <RDialog.Content
             // Фокус ставят сами поля (autoFocus), а не первая кнопка диалога.
             onOpenAutoFocus={(e) => e.preventDefault()}
@@ -230,7 +230,7 @@ export function ConfirmDeleteBtn({ onConfirm, className, title = 'Удалить
       data-armed={armed || undefined}
       className={clsx('grid size-3.5 shrink-0 cursor-pointer place-items-center transition', armed ? 'opacity-100' : 'text-mute opacity-0 hover:text-danger group-hover:opacity-100', className)}
     >
-      {armed ? <span className="grid size-3.5 place-items-center rounded-sm bg-danger font-mono text-[10px] font-bold leading-none text-black">?</span> : <Trash2 size={13} />}
+      {armed ? <span className="grid size-3.5 place-items-center rounded-sm bg-danger font-mono text-[10px] font-bold leading-none text-bg">?</span> : <Trash2 size={13} />}
     </button>
   );
 }

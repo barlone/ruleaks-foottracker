@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import {
-  DEFAULT_TAG_COLOR, newId, normalizeTagText, type Dossier, type DossierItem, type DossierRelation, type DossierSummary, type Investigation,
+  DEFAULT_TAG_COLOR, newId, normalizeTagText, resolveUserSettings, type Dossier, type DossierItem, type DossierRelation, type DossierSummary, type Investigation,
   type InvestigationSummary, type RelationType, type SearchJob, type SearchSection, type Share, type Tag, type User,
 } from '@ft/shared';
 import { roleOf } from '../../authz.ts';
@@ -18,10 +18,12 @@ import { seedDossiers, seedInvestigations, seedRelations, seedTagColors, seedUse
 const now = () => new Date().toISOString();
 const clone = <T,>(v: T): T => structuredClone(v);
 
-type StoredUser = Omit<User, 'access'>;
+type StoredUser = Omit<User, 'access' | 'settings'>;
 
 export class MemoryUsers implements UserRepo {
   private byId = new Map<string, StoredUser>(seedUsers.map((u) => [u.id, u]));
+  /** Как users.settings: только ключи не по умолчанию. */
+  private settings = new Map<string, Record<string, unknown>>();
 
   async upsertByTgId(u: { tgId: string; displayName: string | null; username: string | null }) {
     const existing = [...this.byId.values()].find((x) => x.tgId === u.tgId);
@@ -36,11 +38,19 @@ export class MemoryUsers implements UserRepo {
     return { id };
   }
   async get(id: string) {
-    return this.byId.get(id) ?? null;
+    const u = this.byId.get(id);
+    return u ? { ...u, settings: resolveUserSettings(this.settings.get(id)) } : null;
   }
   async findByUsername(username: string) {
     const n = username.replace(/^@/, '').toLowerCase();
     return [...this.byId.values()].find((u) => u.username?.toLowerCase() === n) ?? null;
+  }
+  async updateSettings(id: string, set: Record<string, unknown>, reset: string[]) {
+    if (!this.byId.has(id)) throw new Error('NOT_FOUND');
+    const next = { ...this.settings.get(id), ...set };
+    for (const key of reset) delete next[key];
+    this.settings.set(id, next);
+    return resolveUserSettings(next);
   }
 }
 

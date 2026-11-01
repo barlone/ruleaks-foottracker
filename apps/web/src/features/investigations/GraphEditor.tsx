@@ -15,8 +15,10 @@ import { Button, Field, Input, Select, Spinner, Tag } from '../../components/ui.
 import { MarkdownView } from '../../components/Markdown.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorCode, errorText } from '../../lib/errors.ts';
+import { useStore } from '../../lib/store.ts';
+import { theme } from '../../lib/theme.ts';
 import { toast } from '../../lib/toast.ts';
-import { NODE_STYLE, RELATIONS, edgeStyle } from './nodeStyle.ts';
+import { NODE_STYLE, RELATIONS, edgeStyle, withAlpha } from './nodeStyle.ts';
 
 // Визуальный редактор связей. Состояние графа живёт локально (React Flow),
 // на сервер уходит целиком с задержкой (автосохранение) и версией для
@@ -60,17 +62,17 @@ function EntityNodeView({ data, selected }: NodeProps<EntityNode>) {
   const { icon: Icon, color } = NODE_STYLE[data.type];
   return (
     <div
-      className={clsx('min-w-40 max-w-60 rounded-xl border bg-panel/95 px-3 py-2.5 backdrop-blur transition', selected ? 'shadow-glow' : 'shadow-[0_0_18px_rgba(0,0,0,.6)]')}
-      style={{ borderColor: selected ? color : `${color}55` }}
+      className={clsx('min-w-40 max-w-60 rounded-xl border bg-panel/95 px-3 py-2.5 backdrop-blur transition', selected ? 'shadow-glow' : 'shadow-[0_0_18px_var(--ft-shadow)]')}
+      style={{ borderColor: selected ? color : withAlpha(color, 33) }}
     >
       <Handle type="target" position={Position.Top} className="!size-2.5" />
       <div className="flex items-center gap-2">
-        <span className="grid size-7 shrink-0 place-items-center rounded-lg" style={{ background: `${color}1f`, color }}>
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg" style={{ background: withAlpha(color, 12), color }}>
           <Icon size={15} />
         </span>
         <div className="min-w-0">
           <div className="truncate text-[13px] font-semibold leading-tight">{data.label}</div>
-          <div className="font-mono text-[9px] uppercase tracking-wider" style={{ color: `${color}cc` }}>
+          <div className="font-mono text-[9px] uppercase tracking-wider" style={{ color: withAlpha(color, 80) }}>
             {NODE_TYPE_LABELS[data.type]}
             {data.props.date && ` · ${data.props.date}`}
           </div>
@@ -154,6 +156,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   // Автосохранение через 1.2 с после последней правки. Пока запрос в полёте, следующий не отправляется
   // (иначе он ушёл бы со старой версией и получил конфликт) — он уйдёт, когда ответ придёт и isPending сменится.
   const saving = save.isPending;
+  const colorMode = useStore(theme);
   useEffect(() => {
     if (!dirty || !editable || saving) return;
     const t = setTimeout(() => {
@@ -276,11 +279,11 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         fitViewOptions={{ padding: 0.25 }}
         minZoom={0.15}
         proOptions={{ hideAttribution: true }}
-        colorMode="dark"
+        colorMode={colorMode}
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="rgba(46,224,172,.18)" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="rgb(var(--ft-mint-rgb) / .18)" />
         <Controls showInteractive={false} position="bottom-left" />
-        <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => NODE_STYLE[(n as EntityNode).data.type].color} maskColor="rgba(0,0,0,.7)" />
+        <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => NODE_STYLE[(n as EntityNode).data.type].color} maskColor={withAlpha('var(--color-bg)', 70)} />
       </ReactFlow>
 
       {/* Панель инструментов */}

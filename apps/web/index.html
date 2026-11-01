@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#000000" />
+    <!-- До первой отрисовки: настройки пользователя придут с сервера позже, и светлая тема мигнула бы тёмной (lib/theme.ts). -->
+    <script>
+      try {
+        if (localStorage.getItem('ft-theme') === 'light') document.documentElement.dataset.theme = 'light';
+      } catch {}
+    </script>
     <link rel="icon" href="/favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

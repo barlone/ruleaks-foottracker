@@ -112,7 +112,7 @@ function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | u
         failed ? 'cursor-default opacity-60' : 'cursor-zoom-in hover:border-mint/60 hover:shadow-glow-sm',
       )}
     >
-      <div className="relative grid h-36 place-items-center bg-black">
+      <div className="relative grid h-36 place-items-center bg-bg">
         {failed ? (
           <FileImage size={28} className="text-mute" />
         ) : (
@@ -279,7 +279,7 @@ function ScanViewer({ scans, index, onIndex }: { scans: ViewerScan[]; index: num
   return (
     <RDialog.Root open={scan != null} onOpenChange={(v) => !v && onIndex(null)}>
       <RDialog.Portal>
-        <RDialog.Overlay className="fixed inset-0 z-40 bg-black/85 backdrop-blur-sm" />
+        <RDialog.Overlay className="fixed inset-0 z-40 bg-bg/85 backdrop-blur-sm" />
         <RDialog.Content
           onOpenAutoFocus={(e) => e.preventDefault()}
           onKeyDown={(e) => {

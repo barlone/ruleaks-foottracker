@@ -153,8 +153,8 @@ function BotLogin() {
           </ol>
         </div>
         {link && (
-          <div className="rounded-xl border border-line bg-black p-3">
-            <QRCodeSVG value={link} size={168} bgColor="#000000" fgColor="#2EE0AC" level="M" />
+          <div className="rounded-xl border border-line bg-bg p-3">
+            <QRCodeSVG value={link} size={168} bgColor="var(--color-bg)" fgColor="var(--color-mint)" level="M" />
           </div>
         )}
       </div>

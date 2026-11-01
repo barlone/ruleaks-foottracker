@@ -35,3 +35,27 @@ export const tableCls = {
   tr: 'cursor-pointer border-b border-line-soft transition last:border-0 hover:bg-mint/5',
   td: 'px-3 py-2 align-middle',
 };
+
+/**
+ * Фильтр списка («Все / Мои / Доступные мне»): живёт в адресе (?scope=), а последний выбор запоминается в браузере.
+ * Если в адресе фильтра нет (пункт меню, «все досье» со страницы объекта), берётся запомненный — выбор не слетает
+ * при возврате в список. Неизвестное сохранённое значение игнорируется.
+ */
+export function rememberedScope<S extends string>(key: string, fromUrl: S | undefined, allowed: readonly S[], fallback: S): S {
+  const storageKey = `ft:scope:${key}`;
+  if (fromUrl !== undefined) {
+    try {
+      localStorage.setItem(storageKey, fromUrl);
+    } catch {
+      /* приватный режим — выбор живёт только в адресе */
+    }
+    return fromUrl;
+  }
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (saved && (allowed as readonly string[]).includes(saved)) return saved as S;
+  } catch {
+    /* нет localStorage */
+  }
+  return fallback;
+}

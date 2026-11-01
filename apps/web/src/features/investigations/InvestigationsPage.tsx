@@ -4,7 +4,7 @@ import { FileUp, Network, Plus } from 'lucide-react';
 import { ImportDialog } from '../../components/ImportDialog.tsx';
 import { VisibilityTag } from '../../components/Sharing.tsx';
 import { ViewToggle } from '../../components/ListView.tsx';
-import { tableCls, useListView } from '../../lib/listView.ts';
+import { rememberedScope, tableCls, useListView } from '../../lib/listView.ts';
 import { TagFilter, TagList } from '../../components/Tags.tsx';
 import { Button, Dialog, Empty, Field, Input, Segmented, Spinner, Tag } from '../../components/ui.tsx';
 import { MarkdownEditor } from '../../components/Markdown.tsx';
@@ -13,7 +13,8 @@ import { ago, fmtDate } from '../../lib/format.ts';
 import { errorText } from '../../lib/errors.ts';
 
 export function InvestigationsPage() {
-  const { scope = 'mine' } = useSearch({ from: '/investigations' });
+  const search = useSearch({ from: '/investigations' });
+  const scope = rememberedScope('investigations', search.scope, ['all', 'mine', 'shared', 'public'] as const, 'mine');
   const navigate = useNavigate({ from: '/investigations' });
   const [title, setTitle] = useState('');
   const [tagIds, setTagIds] = useState<string[]>([]);

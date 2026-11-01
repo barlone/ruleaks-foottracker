@@ -322,6 +322,8 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   `settings.update` (`authedProcedure`: works without a subscription). UI: the user dialog in `AppShell`. ARCHITECTURE.md §9.1.
 - Page containers are full-width with `pt-2.5 pl-6 pr-[30px]` (no centered max-width); the 10 px top padding puts the
   first line of the page title level with the visible top of the sidebar logo — keep it when adding a page.
+- List filters («Все / Мои / Доступные мне») live in `?scope=` and the last choice is remembered in localStorage
+  (`rememberedScope` in `lib/listView.ts`): a link to the bare list (`/dossiers`, sidebar) reopens the remembered scope.
 - Markdown is the storage format for all long text; `@` in the TipTap editor inserts a plain link
   `[@Title](/dossiers/<id>)` rather than a custom node, so stored text stays portable.
 - Every dossier item and fact carries a `source` with an Admiralty-code rating (reliability A–F, credibility 1–6),

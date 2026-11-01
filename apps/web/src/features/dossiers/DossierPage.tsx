@@ -275,9 +275,12 @@ export function DossierPage() {
               {items('link').map((l) => (
                 <div key={l.id} className="group flex items-center gap-2.5 rounded-lg border border-line-soft px-3 py-2">
                   <Tag tone="dim" className="w-20 justify-center">{PLATFORM_LABELS[l.platform]}</Tag>
-                  <a href={l.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate text-sm hover:text-mint">
-                    {l.title || l.url}
-                  </a>
+                  <div className="min-w-0 flex-1">
+                    <a href={l.url} target="_blank" rel="noreferrer noopener" className="block truncate text-sm hover:text-mint">
+                      {l.title || l.url}
+                    </a>
+                    {l.source?.ref && <div className="truncate font-mono text-[10px] text-mute" title={l.source.ref}>{l.source.ref}</div>}
+                  </div>
                   <a href={l.url} target="_blank" rel="noreferrer noopener" title="Открыть в новой вкладке" className="text-mute hover:text-mint">
                     <ExternalLink size={12} />
                   </a>

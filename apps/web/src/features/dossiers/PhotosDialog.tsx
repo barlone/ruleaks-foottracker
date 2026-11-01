@@ -6,10 +6,12 @@ import { Button, ConfirmDeleteBtn, Dialog, Empty, FilePicker, Input } from '../.
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
+import { GLYPHS, glyphOf } from './glyphs.ts';
 import { PHOTO_ALBUM } from './labels.ts';
 
 // Фото персоны (группы): медиа-элементы досье в альбоме PHOTO_ALBUM. Основное фото — обложка досье
 // (coverMediaUrl), оно показывается в боксе слева от названия, в списках досье и в связях.
+// Пока фото нет, у персоны можно выбрать значок (glyphs.ts): он становится обложкой, но фото не считается.
 
 type Media = Extract<DossierItem, { type: 'media' }>;
 
@@ -24,7 +26,8 @@ export function CoverBox({
   editable: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const clickable = editable || photos.length > 0;
+  const realPhotos = photos.filter((p) => !glyphOf(p.url));
+  const clickable = editable || realPhotos.length > 0;
   const Icon = kind === 'group' ? Users : User;
   return (
     <>
@@ -32,7 +35,7 @@ export function CoverBox({
         type="button"
         disabled={!clickable}
         onClick={() => setOpen(true)}
-        title={editable ? (photos.length ? 'Фото: добавить, удалить, выбрать основное' : 'Добавить фото') : 'Фото'}
+        title={editable ? (realPhotos.length ? 'Фото: добавить, удалить, выбрать основное' : 'Добавить фото') : 'Фото'}
         className={clsx(
           'group relative size-32 shrink-0 overflow-hidden rounded-2xl border border-line bg-bg-soft shadow-glow-sm transition',
           clickable && 'cursor-pointer hover:border-mint/60',
@@ -51,13 +54,13 @@ export function CoverBox({
             )}
           </span>
         )}
-        {photos.length > 0 && (
+        {realPhotos.length > 0 && (
           <span className="absolute bottom-1.5 right-1.5 rounded-md bg-bg/75 px-1.5 font-mono text-[10px] text-dim">
-            {photos.length} фото
+            {realPhotos.length} фото
           </span>
         )}
       </button>
-      <PhotosDialog open={open} onOpenChange={setOpen} dossierId={dossierId} coverUrl={coverUrl} photos={photos} editable={editable} />
+      <PhotosDialog open={open} onOpenChange={setOpen} dossierId={dossierId} kind={kind} coverUrl={coverUrl} photos={photos} editable={editable} />
     </>
   );
 }
@@ -87,11 +90,12 @@ async function toDataUrl(f: File): Promise<string> {
 }
 
 function PhotosDialog({
-  open, onOpenChange, dossierId, coverUrl, photos, editable,
+  open, onOpenChange, dossierId, kind, coverUrl, photos, editable,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   dossierId: string;
+  kind: 'person' | 'group';
   coverUrl: string | null;
   photos: Media[];
   editable: boolean;
@@ -104,6 +108,8 @@ function PhotosDialog({
   const [busy, setBusy] = useState(false);
 
   const refresh = () => utils.dossiers.invalidate();
+  const realPhotos = photos.filter((p) => !glyphOf(p.url));
+  const glyphItem = photos.find((p) => glyphOf(p.url));
   /** Последовательные правки: версия досье берётся из ответа предыдущей. */
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -117,7 +123,7 @@ function PhotosDialog({
     }
   }
 
-  /** Добавить фото; если основного ещё нет — первое добавленное становится основным. */
+  /** Добавить фото; если основного ещё нет — первое добавленное становится основным и заменяет значок. */
   const addPhotos = (urls: { url: string; caption?: string }[]) =>
     run(async () => {
       if (!urls.length) return;
@@ -125,8 +131,21 @@ function PhotosDialog({
         id: dossierId,
         items: urls.map((p) => ({ type: 'media' as const, mediaId: newId(), url: p.url, caption: p.caption, album: PHOTO_ALBUM })),
       });
-      if (!coverUrl && urls[0]) await update.mutateAsync({ id: dossierId, version: d.version, patch: { coverMediaUrl: urls[0].url } });
+      if ((!coverUrl || glyphOf(coverUrl)) && urls[0]) await update.mutateAsync({ id: dossierId, version: d.version, patch: { coverMediaUrl: urls[0].url } });
+      if (glyphItem) await removeItem.mutateAsync({ id: dossierId, itemId: glyphItem.id });
       setUrl('');
+    });
+
+  /** Значок вместо фото: другой заменяет выбранный, повторный щелчок убирает (обложку снимает сервер вместе с элементом). */
+  const chooseGlyph = (glyph: (typeof GLYPHS)[number]) =>
+    run(async () => {
+      if (glyphItem) await removeItem.mutateAsync({ id: dossierId, itemId: glyphItem.id });
+      if (glyphItem && glyphOf(glyphItem.url) === glyph.id) return;
+      const d = await addItems.mutateAsync({
+        id: dossierId,
+        items: [{ type: 'media', mediaId: newId(), url: glyph.url, caption: glyph.label, album: PHOTO_ALBUM }],
+      });
+      await update.mutateAsync({ id: dossierId, version: d.version, patch: { coverMediaUrl: glyph.url } });
     });
 
   /** Файлы-изображения (выбранные, вставленные из буфера) → фото досье. */
@@ -181,7 +200,7 @@ function PhotosDialog({
     run(async () => {
       const d = await removeItem.mutateAsync({ id: dossierId, itemId: p.id });
       if (p.url === coverUrl) {
-        const next = photos.find((x) => x.id !== p.id);
+        const next = realPhotos.find((x) => x.id !== p.id);
         await update.mutateAsync({ id: dossierId, version: d.version, patch: { coverMediaUrl: next?.url ?? null } });
       }
     });
@@ -189,11 +208,33 @@ function PhotosDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Фото" width="max-w-[55rem]">
       <div className="space-y-4">
-        {photos.length === 0 ? (
-          <Empty>Фото нет</Empty>
+        {realPhotos.length === 0 ? (
+          <div className="flex flex-wrap items-stretch gap-3">
+            <div className="min-w-40 flex-1 [&>*]:grid [&>*]:h-full [&>*]:place-items-center"><Empty>Фото нет</Empty></div>
+            {editable && kind === 'person' && GLYPHS.map((g) => {
+              const active = glyphOf(coverUrl) === g.id;
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  disabled={busy}
+                  aria-pressed={active}
+                  onClick={() => chooseGlyph(g)}
+                  title={active ? `Убрать значок «${g.label}»` : `Показывать значок «${g.label}» вместо фото`}
+                  className={clsx(
+                    'relative size-24 shrink-0 cursor-pointer overflow-hidden rounded-xl border transition disabled:cursor-wait',
+                    active ? 'border-mint shadow-glow-sm' : 'border-line-soft hover:border-mint/60',
+                  )}
+                >
+                  <img src={g.url} alt="" className="size-full object-cover" />
+                  <span className="absolute inset-x-0 bottom-0 bg-bg/70 py-0.5 text-center font-mono text-[10px] text-dim">{g.label}</span>
+                </button>
+              );
+            })}
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {photos.map((p) => {
+            {realPhotos.map((p) => {
               const main = p.url === coverUrl;
               return (
                 <figure
@@ -251,7 +292,7 @@ function PhotosDialog({
             </form>
             <p className="font-mono text-[10px] text-mute">
               Можно выбрать несколько файлов сразу или вставить скриншот / скопированную картинку из буфера обмена;
-              большие изображения уменьшаются до 1600 px. Первое фото становится основным.
+              большие изображения уменьшаются до 1600 px. Первое фото становится основным и заменяет значок.
             </p>
           </div>
         )}

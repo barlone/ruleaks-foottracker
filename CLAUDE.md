@@ -312,6 +312,11 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   in light). Hex concatenation (`${color}55`) does not work on tokens — `withAlpha`. MapLibre cannot read `var()`: colours
   come from `cssColor()` and the map is rebuilt when the `theme` store changes. Tailwind inlines `--shadow-*`, so their
   colour goes through `--ft-mint-rgb`.
+- Dossier duplicates: `itemIdentity` in `@ft/shared` is the only definition, used by the router (`addItem`/`updateItem` →
+  `CONFLICT DUPLICATE_ITEM`, `addItems` skips and returns `skipped`) and the web (`findDuplicate`, `markDuplicates`,
+  `useTargetItems`, `WarnNote`). A new attribute field that is a number or a document goes into `COMPACT_FIELDS`. ARCHITECTURE.md §6.
+- Person glyphs (`features/dossiers/glyphs.ts`) are ordinary `PHOTO_ALBUM` media items with an SVG data URL, also set as the
+  cover: nothing else has to know about them, but anything that counts or lists photos must skip them with `glyphOf`.
 - User settings: `users.settings` jsonb holds only non-default keys, `@ft/shared` holds the schema and defaults (a new
   setting needs no migration), they arrive with `auth.me`, `useUserSettings()` updates them optimistically via
   `settings.update` (`authedProcedure`: works without a subscription). UI: the user dialog in `AppShell`. ARCHITECTURE.md §9.1.

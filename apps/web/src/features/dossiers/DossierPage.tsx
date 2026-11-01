@@ -70,6 +70,7 @@ export function DossierPage() {
   const [editTitle, setEditTitle] = useState<string | null>(null);
   const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'media' | 'note' | 'post'>(null);
   const [editingMedia, setEditingMedia] = useState<Of<'media'> | null>(null);
+  const [editingLink, setEditingLink] = useState<Of<'link'> | null>(null);
   const [sharing, setSharing] = useState(false);
   const [exporting, setExporting] = useState<'file' | 'pdf' | null>(null);
 
@@ -277,8 +278,15 @@ export function DossierPage() {
                   <a href={l.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate text-sm hover:text-mint">
                     {l.title || l.url}
                   </a>
-                  <ExternalLink size={12} className="text-mute" />
-                  {editable && <span className="opacity-0 group-hover:opacity-100"><DeleteBtn onClick={() => removeItem.mutate({ id, itemId: l.id })} /></span>}
+                  <a href={l.url} target="_blank" rel="noreferrer noopener" title="Открыть в новой вкладке" className="text-mute hover:text-mint">
+                    <ExternalLink size={12} />
+                  </a>
+                  {editable && (
+                    <span className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                      <button type="button" onClick={() => setEditingLink(l)} title="Править" className="cursor-pointer text-mute hover:text-mint"><Pencil size={12} /></button>
+                      <DeleteBtn onClick={() => removeItem.mutate({ id, itemId: l.id })} />
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -308,6 +316,12 @@ export function DossierPage() {
         media={editingMedia}
         onClose={() => setEditingMedia(null)}
         onSave={(item) => updateItem.mutateAsync({ id, item }).then(() => setEditingMedia(null))}
+      />
+      <EditLinkDialog
+        link={editingLink}
+        existing={d.items}
+        onClose={() => setEditingLink(null)}
+        onSave={(item) => updateItem.mutateAsync({ id, item }).then(() => setEditingLink(null))}
       />
       <AddItemDialog kind={adding} existing={d.items} onClose={() => setAdding(null)} onAdd={add} />
 
@@ -500,6 +514,61 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
       <div className="flex justify-end">
         <Button type="submit" variant="primary" disabled={saving}>Сохранить</Button>
+      </div>
+    </form>
+  );
+}
+
+function EditLinkDialog({ link, existing, onClose, onSave }: { link: Of<'link'> | null; existing: DossierItem[]; onClose: () => void; onSave: (item: Of<'link'>) => Promise<void> }) {
+  return (
+    <Dialog open={!!link} onOpenChange={(v) => !v && onClose()} title="Ссылка на профиль">
+      {link && <EditLinkForm key={link.id} link={link} existing={existing} onSave={onSave} />}
+    </Dialog>
+  );
+}
+
+function EditLinkForm({ link, existing, onSave }: { link: Of<'link'>; existing: DossierItem[]; onSave: (item: Of<'link'>) => Promise<void> }) {
+  const [value, setValue] = useState(link.url);
+  const [title, setTitle] = useState(link.title ?? '');
+  const { capturedAt, ...rest } = link.source ?? { capturedAt: undefined, ...emptySource() };
+  const [source, setSource] = useState<SourceDraft>({ ...rest, ref: rest.ref ?? '' });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const url = value.trim() ? (/^https?:\/\//.test(value.trim()) ? value.trim() : `https://${value.trim()}`) : '';
+  // Сам правящийся элемент дубликатом не считается — иначе любая правка подписи упёрлась бы в предупреждение.
+  const duplicate = url ? findDuplicate(existing.filter((i) => i.id !== link.id), { type: 'link', url }) : undefined;
+
+  async function submit() {
+    if (!url) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const src = finishSource(source);
+      await onSave({ ...link, url, title: title.trim() || undefined, platform: guessPlatform(url), source: capturedAt ? { ...src, capturedAt } : src });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <Field label="URL профиля" hint={url ? `Платформа: ${PLATFORM_LABELS[guessPlatform(url)]}` : undefined}>
+        <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://vk.com/id…" />
+      </Field>
+      <Field label="Подпись"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+      <SourceFields value={source} onChange={setSource} />
+      {duplicate && <WarnNote>Уже есть в досье: {duplicate.type === 'link' ? duplicate.url : ''}</WarnNote>}
+      {error && <div className="font-mono text-xs text-danger">{error}</div>}
+      <div className="flex justify-end">
+        <Button type="submit" variant="primary" disabled={saving || !url || !!duplicate}>Сохранить</Button>
       </div>
     </form>
   );

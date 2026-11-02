@@ -1,14 +1,18 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2,
+  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, GripVertical, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
 import { ATTR_TYPES, LEAK_FIELDS, attrCopyValue, attrDisplayValue, attrTypeLabel, FIELD_TO_KIND, POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
 import { ExportDialog } from '../../components/ExportDialog.tsx';
+import { ColorMark } from '../../components/ColorMark.tsx';
 import { ObjectActions } from '../../components/ObjectActions.tsx';
 import { ShareDialog, VisibilityTag } from '../../components/Sharing.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
@@ -31,7 +35,7 @@ type Of<T extends DossierItem['type']> = Extract<DossierItem, { type: T }>;
 type NewItem = RouterInputs['dossiers']['addItem']['item'];
 
 /** Порядок атрибутов по важности; остальные поля — после ссылок в порядке LEAK_FIELDS, свои — перед «Прочим». */
-const ATTR_ORDER: string[] = ['names', 'bdays', 'inns', 'pasps', 'snilss', 'phones', 'emails', 'addrs', 'weblinks'];
+const ATTR_ORDER: string[] = ['names', 'bdays', 'inns', 'pasps', 'forpasps', 'snilss', 'phones', 'emails', 'addrs', 'weblinks'];
 const attrRank = (key: string) => {
   if (key === 'infos') return 1000;
   const i = ATTR_ORDER.indexOf(key);
@@ -41,6 +45,16 @@ const attrRank = (key: string) => {
 };
 /** Стабильная сортировка: внутри одного типа атрибуты остаются в порядке добавления. */
 const sortAttributes = (list: Of<'attribute'>[]) => list.map((a, i) => ({ a, i })).sort((x, y) => attrRank(x.a.key) - attrRank(y.a.key) || x.i - y.i).map((x) => x.a);
+/**
+ * Порядок показа атрибутов. Сервер отдаёт элементы по position; пока пользователь ничего не переставлял, позиции
+ * атрибутов идут в порядке их создания — тогда действует порядок по важности. Перестановка мышкой записывает в
+ * position новый порядок (reorderItems), и с этого момента он и показывается; новый атрибут встаёт в конец.
+ */
+function orderAttributes(list: Of<'attribute'>[]): Of<'attribute'>[] {
+  const byCreated = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.position - b.position);
+  const custom = list.some((a, i) => a.id !== byCreated[i]!.id);
+  return custom ? list : sortAttributes(list);
+}
 
 export function DossierPage() {
   const { id } = useParams({ from: '/dossiers/$id' });
@@ -239,34 +253,14 @@ export function DossierPage() {
             actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('attribute')}><Plus size={13} /> Добавить</Button>}
           >
             {items('attribute').length === 0 && <Empty>Пусто</Empty>}
-            <div className="divide-y divide-line-soft">
-              {sortAttributes(items('attribute')).map((a) => {
-                const kind = FIELD_TO_KIND[a.key as LeakField];
-                return (
-                  // Сетка 2×2: подпись | значение, под ними оценка источника | кнопки действий.
-                  <div key={a.id} className="group grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 py-2">
-                    <span className="pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
-                    <div className="whitespace-pre-line break-words font-mono text-sm">{attrDisplayValue(a.key, a.value)}</div>
-                    <div className="flex items-center"><SourceBadge source={a.source} /></div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <ValueActions field={a.key} value={a.value} />
-                      <CopyButton value={attrCopyValue(a.key, a.value)} title={`Скопировать: ${a.label}`} />
-                      {kind && (
-                        <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
-                          <FileSearch size={14} />
-                        </Link>
-                      )}
-                      {editable && (
-                        <>
-                          <button type="button" onClick={() => setEditingAttr(a)} title="Править" className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Pencil size={14} /></button>
-                          <ConfirmDeleteBtn onConfirm={() => removeItem.mutate({ id, itemId: a.id })} />
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <AttributesList
+              items={items('attribute')}
+              editable={editable}
+              onReorder={(ids) => reorder.mutate({ id, orderedIds: ids })}
+              onEdit={setEditingAttr}
+              onRemove={(itemId) => removeItem.mutate({ id, itemId })}
+              onColor={(a, color) => updateItem.mutate({ id, item: { ...a, color } })}
+            />
           </Card>
 
           {d.kind === 'person' && <RelationsCard dossierId={d.id} editable={editable} />}
@@ -357,6 +351,92 @@ export function DossierPage() {
 }
 
 /** Повтор снимка в его разделе поиска. */
+/** Атрибуты досье: перестановка мышкой за бейдж источника (или ручку, если источника нет). */
+function AttributesList({ items, editable, onReorder, onEdit, onRemove, onColor }: {
+  items: Of<'attribute'>[];
+  editable: boolean;
+  onReorder: (orderedIds: string[]) => void;
+  onEdit: (a: Of<'attribute'>) => void;
+  onRemove: (itemId: string) => void;
+  onColor: (a: Of<'attribute'>, color: string | undefined) => void;
+}) {
+  // Порядок после перетаскивания показывается сразу, не дожидаясь ответа сервера (как в галерее медиа).
+  const [order, setOrder] = useState<string[] | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const byId = new Map(items.map((a) => [a.id, a]));
+  const ids = order?.filter((x) => byId.has(x)) ?? orderAttributes(items).map((a) => a.id);
+  // Атрибут, добавленный после перестановки, в локальном порядке ещё не значится — в конец.
+  for (const a of items) if (!ids.includes(a.id)) ids.push(a.id);
+
+  function onDragEnd(e: DragEndEvent) {
+    if (!e.over || e.active.id === e.over.id) return;
+    const next = arrayMove(ids, ids.indexOf(String(e.active.id)), ids.indexOf(String(e.over.id)));
+    setOrder(next);
+    onReorder(next);
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <div className="divide-y divide-line-soft">
+          {ids.map((x) => {
+            const a = byId.get(x)!;
+            return <AttrRow key={a.id} a={a} editable={editable} onEdit={() => onEdit(a)} onRemove={() => onRemove(a.id)} onColor={(c) => onColor(a, c)} />;
+          })}
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function AttrRow({ a, editable, onEdit, onRemove, onColor }: {
+  a: Of<'attribute'>;
+  editable: boolean;
+  onEdit: () => void;
+  onRemove: () => void;
+  onColor: (color: string | undefined) => void;
+}) {
+  const kind = FIELD_TO_KIND[a.key as LeakField];
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: a.id, disabled: !editable });
+  return (
+    // Сетка 2×2: подпись | значение, под ними оценка источника (она же ручка перетаскивания) | кнопки действий.
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={clsx('group grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 py-2', isDragging && 'relative z-10 bg-panel')}
+    >
+      <span className="pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
+      <div className="whitespace-pre-line break-words font-mono text-sm">{attrDisplayValue(a.key, a.value)}</div>
+      <div className="flex items-center">
+        {editable ? (
+          <span ref={setActivatorNodeRef} {...attributes} {...listeners} title="Перетащить" className="inline-flex cursor-grab items-center text-mute active:cursor-grabbing">
+            {a.source ? <SourceBadge source={a.source} /> : <GripVertical size={14} />}
+          </span>
+        ) : (
+          <SourceBadge source={a.source} />
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <ValueActions field={a.key} value={a.value} />
+        <CopyButton value={attrCopyValue(a.key, a.value)} title={`Скопировать: ${a.label}`} />
+        {kind && (
+          <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+            <FileSearch size={14} />
+          </Link>
+        )}
+        {editable && (
+          <>
+            <button type="button" onClick={onEdit} title="Править" className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Pencil size={14} /></button>
+            <ConfirmDeleteBtn onConfirm={onRemove} />
+          </>
+        )}
+        {/* Цветная метка — у правой границы бокса, вне ряда действий. */}
+        <ColorMark value={a.color} editable={editable} onChange={onColor} className="ml-auto" />
+      </div>
+    </div>
+  );
+}
+
 function RepeatSearchLink({ section, kind, query, deep }: { section: SearchSection; kind: string; query: string; deep: boolean }) {
   const cls = 'text-mute hover:text-mint';
   const icon = <FileSearch size={14} />;

@@ -160,6 +160,8 @@ export const AttributeItem = z.object({
   key: z.string().max(64),
   label: z.string().max(128),
   value: z.string().max(4000),
+  /** Цветная метка пользователя (квадрат в строке атрибута); в файл экспорта и PDF не попадает. */
+  color: TagColor.optional(),
 });
 
 export const Platform = z.enum(['vk', 'telegram', 'ok', 'instagram', 'facebook', 'x', 'youtube', 'web', 'other']);

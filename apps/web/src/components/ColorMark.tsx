@@ -43,7 +43,13 @@ export function ColorMark({ value, editable, onChange, className }: {
         disabled={!editable}
         onClick={() => setOpen((v) => !v)}
         title={editable ? (value ? 'Изменить цвет метки' : 'Пометить цветом') : undefined}
-        className={clsx('size-3.5 shrink-0 rounded-full border transition', editable && 'cursor-pointer hover:scale-110', value ? 'border-text/20' : 'border-text/40')}
+        // Пустой круг виден только при наведении на строку (как «править» и «удалить») и пока открыта палитра.
+        className={clsx(
+          'size-3.5 shrink-0 rounded-full border transition',
+          editable && 'cursor-pointer hover:scale-110',
+          value ? 'border-text/20' : 'border-text/40',
+          !value && !open && 'opacity-0 group-hover:opacity-100',
+        )}
         style={value ? { background: value } : undefined}
       />
       {open && (

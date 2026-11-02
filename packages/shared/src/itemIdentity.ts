@@ -1,4 +1,5 @@
 import type { DossierItem } from './domain.ts';
+import { ATTR_TYPE_LABELS } from './attrTypes.ts';
 import { LEAK_FIELDS } from './search.ts';
 
 // Что считать дубликатом элемента досье. Правило одно на сервер (он запрещает) и интерфейс (он предупреждает заранее).
@@ -16,7 +17,7 @@ export type ItemLike =
   | Pick<Of<'media'> | Of<'note'>, 'type'>;
 
 /** Номера и документы: разделители в записи ничего не значат («45 10 123456» = «4510123456»). */
-const COMPACT_FIELDS = new Set(['inns', 'snilss', 'pasps', 'forpasps', 'bsvids', 'ogrnips', 'tgids', 'bankcards', 'milpns', 'plates']);
+const COMPACT_FIELDS = new Set(['inns', 'snilss', 'pasps', 'forpasps', 'bsvids', 'ogrnips', 'tgids', 'bankcards', 'milpns', 'plates', 'vins']);
 
 const text = (s: string) => s.normalize('NFKC').toLowerCase().replaceAll('ё', 'е').replace(/\s+/g, ' ').trim();
 
@@ -50,7 +51,7 @@ export function itemIdentity(item: ItemLike): string | null {
       const value = attributeValue(item.key, item.value);
       if (!value) return null;
       // Свои атрибуты различаются ещё и названием: «Хобби: шахматы» и «Клуб: шахматы» — разные значения.
-      const field = Object.hasOwn(LEAK_FIELDS, item.key) ? item.key : `${item.key}/${text(item.label)}`;
+      const field = Object.hasOwn(LEAK_FIELDS, item.key) || Object.hasOwn(ATTR_TYPE_LABELS, item.key) ? item.key : `${item.key}/${text(item.label)}`;
       return `attribute:${field}:${value}`;
     }
     case 'link':

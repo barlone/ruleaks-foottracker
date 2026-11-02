@@ -315,6 +315,10 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 - Dossier duplicates: `itemIdentity` in `@ft/shared` is the only definition, used by the router (`addItem`/`updateItem` →
   `CONFLICT DUPLICATE_ITEM`, `addItems` skips and returns `skipped`) and the web (`findDuplicate`, `markDuplicates`,
   `useTargetItems`, `WarnNote`). A new attribute field that is a number or a document goes into `COMPACT_FIELDS`. ARCHITECTURE.md §6.
+- Attribute types for manual entry are `ATTR_TYPES` in `@ft/shared` (`attrTypes.ts`): ordered list with its own labels,
+  keyed by the gateway field from `LEAK_FIELDS` where one exists (so a hand-typed phone and a found one are the same
+  type) and by site-only keys otherwise (`birthaddrs`, `regaddrs`, `liveaddrs`, `vins`). `LEAK_FIELDS` keeps the gateway's
+  field set and order (search pages, export) — add a manual type there only when the gateway has the field.
 - Person glyphs (`features/dossiers/glyphs.ts`) are ordinary `PHOTO_ALBUM` media items with an SVG data URL, also set as the
   cover: nothing else has to know about them, but anything that counts or lists photos must skip them with `glyphOf`.
 - User settings: `users.settings` jsonb holds only non-default keys, `@ft/shared` holds the schema and defaults (a new

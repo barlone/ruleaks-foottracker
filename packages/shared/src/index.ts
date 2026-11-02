@@ -2,6 +2,7 @@ export * from './domain.ts';
 export * from './settings.ts';
 export * from './itemIdentity.ts';
 export * from './search.ts';
+export * from './attrTypes.ts';
 export * from './id.ts';
 export * from './export.ts';
 export * from './tsquery.ts';

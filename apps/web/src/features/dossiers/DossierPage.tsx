@@ -2,9 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, NotebookPen, Pencil, Plus, Trash2,
+  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
-import { LEAK_FIELDS, attrCopyValue, attrDisplayValue, FIELD_TO_KIND, POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
+import { ATTR_TYPES, LEAK_FIELDS, attrCopyValue, attrDisplayValue, attrTypeLabel, FIELD_TO_KIND, POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
@@ -246,7 +246,7 @@ export function DossierPage() {
                   // Сетка 2×2: подпись | значение, под ними оценка источника | кнопки действий.
                   <div key={a.id} className="group grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 py-2">
                     <span className="pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
-                    <div className="break-words font-mono text-sm">{attrDisplayValue(a.key, a.value)}</div>
+                    <div className="whitespace-pre-line break-words font-mono text-sm">{attrDisplayValue(a.key, a.value)}</div>
                     <div className="flex items-center"><SourceBadge source={a.source} /></div>
                     <div className="flex flex-wrap items-center gap-2">
                       <ValueActions field={a.key} value={a.value} />
@@ -533,6 +533,37 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
   );
 }
 
+/** Список типов атрибута; keep — ключ правящегося элемента: поле шлюза вне списка ручного ввода остаётся выбираемым. */
+function AttrTypeSelect({ value, onChange, keep }: { value: string; onChange: (key: string) => void; keep?: string }) {
+  const extra = keep && !ATTR_TYPES.some((t) => t.key === keep) ? attrTypeLabel(keep) : undefined;
+  return (
+    <Select value={value} onChange={(e) => onChange(e.target.value)} className="w-full">
+      {ATTR_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+      {extra && <option value={keep}>{extra}</option>}
+      <option value="custom">Свой…</option>
+    </Select>
+  );
+}
+
+/** Поле «Значение» с кнопкой мини-редактора на 10 строк для длинных атрибутов (адрес, место работы…). */
+function AttrValueField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Field label="Значение">
+      <div className="flex items-center gap-2">
+        <Input autoFocus value={value} onChange={(e) => onChange(e.target.value)} className="font-mono" />
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)} title="Редактор для длинного значения"><Maximize2 size={14} /></Button>
+      </div>
+      <Dialog open={open} onOpenChange={setOpen} title="Значение" stacked>
+        <Textarea autoFocus rows={10} value={value} onChange={(e) => onChange(e.target.value)} className="font-mono" />
+        <div className="mt-4 flex justify-end">
+          <Button type="button" variant="primary" onClick={() => setOpen(false)}>Готово</Button>
+        </div>
+      </Dialog>
+    </Field>
+  );
+}
+
 function EditAttrDialog({ attr, existing, onClose, onSave }: { attr: Of<'attribute'> | null; existing: DossierItem[]; onClose: () => void; onSave: (item: Of<'attribute'>) => Promise<void> }) {
   return (
     <Dialog open={!!attr} onOpenChange={(v) => !v && onClose()} title="Атрибут">
@@ -543,7 +574,7 @@ function EditAttrDialog({ attr, existing, onClose, onSave }: { attr: Of<'attribu
 
 function EditAttrForm({ attr, existing, onSave }: { attr: Of<'attribute'>; existing: DossierItem[]; onSave: (item: Of<'attribute'>) => Promise<void> }) {
   // Ключ не из каталога — «свой» атрибут с собственным названием.
-  const known = attr.key in LEAK_FIELDS;
+  const known = attrTypeLabel(attr.key) !== undefined;
   const [key, setKey] = useState<string>(known ? attr.key : 'custom');
   const [label, setLabel] = useState(known ? '' : attr.label);
   const [value, setValue] = useState(attr.value);
@@ -551,7 +582,7 @@ function EditAttrForm({ attr, existing, onSave }: { attr: Of<'attribute'>; exist
   const [source, setSource] = useState<SourceDraft>({ ...rest, ref: rest.ref ?? '' });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const attrLabel = key === 'custom' ? label.trim() : LEAK_FIELDS[key as LeakField];
+  const attrLabel = key === 'custom' ? label.trim() : attrTypeLabel(key) ?? '';
   // «Свой» атрибут хранится с ключом custom, как и при добавлении.
   const attrKey = key;
   const ready = !!value.trim() && !!attrLabel;
@@ -582,14 +613,11 @@ function EditAttrForm({ attr, existing, onSave }: { attr: Of<'attribute'>; exist
     >
       <div className="grid grid-cols-2 gap-3">
         <Field label="Тип">
-          <Select value={key} onChange={(e) => setKey(e.target.value)} className="w-full">
-            {Object.entries(LEAK_FIELDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            <option value="custom">Свой…</option>
-          </Select>
+          <AttrTypeSelect value={key} onChange={setKey} keep={attr.key} />
         </Field>
         {key === 'custom' && <Field label="Название"><Input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>}
       </div>
-      <Field label="Значение"><Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="font-mono" /></Field>
+      <AttrValueField value={value} onChange={setValue} />
       <SourceFields value={source} onChange={setSource} />
       {duplicate && <WarnNote>Уже есть в досье: {duplicate.type === 'attribute' ? `${duplicate.label} — ${attrDisplayValue(duplicate.key, duplicate.value)}` : ''}</WarnNote>}
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
@@ -679,7 +707,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   const [replyTo, setReplyTo] = useState('');
   const [source, setSource] = useState<SourceDraft>(emptySource());
   const [error, setError] = useState<string | null>(null);
-  const attrLabel = key === 'custom' ? label : LEAK_FIELDS[key as LeakField];
+  const attrLabel = key === 'custom' ? label : attrTypeLabel(key) ?? '';
   // Предупреждение сразу при вводе; окончательно дубликат не пропустит сервер (досье мог изменить другой пользователь).
   const duplicate = kind === 'attribute'
     ? findDuplicate(existing, { type: 'attribute', key, label: attrLabel, value })
@@ -728,14 +756,11 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
       <>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Тип">
-            <Select value={key} onChange={(e) => setKey(e.target.value)} className="w-full">
-              {Object.entries(LEAK_FIELDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              <option value="custom">Свой…</option>
-            </Select>
+            <AttrTypeSelect value={key} onChange={setKey} />
           </Field>
           {key === 'custom' && <Field label="Название"><Input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>}
         </div>
-        <Field label="Значение"><Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="font-mono" /></Field>
+        <AttrValueField value={value} onChange={setValue} />
       </>
     );
   } else if (kind === 'link') {

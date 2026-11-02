@@ -139,6 +139,9 @@ obvious from the schema:
 - jsonb params must be `JSON.stringify`-ed (`json()`), otherwise node-postgres turns JS arrays into PG arrays.
 - Media: there is no file storage yet; the image stays in the item's `data.url` and a `media` row with the sha256 of
   that string satisfies the FK (`storage_key = inline/<owner>/<sha>`). Cover = `cover_media_id`.
+  Embedded media are capped (`@ft/shared` `media.ts`: 1 MiB per file, 5 MiB per dossier, external URLs are free);
+  `checkMediaLimits` in `routers/dossiers.ts` throws `BAD_REQUEST MEDIA_TOO_LARGE` / `MEDIA_QUOTA`, the web pre-checks
+  files and tells the user to keep big files on their Google Drive and add a link. Import is not capped.
 - Dossiers/investigations are soft-deleted (`deleted_at`); search history "clear" sets `hidden_at`, and a search that
   was attached to a dossier as a snapshot is `pinned`.
 - Repos that write `created_by`/`granted_by` take an `actorId` argument (memory adapters ignore it).

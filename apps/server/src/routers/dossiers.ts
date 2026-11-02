@@ -2,7 +2,8 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   AttributeItem, DossierItem, DossierKind, DossierVisibility, ExportRequest, LinkItem, PdfRequest, MediaItem, NoteItem, PostItem, ShareRole,
-  SnapshotItem, findDuplicate, itemIdentity, markDuplicates, newId, type Dossier,
+  SnapshotItem, DOSSIER_MEDIA_MAX_BYTES, MEDIA_FILE_MAX_BYTES, dossierMediaBytes, findDuplicate, itemIdentity, markDuplicates, mediaBytes, newId,
+  type Dossier,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { exportDossier } from '../export/build.ts';
@@ -47,6 +48,25 @@ function prepareItems(d: Dossier, inputs: z.infer<typeof NewItem>[]): { items: D
     else if (input.type !== 'snapshot') skipped++;
   });
   return { items, skipped };
+}
+
+/**
+ * Лимиты встроенных медиа (@ft/shared media.ts): один файл ≤ MEDIA_FILE_MAX_BYTES, всё досье ≤ DOSSIER_MEDIA_MAX_BYTES.
+ * replacedId — элемент, который заменяется (updateItem): его прежний размер в сумму не входит.
+ */
+function checkMediaLimits(d: Dossier, added: readonly DossierItem[], replacedId?: string) {
+  const fresh = added.filter((i) => i.type === 'media');
+  if (!fresh.length) return;
+  for (const i of fresh) {
+    if (i.type === 'media' && mediaBytes(i.url) > MEDIA_FILE_MAX_BYTES) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: `MEDIA_TOO_LARGE: ${Math.ceil(mediaBytes(i.url) / 1024)} КБ` });
+    }
+  }
+  const used = dossierMediaBytes(d.items.filter((i) => i.id !== replacedId));
+  const total = used + dossierMediaBytes(fresh);
+  if (total > DOSSIER_MEDIA_MAX_BYTES) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: `MEDIA_QUOTA: занято ${Math.ceil(used / 1024)} КБ из ${DOSSIER_MEDIA_MAX_BYTES / 1024}` });
+  }
 }
 
 export const dossiersRouter = router({
@@ -116,6 +136,7 @@ export const dossiersRouter = router({
     const d = await load(ctx, input.id, 'edit');
     const { items } = prepareItems(d, [input.item]);
     if (!items.length) throw new Conflict('DUPLICATE_ITEM');
+    checkMediaLimits(d, items);
     return withRole(ctx, await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id));
   }),
 
@@ -126,6 +147,7 @@ export const dossiersRouter = router({
   addItems: activeProcedure.input(z.object({ id: z.string(), items: z.array(NewItem).min(1).max(500) })).mutation(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'edit');
     const { items, skipped } = prepareItems(d, input.items);
+    checkMediaLimits(d, items);
     return { ...withRole(ctx, items.length ? await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id) : d), skipped };
   }),
 
@@ -136,6 +158,7 @@ export const dossiersRouter = router({
     if (before && itemIdentity(before) !== itemIdentity(input.item) && findDuplicate(d.items, input.item)) {
       throw new Conflict('DUPLICATE_ITEM');
     }
+    checkMediaLimits(d, [input.item], input.item.id);
     return withRole(ctx, await ctx.deps.dossiers.updateItem(input.id, input.item));
   }),
 

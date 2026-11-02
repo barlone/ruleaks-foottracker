@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { ClipboardPaste, ImagePlus, Plus, Star, User, Users } from 'lucide-react';
-import { newId, type DossierItem } from '@ft/shared';
+import { MEDIA_FILE_MAX_BYTES, fmtBytes, mediaBytes, newId, type DossierItem } from '@ft/shared';
 import { Button, ConfirmDeleteBtn, Dialog, Empty, FilePicker, Input } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
@@ -152,11 +152,17 @@ function PhotosDialog({
   async function addFiles(files: File[], caption?: (f: File) => string | undefined) {
     const images = files.filter((f) => f.type.startsWith('image/'));
     if (!images.length) return;
+    let photos: { url: string; caption?: string }[];
     try {
-      await addPhotos(await Promise.all(images.map(async (f) => ({ url: await toDataUrl(f), caption: caption ? caption(f) : f.name }))));
+      photos = await Promise.all(images.map(async (f) => ({ url: await toDataUrl(f), caption: caption ? caption(f) : f.name })));
     } catch {
       toast('Не удалось прочитать изображение', 'error');
+      return;
     }
+    // Уже после уменьшения до 1600 px: что всё равно больше лимита — не отправляем, остальное добавляем.
+    const big = photos.filter((p) => mediaBytes(p.url) > MEDIA_FILE_MAX_BYTES);
+    if (big.length) toast(`${big.length === 1 ? 'Файл' : `${big.length} файла(ов)`} больше ${fmtBytes(MEDIA_FILE_MAX_BYTES)} — не добавлено. Большие фото держите на своём Гугл-диске и добавьте в досье ссылку`, 'error');
+    await addPhotos(photos.filter((p) => !big.includes(p)));
   }
   // Скриншот или скопированная картинка не имеют осмысленного имени файла («image.png») — подписи нет.
   const fromClipboard = (files: File[]) => addFiles(files, () => undefined);

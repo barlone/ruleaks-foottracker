@@ -7,7 +7,10 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
   ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
-import { ATTR_TYPES, LEAK_FIELDS, attrCopyValue, attrDisplayValue, attrTypeLabel, FIELD_TO_KIND, POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
+import {
+  ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND, fmtBytes,
+  POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection,
+} from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
@@ -202,7 +205,14 @@ export function DossierPage() {
 
           <Card compact
             title={<><Camera size={13} /> Медиа</>}
-            actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('media')}><Plus size={13} /> Добавить</Button>}
+            actions={(
+              <span className="flex items-center gap-2">
+                {media.length > 0 && (
+                  <span className="font-mono text-[10px] text-mute" title="Объём встроенных медиафайлов досье">{fmtBytes(dossierMediaBytes(media))} / {fmtBytes(DOSSIER_MEDIA_MAX_BYTES)}</span>
+                )}
+                {editable && <Button size="sm" variant="ghost" onClick={() => setAdding('media')}><Plus size={13} /> Добавить</Button>}
+              </span>
+            )}
           >
             {media.length ? (
               <MediaGallery
@@ -836,6 +846,11 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   // Пока нет S3: локальный файл превращается в data URL (только для макета).
   function onFile(f: File | undefined) {
     if (!f) return;
+    if (f.size > MEDIA_FILE_MAX_BYTES) {
+      setError(`Файл ${fmtBytes(f.size)} — больше ${fmtBytes(MEDIA_FILE_MAX_BYTES)}. Большие файлы держите на своём Гугл-диске и добавьте в досье ссылку («Соцсети и ссылки»)`);
+      return;
+    }
+    setError(null);
     const r = new FileReader();
     r.onload = () => setValue(String(r.result));
     r.readAsDataURL(f);
@@ -867,7 +882,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   } else if (kind === 'media') {
     body = (
       <>
-        <Field label="Файл" hint="В прототипе файл встраивается как data URL; в проде — presigned-загрузка в S3, превью, EXIF.">
+        <Field label="Файл" hint={`До ${fmtBytes(MEDIA_FILE_MAX_BYTES)} на файл и ${fmtBytes(DOSSIER_MEDIA_MAX_BYTES)} на досье (занято ${fmtBytes(dossierMediaBytes(existing))}). Что больше — на свой Гугл-диск, в досье ссылку.`}>
           <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
         </Field>
         <Field label="…или URL изображения"><Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} /></Field>

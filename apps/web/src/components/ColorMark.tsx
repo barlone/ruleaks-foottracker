@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 import { TAG_COLORS } from '@ft/shared';
 
 /**
- * Квадрат-маркер: пустой контур, пока цвет не выбран, иначе залит цветом. По нажатию — палитра (цвета тегов + свой
+ * Круг-маркер: пустой контур, пока цвет не выбран, иначе залит цветом. По нажатию — палитра (цвета тегов + свой
  * цвет + «без цвета»). Без права правки — только показ.
  */
 export function ColorMark({ value, editable, onChange, className }: {
@@ -43,7 +43,7 @@ export function ColorMark({ value, editable, onChange, className }: {
         disabled={!editable}
         onClick={() => setOpen((v) => !v)}
         title={editable ? (value ? 'Изменить цвет метки' : 'Пометить цветом') : undefined}
-        className={clsx('size-3.5 shrink-0 rounded-sm border transition', editable && 'cursor-pointer hover:scale-110', value ? 'border-text/20' : 'border-text/40')}
+        className={clsx('size-3.5 shrink-0 rounded-full border transition', editable && 'cursor-pointer hover:scale-110', value ? 'border-text/20' : 'border-text/40')}
         style={value ? { background: value } : undefined}
       />
       {open && (
@@ -71,8 +71,9 @@ export function ColorMark({ value, editable, onChange, className }: {
           <button
             type="button"
             onClick={() => pick(undefined)}
-            title="Без цвета"
-            className="grid size-6 cursor-pointer place-items-center rounded-md border border-text/25 text-dim transition hover:text-danger"
+            title="Сбросить цвет"
+            // Всегда в правом нижнем углу палитры, что бы ни стояло перед ней.
+            className="col-start-4 grid size-6 cursor-pointer place-items-center rounded-md border border-text/25 text-dim transition hover:text-danger"
           >
             <X size={12} />
           </button>

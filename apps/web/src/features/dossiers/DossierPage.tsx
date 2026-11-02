@@ -5,7 +5,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from '@dnd-kit/utilities';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, GripVertical, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2,
+  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2,
 } from 'lucide-react';
 import { ATTR_TYPES, LEAK_FIELDS, attrCopyValue, attrDisplayValue, attrTypeLabel, FIELD_TO_KIND, POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
@@ -407,14 +407,13 @@ function AttrRow({ a, editable, onEdit, onRemove, onColor }: {
     >
       <span className="pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
       <div className="whitespace-pre-line break-words font-mono text-sm">{attrDisplayValue(a.key, a.value)}</div>
-      <div className="flex items-center">
-        {editable ? (
-          <span ref={setActivatorNodeRef} {...attributes} {...listeners} title="Перетащить" className="inline-flex cursor-grab items-center text-mute active:cursor-grabbing">
-            {a.source ? <SourceBadge source={a.source} /> : <GripVertical size={14} />}
+      <div className="flex items-center gap-1.5">
+        {editable && (
+          <span ref={setActivatorNodeRef} {...attributes} {...listeners} title="Перетащить" className="inline-flex cursor-grab items-center text-mute transition hover:text-mint active:cursor-grabbing">
+            <DragDots />
           </span>
-        ) : (
-          <SourceBadge source={a.source} />
         )}
+        <SourceBadge source={a.source} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <ValueActions field={a.key} value={a.value} />
@@ -434,6 +433,19 @@ function AttrRow({ a, editable, onEdit, onRemove, onColor }: {
         <ColorMark value={a.color} editable={editable} onChange={onColor} className="ml-auto" />
       </div>
     </div>
+  );
+}
+
+/** Ручка перетаскивания: квадрат с четырьмя точками. */
+function DragDots() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <rect x="0.5" y="0.5" width="13" height="13" rx="2" fill="none" stroke="currentColor" strokeOpacity="0.5" />
+      <circle cx="5" cy="5" r="1.2" fill="currentColor" />
+      <circle cx="9" cy="5" r="1.2" fill="currentColor" />
+      <circle cx="5" cy="9" r="1.2" fill="currentColor" />
+      <circle cx="9" cy="9" r="1.2" fill="currentColor" />
+    </svg>
   );
 }
 

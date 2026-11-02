@@ -10,6 +10,7 @@ import { GripVertical, Pencil, Star, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
+import { DELETE_GAP } from '../../components/ui.tsx';
 
 type Media = Extract<DossierItem, { type: 'media' }>;
 
@@ -105,12 +106,12 @@ function Tile({
           <button onClick={onEdit} title="Править" className="grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-mint">
             <Pencil size={13} />
           </button>
-          <button onClick={onRemove} title="Удалить" className="grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-danger">
-            <Trash2 size={13} />
-          </button>
           <span {...attributes} {...listeners} title="Перетащить" className="grid size-7 cursor-grab place-items-center rounded bg-bg/70 text-dim hover:text-mint">
             <GripVertical size={13} />
           </span>
+          <button onClick={onRemove} title="Удалить" className={`${DELETE_GAP} grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-danger`}>
+            <Trash2 size={13} />
+          </button>
         </div>
       )}
     </figure>

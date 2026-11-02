@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { Minus, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { Hypothesis, HypothesisStatus } from '@ft/shared';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
-import { Button, Dialog, Empty, Field, Input, Select, Tag } from '../../components/ui.tsx';
+import { Button, DELETE_GAP, Dialog, Empty, Field, Input, Select, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
@@ -62,7 +62,7 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
                   {editable && (
                     <span className="flex gap-2 text-mute opacity-0 transition group-hover:opacity-100">
                       <button onClick={() => setEditing(h)} className="cursor-pointer hover:text-mint"><Pencil size={14} /></button>
-                      <button onClick={() => remove.mutate({ id: inv.id, hypothesisId: h.id })} className="cursor-pointer hover:text-danger"><Trash2 size={14} /></button>
+                      <button onClick={() => remove.mutate({ id: inv.id, hypothesisId: h.id })} title="Удалить" className={`${DELETE_GAP} cursor-pointer hover:text-danger`}><Trash2 size={14} /></button>
                     </span>
                   )}
                 </header>

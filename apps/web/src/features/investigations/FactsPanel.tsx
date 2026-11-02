@@ -6,7 +6,7 @@ import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields } from '../../components/SourceFields.tsx';
 import { emptySource, finishSource, type SourceDraft } from '../../components/source.ts';
-import { Button, Dialog, Empty, Field, Input } from '../../components/ui.tsx';
+import { Button, DELETE_GAP, Dialog, Empty, Field, Input } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
@@ -63,7 +63,7 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
                   {editable && (
                     <span className="flex gap-1.5 opacity-0 transition group-hover:opacity-100">
                       <button onClick={() => setEditing(f)} className="cursor-pointer hover:text-mint"><Pencil size={13} /></button>
-                      <button onClick={() => remove.mutate({ id: inv.id, factId: f.id })} className="cursor-pointer hover:text-danger"><Trash2 size={13} /></button>
+                      <button onClick={() => remove.mutate({ id: inv.id, factId: f.id })} title="Удалить" className={`${DELETE_GAP} cursor-pointer hover:text-danger`}><Trash2 size={13} /></button>
                     </span>
                   )}
                 </div>

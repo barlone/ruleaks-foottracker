@@ -211,6 +211,10 @@ export function CopyButton({ value, title = 'Скопировать', className 
   );
 }
 
+/** Зазор перед иконкой удаления: полширины иконки сверх обычного gap. Правило для всех рядов действий —
+ * удаление всегда крайнее справа и отделено от соседей этим отступом (см. DELETE_GAP в других кнопках). */
+export const DELETE_GAP = 'ml-1.5';
+
 /**
  * Удаление в два нажатия: первое превращает корзину в красный квадрат с «?», второе в течение 3 с удаляет,
  * иначе кнопка возвращается к обычному виду. Пока ждёт подтверждения, видна и без наведения на строку.
@@ -233,7 +237,7 @@ export function ConfirmDeleteBtn({ onConfirm, className, title = 'Удалить
       title={armed ? 'Нажмите ещё раз, чтобы удалить' : title}
       aria-label={armed ? 'Подтвердить удаление' : title}
       data-armed={armed || undefined}
-      className={clsx('grid size-3.5 shrink-0 cursor-pointer place-items-center transition', armed ? 'opacity-100' : 'text-mute opacity-0 hover:text-danger group-hover:opacity-100', className)}
+      className={clsx(DELETE_GAP, 'grid size-3.5 shrink-0 cursor-pointer place-items-center transition', armed ? 'opacity-100' : 'text-mute opacity-0 hover:text-danger group-hover:opacity-100', className)}
     >
       {armed ? <span className="grid size-3.5 place-items-center rounded-sm bg-danger font-mono text-[10px] font-bold leading-none text-bg">?</span> : <Trash2 size={13} />}
     </button>

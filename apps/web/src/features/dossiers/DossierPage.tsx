@@ -15,7 +15,7 @@ import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields } from '../../components/SourceFields.tsx';
 import { emptySource, finishSource, type SourceDraft } from '../../components/source.ts';
 import { TagsBar } from '../../components/Tags.tsx';
-import { Button, Card, ConfirmDeleteBtn, CopyButton, Dialog, Empty, Field, FilePicker, Input, Select, Spinner, Tag, Textarea, WarnNote } from '../../components/ui.tsx';
+import { Button, Card, ConfirmDeleteBtn, CopyButton, DELETE_GAP, Dialog, Empty, Field, FilePicker, Input, Select, Spinner, Tag, Textarea, WarnNote } from '../../components/ui.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
@@ -71,6 +71,7 @@ export function DossierPage() {
   const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'media' | 'note' | 'post'>(null);
   const [editingMedia, setEditingMedia] = useState<Of<'media'> | null>(null);
   const [editingLink, setEditingLink] = useState<Of<'link'> | null>(null);
+  const [editingAttr, setEditingAttr] = useState<Of<'attribute'> | null>(null);
   const [sharing, setSharing] = useState(false);
   const [exporting, setExporting] = useState<'file' | 'pdf' | null>(null);
 
@@ -255,8 +256,12 @@ export function DossierPage() {
                           <FileSearch size={14} />
                         </Link>
                       )}
-                      {/* Отступ в ширину кнопки — чтобы не попасть в «удалить» вместо соседней. */}
-                      {editable && <ConfirmDeleteBtn className="ml-3.5" onConfirm={() => removeItem.mutate({ id, itemId: a.id })} />}
+                      {editable && (
+                        <>
+                          <button type="button" onClick={() => setEditingAttr(a)} title="Править" className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Pencil size={14} /></button>
+                          <ConfirmDeleteBtn onConfirm={() => removeItem.mutate({ id, itemId: a.id })} />
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -319,6 +324,12 @@ export function DossierPage() {
         media={editingMedia}
         onClose={() => setEditingMedia(null)}
         onSave={(item) => updateItem.mutateAsync({ id, item }).then(() => setEditingMedia(null))}
+      />
+      <EditAttrDialog
+        attr={editingAttr}
+        existing={d.items}
+        onClose={() => setEditingAttr(null)}
+        onSave={(item) => updateItem.mutateAsync({ id, item }).then(() => setEditingAttr(null))}
       />
       <EditLinkDialog
         link={editingLink}
@@ -429,7 +440,7 @@ function NoteCard({ note, editable, onSave, onRemove }: { note: Of<'note'>; edit
 
 function DeleteBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button onClick={onClick} title="Удалить" className="cursor-pointer text-mute hover:text-danger">
+    <button onClick={onClick} title="Удалить" className={`${DELETE_GAP} cursor-pointer text-mute hover:text-danger`}>
       <Trash2 size={13} />
     </button>
   );
@@ -517,6 +528,73 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
       <div className="flex justify-end">
         <Button type="submit" variant="primary" disabled={saving}>Сохранить</Button>
+      </div>
+    </form>
+  );
+}
+
+function EditAttrDialog({ attr, existing, onClose, onSave }: { attr: Of<'attribute'> | null; existing: DossierItem[]; onClose: () => void; onSave: (item: Of<'attribute'>) => Promise<void> }) {
+  return (
+    <Dialog open={!!attr} onOpenChange={(v) => !v && onClose()} title="Атрибут">
+      {attr && <EditAttrForm key={attr.id} attr={attr} existing={existing} onSave={onSave} />}
+    </Dialog>
+  );
+}
+
+function EditAttrForm({ attr, existing, onSave }: { attr: Of<'attribute'>; existing: DossierItem[]; onSave: (item: Of<'attribute'>) => Promise<void> }) {
+  // Ключ не из каталога — «свой» атрибут с собственным названием.
+  const known = attr.key in LEAK_FIELDS;
+  const [key, setKey] = useState<string>(known ? attr.key : 'custom');
+  const [label, setLabel] = useState(known ? '' : attr.label);
+  const [value, setValue] = useState(attr.value);
+  const { capturedAt, ...rest } = attr.source ?? { capturedAt: undefined, ...emptySource() };
+  const [source, setSource] = useState<SourceDraft>({ ...rest, ref: rest.ref ?? '' });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const attrLabel = key === 'custom' ? label.trim() : LEAK_FIELDS[key as LeakField];
+  // «Свой» атрибут хранится с ключом custom, как и при добавлении.
+  const attrKey = key;
+  const ready = !!value.trim() && !!attrLabel;
+  // Сам правящийся элемент дубликатом не считается.
+  const duplicate = ready ? findDuplicate(existing.filter((i) => i.id !== attr.id), { type: 'attribute', key: attrKey, label: attrLabel, value }) : undefined;
+
+  async function submit() {
+    if (!ready) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const src = finishSource(source);
+      await onSave({ ...attr, key: attrKey, label: attrLabel, value: value.trim(), source: capturedAt ? { ...src, capturedAt } : src });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Тип">
+          <Select value={key} onChange={(e) => setKey(e.target.value)} className="w-full">
+            {Object.entries(LEAK_FIELDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <option value="custom">Свой…</option>
+          </Select>
+        </Field>
+        {key === 'custom' && <Field label="Название"><Input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>}
+      </div>
+      <Field label="Значение"><Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="font-mono" /></Field>
+      <SourceFields value={source} onChange={setSource} />
+      {duplicate && <WarnNote>Уже есть в досье: {duplicate.type === 'attribute' ? `${duplicate.label} — ${attrDisplayValue(duplicate.key, duplicate.value)}` : ''}</WarnNote>}
+      {error && <div className="font-mono text-xs text-danger">{error}</div>}
+      <div className="flex justify-end">
+        <Button type="submit" variant="primary" disabled={saving || !ready || !!duplicate}>Сохранить</Button>
       </div>
     </form>
   );

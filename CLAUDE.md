@@ -142,6 +142,10 @@ obvious from the schema:
   Embedded media are capped (`@ft/shared` `media.ts`: 1 MiB per file, 5 MiB per dossier, external URLs are free);
   `checkMediaLimits` in `routers/dossiers.ts` throws `BAD_REQUEST MEDIA_TOO_LARGE` / `MEDIA_QUOTA`, the web pre-checks
   files and tells the user to keep big files on their Google Drive and add a link. Import is not capped.
+  Google Drive links (`lib/driveLinks.ts`): a share link pasted into the media URL field is stored as the Drive
+  thumbnail URL (`thumbnail?id=…&sz=w1600`; the file must be shared «by link»), and for a video `embedUrl` holds the
+  Drive `…/preview` player, opened in an iframe dialog from the gallery (lightbox is images only). `embedUrl` is not
+  in the export v1 format: an exported video comes back as its thumbnail image.
 - Dossiers/investigations are soft-deleted (`deleted_at`); search history "clear" sets `hidden_at`, and a search that
   was attached to a dossier as a snapshot is `pinned`.
 - Repos that write `created_by`/`granted_by` take an `actorId` argument (memory adapters ignore it).

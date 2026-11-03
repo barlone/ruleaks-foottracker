@@ -196,6 +196,8 @@ export const MediaItem = z.object({
   thumbUrl: z.string().optional(),
   caption: z.string().max(1000).optional(),
   album: z.string().max(128).optional(),
+  /** Видео: адрес встраиваемого плеера для iframe (Гугл-диск …/preview); url тогда — кадр или миниатюра. */
+  embedUrl: z.string().url().max(2048).optional(),
 });
 
 export const NoteItem = z.object({

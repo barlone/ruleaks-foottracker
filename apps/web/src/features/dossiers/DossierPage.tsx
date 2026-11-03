@@ -22,7 +22,8 @@ import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields } from '../../components/SourceFields.tsx';
 import { emptySource, finishSource, type SourceDraft } from '../../components/source.ts';
 import { TagsBar } from '../../components/Tags.tsx';
-import { Button, Card, ConfirmDeleteBtn, CopyButton, DELETE_GAP, Dialog, Empty, Field, FilePicker, Input, Select, Spinner, Tag, Textarea, WarnNote } from '../../components/ui.tsx';
+import { Button, Card, ConfirmDeleteBtn, CopyButton, DELETE_GAP, Dialog, Empty, Field, FilePicker, Input, Segmented, Select, Spinner, Tag, Textarea, WarnNote } from '../../components/ui.tsx';
+import { driveImageUrl, drivePreviewUrl, googleDriveId } from '../../lib/driveLinks.ts';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
@@ -800,6 +801,9 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   const [value, setValue] = useState('');
   const [title, setTitle] = useState('');
   const [album, setAlbum] = useState('');
+  // Для ссылки Гугл-диска: по самой ссылке не понять, картинка это или видео — спрашиваем.
+  const [mediaKind, setMediaKind] = useState<'image' | 'video'>('image');
+  const driveId = kind === 'media' && !value.startsWith('data:') ? googleDriveId(value) : null;
   // Пост: вид, площадка, где опубликовано, ссылка, время (UTC), эмодзи реакции, на что ответ.
   const [postKind, setPostKind] = useState<Of<'post'>['kind']>('comment');
   const [platform, setPlatform] = useState<Of<'post'>['platform']>('telegram');
@@ -825,7 +829,10 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
         const url = /^https?:\/\//.test(value) ? value : `https://${value}`;
         await onAdd({ type: 'link', url, title: title || undefined, platform: guessPlatform(url), source: src });
       } else if (kind === 'media') {
-        await onAdd({ type: 'media', mediaId: newId(), url: value, caption: title || undefined, album: album || undefined, source: src });
+        // Ссылка Диска хранится как миниатюра (картинка, кадр видео) и, для видео, адрес плеера.
+        const url = driveId ? driveImageUrl(driveId) : value;
+        const embedUrl = driveId && mediaKind === 'video' ? drivePreviewUrl(driveId) : undefined;
+        await onAdd({ type: 'media', mediaId: newId(), url, embedUrl, caption: title || undefined, album: album || undefined, source: src });
       } else if (kind === 'post') {
         await onAdd({
           type: 'post', kind: postKind, platform, text: value, place: place.trim() || undefined, url: title.trim() || undefined,
@@ -885,8 +892,16 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
         <Field label="Файл" hint={`До ${fmtBytes(MEDIA_FILE_MAX_BYTES)} на файл и ${fmtBytes(DOSSIER_MEDIA_MAX_BYTES)} на досье (занято ${fmtBytes(dossierMediaBytes(existing))}). Что больше — на свой Гугл-диск, в досье ссылку.`}>
           <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
         </Field>
-        <Field label="…или URL изображения"><Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} /></Field>
-        {value && <img src={value} alt="" className="max-h-48 rounded-lg border border-line" />}
+        <Field
+          label="…или URL изображения"
+          hint={driveId ? 'Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»' : 'Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)'}
+        >
+          <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder="https://… или https://drive.google.com/file/d/…" />
+        </Field>
+        {driveId && (
+          <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: 'Изображение' }, { value: 'video', label: 'Видео' }]} />
+        )}
+        {value && <img src={driveId ? driveImageUrl(driveId) : value} alt="" className="max-h-48 rounded-lg border border-line" />}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Подпись"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
           <Field label="Альбом"><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder="Соцсети, Наблюдение…" /></Field>

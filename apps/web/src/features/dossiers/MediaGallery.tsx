@@ -6,11 +6,11 @@ import Lightbox from 'yet-another-react-lightbox';
 import Captions from 'yet-another-react-lightbox/plugins/captions';
 import 'yet-another-react-lightbox/styles.css';
 import 'yet-another-react-lightbox/plugins/captions.css';
-import { GripVertical, Pencil, Star, Trash2 } from 'lucide-react';
+import { GripVertical, Pencil, Play, Star, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
-import { DELETE_GAP } from '../../components/ui.tsx';
+import { DELETE_GAP, Dialog } from '../../components/ui.tsx';
 
 type Media = Extract<DossierItem, { type: 'media' }>;
 
@@ -32,6 +32,7 @@ export function MediaGallery({
 }) {
   const [order, setOrder] = useState<string[] | null>(null);
   const [open, setOpen] = useState(-1);
+  const [video, setVideo] = useState<Media | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const byId = new Map(items.map((m) => [m.id, m]));
@@ -56,7 +57,7 @@ export function MediaGallery({
                 m={m}
                 editable={editable}
                 isCover={m.url === coverUrl}
-                onOpen={() => setOpen(i)}
+                onOpen={() => (m.embedUrl ? setVideo(m) : setOpen(i))}
                 onRemove={() => onRemove(m.id)}
                 onCover={() => onCover(m.url)}
                 onEdit={() => onEdit(m)}
@@ -73,6 +74,10 @@ export function MediaGallery({
         slides={sorted.map((m) => ({ src: m.url, title: m.caption, description: m.album }))}
         styles={{ container: { backgroundColor: 'rgba(0,0,0,.92)' } }}
       />
+      {/* Видео: встраиваемый плеер (Гугл-диск) — iframe в окне, Lightbox работает только с картинками и прямыми файлами. */}
+      <Dialog open={!!video} onOpenChange={(v) => !v && setVideo(null)} title={video?.caption || 'Видео'} wide>
+        {video && <iframe src={video.embedUrl} title={video.caption ?? 'Видео'} allow="autoplay; fullscreen" allowFullScreen className="aspect-video w-full rounded-lg border border-line bg-bg" />}
+      </Dialog>
     </>
   );
 }
@@ -90,8 +95,13 @@ function Tile({
         isDragging && 'z-10 border-mint shadow-glow',
       )}
     >
-      <button onClick={onOpen} className="block aspect-[4/3] w-full cursor-zoom-in">
+      <button onClick={onOpen} className={clsx('relative block aspect-[4/3] w-full', m.embedUrl ? 'cursor-pointer' : 'cursor-zoom-in')} title={m.embedUrl ? 'Воспроизвести' : undefined}>
         <img src={m.url} alt={m.caption ?? ''} className="size-full object-cover" draggable={false} />
+        {m.embedUrl && (
+          <span className="absolute inset-0 grid place-items-center">
+            <span className="grid size-10 place-items-center rounded-full border border-mint/60 bg-bg/70 text-mint"><Play size={18} fill="currentColor" /></span>
+          </span>
+        )}
       </button>
       <figcaption className="flex items-center gap-2 px-2.5 py-2">
         <span className="min-w-0 flex-1 truncate text-xs text-dim">{m.caption ?? '—'}</span>

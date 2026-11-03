@@ -24,6 +24,7 @@ import { emptySource, finishSource, type SourceDraft } from '../../components/so
 import { TagsBar } from '../../components/Tags.tsx';
 import { Button, Card, ConfirmDeleteBtn, CopyButton, DELETE_GAP, Dialog, Empty, Field, FilePicker, Input, Segmented, Select, Spinner, Tag, Textarea, WarnNote } from '../../components/ui.tsx';
 import { driveImageUrl, drivePreviewUrl, googleDriveId } from '../../lib/driveLinks.ts';
+import { DriveHelpButton } from '../../components/DriveHelp.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
@@ -894,7 +895,13 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
         </Field>
         <Field
           label="…или URL изображения"
-          hint={driveId ? 'Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»' : 'Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)'}
+          hint={(
+            <>
+              {driveId ? 'Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»' : 'Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)'}
+              {' '}
+              <DriveHelpButton />
+            </>
+          )}
         >
           <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder="https://… или https://drive.google.com/file/d/…" />
         </Field>

@@ -435,6 +435,8 @@ export const STEP2_SOURCES = [
   { field: 'pasps', kind: 'pasp', by: 'паспорту', ok: (v: string) => RE.pasp.test(v) },
   { field: 'forpasps', kind: 'fpasp', by: 'загранпаспорту', ok: (v: string) => /^\d{9}$/.test(v) },
   { field: 'bsvids', kind: 'bsvid', by: 'свидетельству о рождении', ok: (v: string, raw: string) => RE.bsvid.test(v) || RE.bsvid.test(raw.trim()) },
+  // Телефон: только мобильные РФ в нормализованном виде (79…), как у поиска бота; городские и +380 не годятся.
+  { field: 'phones', kind: 'phone', by: 'телефону', ok: (v: string) => RE.phone.test(v) },
   { field: 'emails', kind: 'email', by: 'email', ok: (v: string) => RE.email.test(v) },
   { field: 'tgids', kind: 'tgid', by: 'Telegram ID', ok: (v: string) => RE.tgid.test(v) },
   { field: 'milpns', kind: 'milpn', by: 'личному номеру', ok: (v: string, raw: string) => RE.milpn.test(raw.trim()) || /^\p{L}-\d{6}$/u.test(v) },

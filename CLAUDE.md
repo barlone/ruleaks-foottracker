@@ -213,7 +213,7 @@ nobody polls stays `running` until `[api] job-timeout-sec`. A server-side poller
 
 «Дополнительный поиск вторым шагом» (attr, exclusive with deep; `params.step2` = fields to take, `params.step2by` =
 kinds to search by): after the raw search, `search/step2.ts` runs up to `STEP2_MAX_SEARCHES` raw searches (round-robin
-over kinds) by the found INN/SNILS/passport/foreign passport/birth certificate/email/Telegram ID/military number/link
+over kinds) by the found INN/SNILS/passport/foreign passport/birth certificate/mobile phone/email/Telegram ID/military number/link
 (`STEP2_SOURCES`; the gateway has no OGRNIP search) in the background — not driven by polls — and adds the chosen fields of their tuples to
 the step-1 tuple that held the identifier (`LeakTuple.step2`: `{f, v, by}`; the step-2 leak name is dropped). UI, PDF
 and Excel show them in the same record below a dashed rule as «ТЕЛЕФОН² (найден по паспорту)». The job stays `running` with no `gatewayJobId`

@@ -259,15 +259,13 @@ export function DossierPage() {
           >
             <div className="space-y-[0.8rem]">
               {items('note').length === 0 && <Empty>Заметок нет</Empty>}
-              {items('note').map((n) => (
-                <NoteCard
-                  key={n.id}
-                  note={n}
-                  editable={editable}
-                  onSave={(markdown) => updateItem.mutateAsync({ id, item: { ...n, markdown } }).then(() => undefined)}
-                  onRemove={() => removeItem.mutate({ id, itemId: n.id })}
-                />
-              ))}
+              <NotesList
+                notes={items('note')}
+                editable={editable}
+                onReorder={(ids) => reorder.mutate({ id, orderedIds: ids })}
+                onSave={(n, markdown) => updateItem.mutateAsync({ id, item: { ...n, markdown } }).then(() => undefined)}
+                onRemove={(itemId) => removeItem.mutate({ id, itemId })}
+              />
             </div>
           </Card>
         </div>
@@ -602,8 +600,55 @@ function RepeatSearchLink({ section, kind, query, deep }: { section: SearchSecti
 }
 
 /** Заметка: свёрнутой остаётся строка с датой и началом текста; карандаш открывает редактор на месте. */
-function NoteCard({ note, editable, onSave, onRemove }: { note: Of<'note'>; editable: boolean; onSave: (markdown: string) => Promise<void>; onRemove: () => void }) {
-  const [collapsed, setCollapsed] = useState(false);
+/**
+ * Заметки с перестановкой мышью: ручка с четырьмя точками есть только у свёрнутой заметки. Пока одну тянут,
+ * остальные временно свёрнуты (иначе целиться между длинными текстами невозможно); после сброса возвращаются.
+ */
+function NotesList({ notes, editable, onReorder, onSave, onRemove }: {
+  notes: Of<'note'>[];
+  editable: boolean;
+  onReorder: (orderedIds: string[]) => void;
+  onSave: (note: Of<'note'>, markdown: string) => Promise<void>;
+  onRemove: (itemId: string) => void;
+}) {
+  const [order, setOrder] = useState<string[] | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  const ids = order?.filter((x) => byId.has(x)) ?? notes.map((n) => n.id);
+  for (const n of notes) if (!ids.includes(n.id)) ids.push(n.id);
+
+  function onDragEnd(e: DragEndEvent) {
+    setDragging(false);
+    if (!e.over || e.active.id === e.over.id) return;
+    const next = arrayMove(ids, ids.indexOf(String(e.active.id)), ids.indexOf(String(e.over.id)));
+    setOrder(next);
+    onReorder(next);
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={() => setDragging(true)} onDragEnd={onDragEnd} onDragCancel={() => setDragging(false)}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        {ids.map((x) => {
+          const n = byId.get(x)!;
+          return <NoteCard key={n.id} note={n} editable={editable} forceCollapsed={dragging} onSave={(md) => onSave(n, md)} onRemove={() => onRemove(n.id)} />;
+        })}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
+  note: Of<'note'>;
+  editable: boolean;
+  /** Временно свёрнута, пока переставляют другую заметку; своё состояние сохраняется. */
+  forceCollapsed: boolean;
+  onSave: (markdown: string) => Promise<void>;
+  onRemove: () => void;
+}) {
+  const [ownCollapsed, setCollapsed] = useState(false);
+  const collapsed = ownCollapsed || forceCollapsed;
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: note.id, disabled: !editable || !ownCollapsed });
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -624,10 +669,15 @@ function NoteCard({ note, editable, onSave, onRemove }: { note: Of<'note'>; edit
   }
 
   return (
-    <article className="rounded-xl border border-line-soft p-[0.8rem]">
+    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={clsx('rounded-xl border border-line-soft p-[0.8rem]', isDragging && 'relative z-10 border-mint bg-panel shadow-glow')}>
       <div className={clsx('flex items-center justify-between gap-2 font-mono text-[11px] text-mute', !collapsed && 'mb-2')}>
         {/* В узкой колонке места мало: дата и превью усекаются, значки справа — нет. */}
         <span className="flex min-w-0 items-center gap-3">
+          {editable && ownCollapsed && (
+            <span ref={setActivatorNodeRef} {...attributes} {...listeners} title="Перетащить" className="inline-flex cursor-grab items-center text-mute transition hover:text-mint active:cursor-grabbing">
+              <DragDots />
+            </span>
+          )}
           <span className="truncate">{fmtDate(note.createdAt, true)}</span>
           {collapsed && <span className="hidden truncate text-dim sm:inline">{firstLine}</span>}
         </span>
@@ -636,10 +686,10 @@ function NoteCard({ note, editable, onSave, onRemove }: { note: Of<'note'>; edit
           <button
             type="button"
             onClick={() => setCollapsed((v) => !v)}
-            title={collapsed ? 'Развернуть' : 'Свернуть'}
+            title={ownCollapsed ? 'Развернуть' : 'Свернуть'}
             className="cursor-pointer text-mute hover:text-mint"
           >
-            {collapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+            {ownCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
           </button>
           {editable && draft === null && (
             <button

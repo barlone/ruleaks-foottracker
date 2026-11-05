@@ -478,6 +478,7 @@ function AttrRow({ a, child, pair, mode, editable, linkable, onEdit, onRemove, o
   onPickParent: () => void;
 }) {
   const kind = FIELD_TO_KIND[a.key as LeakField];
+  const { id: dossierId } = useParams({ from: '/dossiers/$id' });
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: a.id, disabled: !editable || mode !== 'normal' });
   const target = mode === 'target';
   return (
@@ -533,7 +534,7 @@ function AttrRow({ a, child, pair, mode, editable, linkable, onEdit, onRemove, o
             <ValueActions field={a.key} value={a.value} />
             <CopyButton value={attrCopyValue(a.key, a.value)} title={`Скопировать: ${a.label}`} />
             {kind && (
-              <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+              <Link to="/search" search={{ kind, q: a.value, from: dossierId }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
                 <FileSearch size={14} />
               </Link>
             )}
@@ -561,13 +562,14 @@ function AttrRow({ a, child, pair, mode, editable, linkable, onEdit, onRemove, o
  * ФИО + дата рождения, поиск по ним. Иконки стоят на уровне иконок родителя (сдвиг подчинённого компенсируется).
  */
 function PairActions({ parent, child }: { parent: Of<'attribute'>; child: Of<'attribute'> }) {
+  const { id: dossierId } = useParams({ from: '/dossiers/$id' });
   const combined = `${attrCopyValue(parent.key, parent.value)} ${attrCopyValue(child.key, child.value)}`;
   const searchable = parent.key === 'names' && child.key === 'bdays';
   return (
     <div className="col-start-2 -ml-[1.125rem] flex items-center gap-2 pt-1">
       <CopyButton value={combined} title={`Скопировать: ${parent.label} + ${child.label}`} />
       {searchable && (
-        <Link to="/search" search={{ kind: 'name', q: combined }} title="Искать по ФИО и дате рождения" className="text-mute transition hover:text-mint">
+        <Link to="/search" search={{ kind: 'name', q: combined, from: dossierId }} title="Искать по ФИО и дате рождения" className="text-mute transition hover:text-mint">
           <FileSearch size={14} />
         </Link>
       )}
@@ -590,12 +592,13 @@ function DragDots() {
 }
 
 function RepeatSearchLink({ section, kind, query, deep }: { section: SearchSection; kind: string; query: string; deep: boolean }) {
+  const { id: dossierId } = useParams({ from: '/dossiers/$id' });
   const cls = 'text-mute hover:text-mint';
   const icon = <FileSearch size={14} />;
   if (section === 'tg') return <Link to="/search/telegram" search={{ mode: kind, q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
   if (section === 'fuzzy') return <Link to="/search/fuzzy" search={{ mode: kind, q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
   if (section === 'geo') return <Link to="/search/geo" search={{ q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
-  return <Link to="/search" search={{ kind, q: query, deep }} title="Повторить поиск" className={cls}>{icon}</Link>;
+  return <Link to="/search" search={{ kind, q: query, deep, from: dossierId }} title="Повторить поиск" className={cls}>{icon}</Link>;
 }
 
 /** Заметка: свёрнутой остаётся строка с датой и началом текста; карандаш открывает редактор на месте. */

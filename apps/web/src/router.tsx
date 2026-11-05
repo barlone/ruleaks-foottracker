@@ -35,7 +35,8 @@ export const loginRoute = createRoute({
 export const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search',
-  validateSearch: z.object({ kind: text, q: text, deep: z.boolean().optional().catch(undefined) }),
+  // from — id досье, из которого пришли по иконке «Искать»: в заголовке появляется возврат в него.
+  validateSearch: z.object({ kind: text, q: text, deep: z.boolean().optional().catch(undefined), from: text }),
   component: AttrSearchPage,
 });
 

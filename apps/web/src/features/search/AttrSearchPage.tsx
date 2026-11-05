@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, ListChecks, Search as SearchIcon, SearchCheck, ShieldCheck, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, ListChecks, Search as SearchIcon, SearchCheck, ShieldCheck, Zap } from 'lucide-react';
 import {
   FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_KINDS, STEP2_MAX_SEARCHES, STEP2_SOURCES, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
   isUkrainianPhone, step2ByText, step2Summary, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type Step2Info,
@@ -84,6 +84,7 @@ export function AttrSearchPage() {
     <SearchLayout
       section="attr"
       title="Поиск по атрибутам"
+      titleExtra={params.from && <BackToDossier id={params.from} />}
       subtitle="Телефон, email, ФИО, документы, авто, Telegram ID… Найденное можно сразу перенести в досье."
       activeId={jobId}
       onOpen={setJobId}
@@ -189,6 +190,16 @@ export function AttrSearchPage() {
         </Empty>
       )}
     </SearchLayout>
+  );
+}
+
+/** Возврат в досье, из которого пришли по «Искать» (?from=): текст-кнопка справа от заголовка. */
+function BackToDossier({ id }: { id: string }) {
+  const d = trpc.dossiers.get.useQuery({ id }, { select: (x) => x.title, staleTime: 60_000 });
+  return (
+    <Link to="/dossiers/$id" params={{ id }} className="inline-flex items-center gap-1.5 font-mono text-xs text-mute transition hover:text-mint">
+      <ArrowLeft size={13} /> в досье{d.data ? ` «${d.data}»` : ''}
+    </Link>
   );
 }
 

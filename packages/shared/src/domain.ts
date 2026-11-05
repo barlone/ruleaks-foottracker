@@ -162,6 +162,11 @@ export const AttributeItem = z.object({
   value: z.string().max(4000),
   /** Цветная метка пользователя (квадрат в строке атрибута); в файл экспорта и PDF не попадает. */
   color: TagColor.optional(),
+  /**
+   * Связанная пара: id родительского атрибута того же досье (ФИО + дата рождения, паспорт + кем выдан).
+   * Один уровень: родитель сам не подчинённый. Показывается сразу под родителем; в экспорт и PDF не попадает.
+   */
+  parentId: Id.optional(),
 });
 
 export const Platform = z.enum(['vk', 'telegram', 'ok', 'instagram', 'facebook', 'x', 'youtube', 'web', 'other']);

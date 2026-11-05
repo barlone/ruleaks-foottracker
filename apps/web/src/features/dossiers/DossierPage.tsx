@@ -5,10 +5,10 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from '@dnd-kit/utilities';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2,
+  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2, X,
 } from 'lucide-react';
 import {
-  ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND, fmtBytes,
+  ATTR_PAIRS, ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, pairAllowed, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND, fmtBytes,
   POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection,
 } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
@@ -59,6 +59,19 @@ function orderAttributes(list: Of<'attribute'>[]): Of<'attribute'>[] {
   const byCreated = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.position - b.position);
   const custom = list.some((a, i) => a.id !== byCreated[i]!.id);
   return custom ? list : sortAttributes(list);
+}
+
+/** Подчинённый ли атрибут: родитель должен быть в списке (у удалённого родителя связь снята сервером, но на всякий случай). */
+const parentOf = (a: Of<'attribute'>, byId: Map<string, Of<'attribute'>>) => (a.parentId && byId.has(a.parentId) ? a.parentId : undefined);
+
+/** Связанные пары: подчинённые атрибуты идут сразу под родителем, в своём порядке. */
+function groupAttributes(ids: string[], byId: Map<string, Of<'attribute'>>): string[] {
+  const out: string[] = [];
+  for (const id of ids) {
+    if (parentOf(byId.get(id)!, byId)) continue;
+    out.push(id, ...ids.filter((x) => parentOf(byId.get(x)!, byId) === id));
+  }
+  return out;
 }
 
 export function DossierPage() {
@@ -272,6 +285,7 @@ export function DossierPage() {
               onEdit={setEditingAttr}
               onRemove={(itemId) => removeItem.mutate({ id, itemId })}
               onColor={(a, color) => updateItem.mutate({ id, item: { ...a, color } })}
+              onLink={(a, parentId) => updateItem.mutate({ id, item: { ...a, parentId } })}
             />
           </Card>
 
@@ -364,21 +378,40 @@ export function DossierPage() {
 
 /** Повтор снимка в его разделе поиска. */
 /** Атрибуты досье: перестановка мышкой за бейдж источника (или ручку, если источника нет). */
-function AttributesList({ items, editable, onReorder, onEdit, onRemove, onColor }: {
+function AttributesList({ items, editable, onReorder, onEdit, onRemove, onColor, onLink }: {
   items: Of<'attribute'>[];
   editable: boolean;
   onReorder: (orderedIds: string[]) => void;
   onEdit: (a: Of<'attribute'>) => void;
   onRemove: (itemId: string) => void;
   onColor: (a: Of<'attribute'>, color: string | undefined) => void;
+  /** Связать с родителем (parentId) или отвязать (undefined). */
+  onLink: (a: Of<'attribute'>, parentId: string | undefined) => void;
 }) {
   // Порядок после перетаскивания показывается сразу, не дожидаясь ответа сервера (как в галерее медиа).
   const [order, setOrder] = useState<string[] | null>(null);
+  // Режим связывания: id атрибута, которому выбирают родителя. Остальные строки становятся кнопками; Esc отменяет.
+  const [linkingId, setLinkingId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const byId = new Map(items.map((a) => [a.id, a]));
-  const ids = order?.filter((x) => byId.has(x)) ?? orderAttributes(items).map((a) => a.id);
+  const base = order?.filter((x) => byId.has(x)) ?? orderAttributes(items).map((a) => a.id);
   // Атрибут, добавленный после перестановки, в локальном порядке ещё не значится — в конец.
-  for (const a of items) if (!ids.includes(a.id)) ids.push(a.id);
+  for (const a of items) if (!base.includes(a.id)) base.push(a.id);
+  const ids = groupAttributes(base, byId);
+  const linking = linkingId && byId.has(linkingId) ? byId.get(linkingId)! : null;
+
+  useEffect(() => {
+    if (!linking) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setLinkingId(null);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [linking]);
+
+  /** Годится ли строка в родители выбранному: допустимая пара типов, не он сам, не подчинённый, не нынешний родитель. */
+  const canBeParent = (a: Of<'attribute'>) =>
+    !!linking && a.id !== linking.id && pairAllowed(a.key, linking.key) && !parentOf(a, byId) && parentOf(linking, byId) !== a.id;
+  // Связывать можно только подчинённый тип допустимой пары, и только если у него нет своих подчинённых.
+  const canStartLink = (a: Of<'attribute'>) => ATTR_PAIRS.some((p) => p.child === a.key) && !items.some((x) => parentOf(x, byId) === a.id);
 
   function onDragEnd(e: DragEndEvent) {
     if (!e.over || e.active.id === e.over.id) return;
@@ -390,10 +423,32 @@ function AttributesList({ items, editable, onReorder, onEdit, onRemove, onColor 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        <div className="divide-y divide-line-soft">
+        <div className={clsx(linking ? 'space-y-1' : 'divide-y divide-line-soft')}>
           {ids.map((x) => {
             const a = byId.get(x)!;
-            return <AttrRow key={a.id} a={a} editable={editable} onEdit={() => onEdit(a)} onRemove={() => onRemove(a.id)} onColor={(c) => onColor(a, c)} />;
+            const mode: RowMode = !linking ? 'normal' : a.id === linking.id ? 'source' : canBeParent(a) ? 'target' : 'muted';
+            const parentId = parentOf(a, byId);
+            return (
+              <AttrRow
+                key={a.id}
+                a={a}
+                child={!!parentId}
+                pair={parentId ? byId.get(parentId) : undefined}
+                mode={mode}
+                editable={editable}
+                linkable={canStartLink(a)}
+                onEdit={() => onEdit(a)}
+                onRemove={() => onRemove(a.id)}
+                onColor={(c) => onColor(a, c)}
+                onUnlink={() => onLink(a, undefined)}
+                onStartLink={() => setLinkingId(a.id)}
+                onCancelLink={() => setLinkingId(null)}
+                onPickParent={() => {
+                  if (linking) onLink(linking, a.id);
+                  setLinkingId(null);
+                }}
+              />
+            );
           })}
         </div>
       </SortableContext>
@@ -401,26 +456,66 @@ function AttributesList({ items, editable, onReorder, onEdit, onRemove, onColor 
   );
 }
 
-function AttrRow({ a, editable, onEdit, onRemove, onColor }: {
+/** normal — обычная строка; source — ей выбирают родителя; target — кнопка-кандидат; muted — в родители не годится. */
+type RowMode = 'normal' | 'source' | 'target' | 'muted';
+
+function AttrRow({ a, child, pair, mode, editable, linkable, onEdit, onRemove, onColor, onUnlink, onStartLink, onCancelLink, onPickParent }: {
   a: Of<'attribute'>;
+  /** Подчинённый атрибут связанной пары: сдвиг вправо и звено цепи перед названием. */
+  child: boolean;
+  /** Родитель подчинённого — для строки пары (копирование «родитель подчинённый», поиск по ФИО и дате рождения). */
+  pair?: Of<'attribute'>;
+  mode: RowMode;
   editable: boolean;
+  /** Можно ли этому атрибуту выбирать родителя (у него нет своих подчинённых). */
+  linkable: boolean;
   onEdit: () => void;
   onRemove: () => void;
   onColor: (color: string | undefined) => void;
+  onUnlink: () => void;
+  onStartLink: () => void;
+  onCancelLink: () => void;
+  onPickParent: () => void;
 }) {
   const kind = FIELD_TO_KIND[a.key as LeakField];
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: a.id, disabled: !editable });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: a.id, disabled: !editable || mode !== 'normal' });
+  const target = mode === 'target';
   return (
-    // Сетка 2×2: подпись | значение, под ними оценка источника (она же ручка перетаскивания) | кнопки действий.
+    // Сетка 2×2: подпись | значение, под ними оценка источника и ручка перетаскивания | кнопки действий.
+    // В режиме связывания строка-кандидат — одна большая кнопка с рамкой.
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={clsx('group grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 py-2', isDragging && 'relative z-10 bg-panel')}
+      role={target ? 'button' : undefined}
+      tabIndex={target ? 0 : undefined}
+      onClick={target ? onPickParent : undefined}
+      onKeyDown={target ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPickParent()) : undefined}
+      title={target ? 'Сделать родительским атрибутом' : undefined}
+      className={clsx(
+        'group grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 py-2',
+        isDragging && 'relative z-10 bg-panel',
+        child && 'pl-[1.125rem]',
+        mode !== 'normal' && 'rounded-lg border px-2.5 transition',
+        target && 'cursor-pointer border-mint/50 hover:border-mint hover:bg-mint/10 hover:shadow-glow-sm',
+        mode === 'source' && 'border-line',
+        mode === 'muted' && 'border-transparent opacity-40',
+      )}
     >
-      <span className="pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">{a.label}</span>
+      <span className="flex items-center gap-1 pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">
+        {child && (
+          editable && mode === 'normal' ? (
+            <button type="button" onClick={onUnlink} title="Отвязать от родительского атрибута" className="-ml-[1.125rem] inline-flex cursor-pointer items-center text-mint/70 transition hover:text-danger">
+              <Link2 size={12} />
+            </button>
+          ) : (
+            <Link2 size={12} className="-ml-[1.125rem] text-mint/70" />
+          )
+        )}
+        <span className="truncate">{a.label}</span>
+      </span>
       <div className="whitespace-pre-line break-words font-mono text-sm">{attrDisplayValue(a.key, a.value)}</div>
       <div className="flex items-center gap-1.5">
-        {editable && (
+        {editable && mode === 'normal' && (
           <span ref={setActivatorNodeRef} {...attributes} {...listeners} title="Перетащить" className="inline-flex cursor-grab items-center text-mute transition hover:text-mint active:cursor-grabbing">
             <DragDots />
           </span>
@@ -428,22 +523,55 @@ function AttrRow({ a, editable, onEdit, onRemove, onColor }: {
         <SourceBadge source={a.source} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <ValueActions field={a.key} value={a.value} />
-        <CopyButton value={attrCopyValue(a.key, a.value)} title={`Скопировать: ${a.label}`} />
-        {kind && (
-          <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
-            <FileSearch size={14} />
-          </Link>
-        )}
-        {editable && (
+        {mode === 'source' ? (
+          <span className="flex items-center gap-2 font-mono text-[11px] text-mint">
+            Выберите родительский атрибут
+            <button type="button" onClick={onCancelLink} title="Отменить связывание (Esc)" className="inline-flex cursor-pointer items-center text-mute transition hover:text-danger"><X size={14} /></button>
+          </span>
+        ) : (
           <>
-            <button type="button" onClick={onEdit} title="Править" className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Pencil size={14} /></button>
-            <ConfirmDeleteBtn onConfirm={onRemove} />
+            <ValueActions field={a.key} value={a.value} />
+            <CopyButton value={attrCopyValue(a.key, a.value)} title={`Скопировать: ${a.label}`} />
+            {kind && (
+              <Link to="/search" search={{ kind, q: a.value }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+                <FileSearch size={14} />
+              </Link>
+            )}
+            {editable && mode === 'normal' && (
+              <>
+                {linkable && (
+                  <button type="button" onClick={onStartLink} title={child ? 'Привязать к другому атрибуту' : 'Привязать к родительскому атрибуту'} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Link2 size={14} /></button>
+                )}
+                <button type="button" onClick={onEdit} title="Править" className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Pencil size={14} /></button>
+                <ConfirmDeleteBtn onConfirm={onRemove} />
+              </>
+            )}
           </>
         )}
         {/* Цветная метка — у правой границы бокса, вне ряда действий. */}
-        <ColorMark value={a.color} editable={editable} onChange={onColor} className="ml-auto" />
+        <ColorMark value={a.color} editable={editable && mode === 'normal'} onChange={onColor} className="ml-auto" />
       </div>
+      {pair && <PairActions parent={pair} child={a} />}
+    </div>
+  );
+}
+
+/**
+ * Строка пары под подчинённым атрибутом: копирование объединённого значения «родитель подчинённый» и, для
+ * ФИО + дата рождения, поиск по ним. Иконки стоят на уровне иконок родителя (сдвиг подчинённого компенсируется).
+ */
+function PairActions({ parent, child }: { parent: Of<'attribute'>; child: Of<'attribute'> }) {
+  const combined = `${attrCopyValue(parent.key, parent.value)} ${attrCopyValue(child.key, child.value)}`;
+  const searchable = parent.key === 'names' && child.key === 'bdays';
+  return (
+    <div className="col-start-2 -ml-[1.125rem] flex items-center gap-2 pt-1">
+      <CopyButton value={combined} title={`Скопировать: ${parent.label} + ${child.label}`} />
+      {searchable && (
+        <Link to="/search" search={{ kind: 'name', q: combined }} title="Искать по ФИО и дате рождения" className="text-mute transition hover:text-mint">
+          <FileSearch size={14} />
+        </Link>
+      )}
+      <span className="font-mono text-[10px] uppercase tracking-wider text-mute">{parent.label} + {child.label}</span>
     </div>
   );
 }

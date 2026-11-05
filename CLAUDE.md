@@ -326,6 +326,14 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   keyed by the gateway field from `LEAK_FIELDS` where one exists (so a hand-typed phone and a found one are the same
   type) and by site-only keys otherwise (`birthaddrs`, `regaddrs`, `liveaddrs`, `vins`). `LEAK_FIELDS` keeps the gateway's
   field set and order (search pages, export) — add a manual type there only when the gateway has the field.
+- Attribute rows (`AttributesList` in `DossierPage.tsx`, dnd-kit): drag by the four-dot handle to reorder (positions
+  via `reorderItems`; the importance order applies until the user reorders). Linked pairs: the chain button in the
+  action row enters «link mode» — the other rows turn into bordered buttons, clicking one makes it the parent
+  (`AttributeItem.parentId`, one level, checked by `checkAttrParent` in `routers/dossiers.ts` → `BAD_REQUEST
+  BAD_PARENT`; `removeItem` unlinks the children of a removed parent), the X / Esc cancels. Only the pairs in
+  `ATTR_PAIRS` (`attrTypes.ts`: names + bdays, pasps + infos) can be linked. Children are shown right under the
+  parent, indented, with a chain icon that unlinks, plus a pair line (`PairActions`): copy «parent child» and, for
+  names + bdays, a name search. `color` and `parentId` are UI-only: not exported, not in PDF.
 - Person glyphs (`features/dossiers/glyphs.ts`) are ordinary `PHOTO_ALBUM` media items with an SVG data URL, also set as the
   cover: nothing else has to know about them, but anything that counts or lists photos must skip them with `glyphOf`.
 - User settings: `users.settings` jsonb holds only non-default keys, `@ft/shared` holds the schema and defaults (a new

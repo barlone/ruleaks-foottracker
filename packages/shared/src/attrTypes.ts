@@ -44,6 +44,17 @@ export const ATTR_TYPES: readonly { key: AttrTypeKey; label: string }[] = [
   { key: 'infos', label: 'Прочее' },
 ];
 
+/**
+ * Связанные пары атрибутов (AttributeItem.parentId): какой тип может быть подчинён какому. ФИО + дата рождения —
+ * ещё и готовый запрос поиска «ФИО дд.мм.гггг»; паспорт + «Прочее» — кем и когда выдан.
+ */
+export const ATTR_PAIRS: readonly { parent: AttrTypeKey; child: AttrTypeKey }[] = [
+  { parent: 'names', child: 'bdays' },
+  { parent: 'pasps', child: 'infos' },
+];
+
+export const pairAllowed = (parentKey: string, childKey: string) => ATTR_PAIRS.some((p) => p.parent === parentKey && p.child === childKey);
+
 export const ATTR_TYPE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(ATTR_TYPES.map((t) => [t.key, t.label]));
 
 /** Подпись типа для формы: из списка ручного ввода, иначе из каталога поиска (поле есть в шлюзе, но в список не вошло). */

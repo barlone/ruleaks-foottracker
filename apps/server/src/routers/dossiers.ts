@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   AttributeItem, DossierItem, DossierKind, DossierVisibility, ExportRequest, LinkItem, PdfRequest, MediaItem, NoteItem, PostItem, ShareRole,
   SnapshotItem, DOSSIER_MEDIA_MAX_BYTES, MEDIA_FILE_MAX_BYTES, dossierMediaBytes, findDuplicate, itemIdentity, markDuplicates, mediaBytes, newId,
-  type Dossier,
+  pairAllowed, type Dossier,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { exportDossier } from '../export/build.ts';
@@ -67,6 +67,19 @@ function checkMediaLimits(d: Dossier, added: readonly DossierItem[], replacedId?
   if (total > DOSSIER_MEDIA_MAX_BYTES) {
     throw new TRPCError({ code: 'BAD_REQUEST', message: `MEDIA_QUOTA: занято ${Math.ceil(used / 1024)} КБ из ${DOSSIER_MEDIA_MAX_BYTES / 1024}` });
   }
+}
+
+/**
+ * Связанная пара атрибутов: родитель — атрибут того же досье, не подчинённый сам, типы — из ATTR_PAIRS
+ * (ФИО + дата рождения, паспорт + прочее); у подчинённого нет своих детей.
+ */
+function checkAttrParent(d: Dossier, item: DossierItem, selfId?: string) {
+  if (item.type !== 'attribute' || !item.parentId) return;
+  const parent = d.items.find((i) => i.id === item.parentId);
+  const bad = !parent || parent.type !== 'attribute' || parent.parentId || parent.id === selfId
+    || !pairAllowed(parent.key, item.key)
+    || d.items.some((i) => i.type === 'attribute' && i.parentId === selfId);
+  if (bad) throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_PARENT' });
 }
 
 export const dossiersRouter = router({
@@ -137,6 +150,7 @@ export const dossiersRouter = router({
     const { items } = prepareItems(d, [input.item]);
     if (!items.length) throw new Conflict('DUPLICATE_ITEM');
     checkMediaLimits(d, items);
+    for (const i of items) checkAttrParent(d, i);
     return withRole(ctx, await ctx.deps.dossiers.addItems(input.id, items, ctx.user.id));
   }),
 
@@ -159,11 +173,16 @@ export const dossiersRouter = router({
       throw new Conflict('DUPLICATE_ITEM');
     }
     checkMediaLimits(d, [input.item], input.item.id);
+    checkAttrParent(d, input.item, input.item.id);
     return withRole(ctx, await ctx.deps.dossiers.updateItem(input.id, input.item));
   }),
 
   removeItem: activeProcedure.input(z.object({ id: z.string(), itemId: z.string() })).mutation(async ({ ctx, input }) => {
-    await load(ctx, input.id, 'edit');
+    const d = await load(ctx, input.id, 'edit');
+    // Подчинённые атрибуты удалённого родителя становятся обычными.
+    for (const i of d.items) {
+      if (i.type === 'attribute' && i.parentId === input.itemId) await ctx.deps.dossiers.updateItem(input.id, { ...i, parentId: undefined });
+    }
     return withRole(ctx, await ctx.deps.dossiers.removeItem(input.id, input.itemId));
   }),
 

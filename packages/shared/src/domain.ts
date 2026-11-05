@@ -299,7 +299,7 @@ export const GraphNode = z.object({
   label: z.string().max(256),
   /** Персона/группа ссылается на досье, а не копирует его. */
   dossierId: Id.nullable(),
-  /** Для событий — дата, для мест — координаты и т.п. */
+  /** Для событий — дата, для мест — координаты и т.п.; note — многострочное пояснение (всплывает при наведении). */
   props: z.record(z.string(), z.string()),
   position: z.object({ x: z.number(), y: z.number() }),
 });
@@ -310,7 +310,8 @@ export const GraphEdge = z.object({
   target: Id,
   /** Тип связи: родство, работа, владение, участие, контакт… */
   relation: z.string().max(64),
-  label: z.string().max(256).optional(),
+  /** Пояснение (многострочное); в графе показываются первые три слова, целиком — при наведении. */
+  label: z.string().max(2000).optional(),
   credibility: InfoCredibility.default('6'),
   factIds: z.array(Id).default([]),
 });

@@ -11,7 +11,7 @@ import { FolderOpen, LayoutGrid, Maximize, Plus, Trash2, X } from 'lucide-react'
 import {
   CREDIBILITY_LABELS, NODE_TYPE_LABELS, newId, type Fact, type GraphEdge, type GraphNode, type NodeType,
 } from '@ft/shared';
-import { Button, Field, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
+import { Button, Field, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
 import { MarkdownView } from '../../components/Markdown.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorCode, errorText } from '../../lib/errors.ts';
@@ -28,6 +28,17 @@ type EntityData = { label: string; type: NodeType; dossierId: string | null; pro
 type EntityNode = Node<EntityData, 'entity'>;
 type RelEdge = Edge<{ relation: string; credibility: GraphEdge['credibility']; factIds: string[]; note?: string }>;
 
+/**
+ * Подпись связи в графе: тип и первые три слова пояснения, дальше многоточие. Целиком — во всплывающем окне.
+ * Тип по умолчанию «связь» при пояснении опускается: он ничего не добавляет.
+ */
+function edgeLabel(relation: string, note?: string): string {
+  if (!note?.trim()) return relation;
+  const words = note.trim().split(/\s+/);
+  const short = `${words.slice(0, 3).join(' ')}${words.length > 3 ? '…' : ''}`;
+  return relation.trim().toLowerCase() === 'связь' ? short : `${relation} · ${short}`;
+}
+
 const toFlowNodes = (nodes: GraphNode[], facts: Fact[]): EntityNode[] =>
   nodes.map((n) => ({
     id: n.id,
@@ -41,7 +52,7 @@ const toFlowEdges = (edges: GraphEdge[]): RelEdge[] =>
     id: e.id,
     source: e.source,
     target: e.target,
-    label: e.label ? `${e.relation} · ${e.label}` : e.relation,
+    label: edgeLabel(e.relation, e.label),
     data: { relation: e.relation, credibility: e.credibility, factIds: e.factIds, note: e.label },
     style: edgeStyle(e.credibility),
     markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: edgeStyle(e.credibility).stroke },
@@ -214,7 +225,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
       es.map((e) => {
         if (e.id !== id) return e;
         const data = { ...e.data!, ...patch };
-        return { ...e, data, label: data.note ? `${data.relation} · ${data.note}` : data.relation, style: edgeStyle(data.credibility, true), markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle(data.credibility).stroke } };
+        return { ...e, data, label: edgeLabel(data.relation, data.note), style: edgeStyle(data.credibility, true), markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle(data.credibility).stroke } };
       }),
     );
     touch();
@@ -247,6 +258,15 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
     setTimeout(() => rf.fitView({ duration: 400 }), 50);
   }
 
+  // Всплывающее окно с полным пояснением узла или связи — у курсора, в координатах редактора.
+  const [hint, setHint] = useState<{ text: string; x: number; y: number } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  function showHint(ev: React.MouseEvent, text: string | undefined) {
+    if (!text?.trim()) return setHint(null);
+    const r = rootRef.current?.getBoundingClientRect();
+    setHint({ text, x: ev.clientX - (r?.left ?? 0) + 14, y: ev.clientY - (r?.top ?? 0) + 16 });
+  }
+
   const relatedFacts = useMemo(() => {
     if (selNode) return facts.filter((f) => f.nodeIds.includes(selNode.id));
     if (selEdge) return facts.filter((f) => selEdge.data?.factIds.includes(f.id));
@@ -254,7 +274,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   }, [selNode, selEdge, facts]);
 
   return (
-    <div className="relative h-full">
+    <div ref={rootRef} className="relative h-full">
       <ReactFlow
         nodes={nodes}
         edges={edges.map((e) => (e.id === selected?.id ? { ...e, style: edgeStyle(e.data?.credibility ?? '6', true) } : e))}
@@ -271,6 +291,11 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         onNodeClick={(_, n) => setSelected({ kind: 'node', id: n.id })}
         onEdgeClick={(_, e) => setSelected({ kind: 'edge', id: e.id })}
         onPaneClick={() => setSelected(null)}
+        onNodeMouseEnter={(ev, n) => showHint(ev, n.data.props.note)}
+        onNodeMouseLeave={() => setHint(null)}
+        onEdgeMouseEnter={(ev, e) => showHint(ev, e.data?.note)}
+        onEdgeMouseLeave={() => setHint(null)}
+        onNodeDragStart={() => setHint(null)}
         onNodeDoubleClick={(_, n) => n.data.dossierId && navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId } })}
         nodesDraggable={editable}
         nodesConnectable={editable}
@@ -285,6 +310,15 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         <Controls showInteractive={false} position="bottom-left" />
         <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => NODE_STYLE[(n as EntityNode).data.type].color} maskColor={withAlpha('var(--color-bg)', 70)} />
       </ReactFlow>
+
+      {hint && (
+        <div
+          className="pointer-events-none absolute z-20 max-w-xs whitespace-pre-line rounded-lg border border-line bg-panel/95 px-3 py-2 text-xs leading-relaxed text-text shadow-glow-sm backdrop-blur"
+          style={{ left: hint.x, top: hint.y }}
+        >
+          {hint.text}
+        </div>
+      )}
 
       {/* Панель инструментов */}
       <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-panel/90 p-1.5 backdrop-blur">
@@ -328,6 +362,17 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
               <Field label="Название">
                 <Input value={selNode.data.label} disabled={!editable} onChange={(e) => patchNode(selNode.id, { label: e.target.value })} />
               </Field>
+              <Field label="Пояснение">
+                <Textarea
+                  rows={3}
+                  value={selNode.data.props.note ?? ''}
+                  disabled={!editable}
+                  onChange={(e) => {
+                    const { note: _old, ...rest } = selNode.data.props;
+                    patchNode(selNode.id, { props: e.target.value ? { ...rest, note: e.target.value } : rest });
+                  }}
+                />
+              </Field>
               <Field label="Тип">
                 <Select value={selNode.data.type} disabled={!editable} onChange={(e) => patchNode(selNode.id, { type: e.target.value as NodeType })} className="w-full">
                   {(Object.keys(NODE_TYPE_LABELS) as NodeType[]).map((t) => <option key={t} value={t}>{NODE_TYPE_LABELS[t]}</option>)}
@@ -366,7 +411,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                 <datalist id="relations">{RELATIONS.map((r) => <option key={r} value={r} />)}</datalist>
               </Field>
               <Field label="Пояснение">
-                <Input value={selEdge.data?.note ?? ''} disabled={!editable} onChange={(e) => patchEdge(selEdge.id, { note: e.target.value || undefined })} />
+                <Textarea rows={3} value={selEdge.data?.note ?? ''} disabled={!editable} onChange={(e) => patchEdge(selEdge.id, { note: e.target.value || undefined })} />
               </Field>
               <Field label="Достоверность">
                 <Select value={selEdge.data?.credibility ?? '6'} disabled={!editable} onChange={(e) => patchEdge(selEdge.id, { credibility: e.target.value as GraphEdge['credibility'] })} className="w-full">

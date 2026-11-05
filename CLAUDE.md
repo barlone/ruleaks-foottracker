@@ -334,6 +334,10 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   `ATTR_PAIRS` (`attrTypes.ts`: names + bdays, pasps + infos) can be linked. Children are shown right under the
   parent, indented, with a chain icon that unlinks, plus a pair line (`PairActions`): copy «parent child» and, for
   names + bdays, a name search. `color` and `parentId` are UI-only: not exported, not in PDF.
+- Graph notes (`investigations/GraphEditor.tsx`): a node's «Пояснение» is `props.note` (so it travels with `props`
+  in export), an edge's is `GraphEdge.label` (≤ 2000); both are 3-row textareas in the side panel. The graph shows an
+  edge as «relation · first three words…» (`edgeLabel`), and hovering a node or edge shows the full note in a tooltip
+  positioned inside the editor root (absolute, not fixed — React Flow transforms).
 - Person glyphs (`features/dossiers/glyphs.ts`) are ordinary `PHOTO_ALBUM` media items with an SVG data URL, also set as the
   cover: nothing else has to know about them, but anything that counts or lists photos must skip them with `glyphOf`.
 - User settings: `users.settings` jsonb holds only non-default keys, `@ft/shared` holds the schema and defaults (a new

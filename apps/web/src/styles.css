@@ -54,6 +54,7 @@
   --ft-surface: #050807;
   --ft-hover: #11201b;
   --ft-shadow: rgb(0 0 0 / 0.6);
+  --ft-node-group: #4fd6e8;
   --ft-node-location: #ff8a5c;
   --ft-node-asset: #c792ea;
 }
@@ -80,6 +81,7 @@
   --ft-surface: #ffffff;
   --ft-hover: #e3efea;
   --ft-shadow: rgb(13 23 20 / 0.14);
+  --ft-node-group: #0c7c8c;
   --ft-node-location: #b8481a;
   --ft-node-asset: #7c3fb0;
 }

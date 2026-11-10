@@ -1,9 +1,10 @@
-import { Building2, CalendarClock, FileText, MapPin, Package, User, type LucideIcon } from 'lucide-react';
+import { Building2, CalendarClock, FileText, MapPin, Package, User, Users, type LucideIcon } from 'lucide-react';
 import type { NodeType } from '@ft/shared';
 
 // Цвета — CSS-переменные темы, поэтому прозрачность задаётся через withAlpha, а не дописыванием к hex.
 export const NODE_STYLE: Record<NodeType, { icon: LucideIcon; color: string }> = {
   person: { icon: User, color: 'var(--color-mint)' },
+  group: { icon: Users, color: 'var(--ft-node-group)' },
   organization: { icon: Building2, color: 'var(--color-info)' },
   event: { icon: CalendarClock, color: 'var(--color-warn)' },
   location: { icon: MapPin, color: 'var(--ft-node-location)' },

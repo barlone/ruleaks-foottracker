@@ -382,6 +382,10 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   in export), an edge's is `GraphEdge.label` (≤ 2000); both are 3-row textareas in the side panel. The graph shows an
   edge as «relation · first three words…» (`edgeLabel`), and hovering a node or edge shows the full note in a tooltip
   positioned inside the editor root (absolute, not fixed — React Flow transforms).
+- Graph node types are `NodeType` in `@ft/shared` and the `node_type` DB enum (a new type needs a migration, plus
+  `NODE_STYLE` and the PDF `COLOR`). `NODE_DOSSIER_KIND` says which types link to a dossier and of which kind:
+  `person` → person dossier, `group` («Группа персон») → group dossier; the side panel offers only dossiers of that kind
+  and a node still named by default takes the dossier title.
 - Graph node images: a node linked to a dossier shows the dossier cover, fetched separately by `dossiers.covers`
   (readable ones only; not part of the graph payload, which is re-sent on every save) through `CoversContext`; any
   other node may carry its own `props.image` — a 128×128 WebP data URL made by `lib/squareImage.ts`, non-square

@@ -9,7 +9,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { FolderOpen, LayoutGrid, Maximize, Plus, Trash2, X } from 'lucide-react';
 import {
-  CREDIBILITY_LABELS, NODE_TYPE_LABELS, newId, type Fact, type GraphEdge, type GraphNode, type NodeType,
+  CREDIBILITY_LABELS, NODE_DOSSIER_KIND, NODE_TYPE_LABELS, newId, type Fact, type GraphEdge, type GraphNode, type NodeType,
 } from '@ft/shared';
 import { Button, Field, FilePicker, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
 import { SquareCropDialog } from '../../components/SquareCropDialog.tsx';
@@ -463,12 +463,24 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                   {(Object.keys(NODE_TYPE_LABELS) as NodeType[]).map((t) => <option key={t} value={t}>{NODE_TYPE_LABELS[t]}</option>)}
                 </Select>
               </Field>
-              {(selNode.data.type === 'person' || selNode.data.dossierId) && (
-                <Field label="Досье">
+              {(NODE_DOSSIER_KIND[selNode.data.type] || selNode.data.dossierId) && (
+                <Field label={selNode.data.type === 'group' ? 'Досье группы' : 'Досье'}>
                   {editable ? (
-                    <Select value={selNode.data.dossierId ?? ''} onChange={(e) => patchNode(selNode.id, { dossierId: e.target.value || null })} className="w-full">
+                    <Select
+                      value={selNode.data.dossierId ?? ''}
+                      onChange={(e) => {
+                        const d = dossiers.data?.find((x) => x.id === e.target.value);
+                        // Узел с названием по умолчанию получает название досье.
+                        const rename = d && (!selNode.data.label.trim() || selNode.data.label === NODE_TYPE_LABELS[selNode.data.type]);
+                        patchNode(selNode.id, { dossierId: e.target.value || null, ...(rename ? { label: d.title } : {}) });
+                      }}
+                      className="w-full"
+                    >
                       <option value="">— не привязано —</option>
-                      {dossiers.data?.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
+                      {/* Персоне — досье персон, группе — групповые; уже привязанное остаётся в списке при любом виде. */}
+                      {dossiers.data
+                        ?.filter((d) => d.id === selNode.data.dossierId || !NODE_DOSSIER_KIND[selNode.data.type] || d.kind === NODE_DOSSIER_KIND[selNode.data.type])
+                        .map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
                     </Select>
                   ) : null}
                   {selNode.data.dossierId && (

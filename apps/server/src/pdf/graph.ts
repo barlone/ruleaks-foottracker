@@ -9,7 +9,7 @@ const H = 46;
 
 /** Цвета типов как в редакторе (nodeStyle.ts), чуть темнее для белой бумаги. */
 const COLOR: Record<NodeType, string> = {
-  person: '#14b386', organization: '#3b8fd9', event: '#d99a1e', location: '#e0703c', asset: '#a66ad6', document: '#7d8a87',
+  person: '#14b386', group: '#1a9fb0', organization: '#3b8fd9', event: '#d99a1e', location: '#e0703c', asset: '#a66ad6', document: '#7d8a87',
 };
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

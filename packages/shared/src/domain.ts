@@ -282,10 +282,15 @@ export const DossierSummary = Dossier.pick({
 
 // ---------- Расследования ----------
 
-export const NodeType = z.enum(['person', 'organization', 'event', 'location', 'asset', 'document']);
+/** group — группа персон: привязывается к групповому досье (значение enum в БД добавлено миграцией node-type-group). */
+export const NodeType = z.enum(['person', 'group', 'organization', 'event', 'location', 'asset', 'document']);
+
+/** Типы узлов, которые привязываются к досье, и вид досье для каждого. */
+export const NODE_DOSSIER_KIND: Partial<Record<z.infer<typeof NodeType>, 'person' | 'group'>> = { person: 'person', group: 'group' };
 
 export const NODE_TYPE_LABELS: Record<z.infer<typeof NodeType>, string> = {
   person: 'Персона',
+  group: 'Группа персон',
   organization: 'Организация',
   event: 'Событие',
   location: 'Место',

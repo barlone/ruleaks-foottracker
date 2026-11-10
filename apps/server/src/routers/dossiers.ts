@@ -100,6 +100,15 @@ export const dossiersRouter = router({
     return [...mine, ...shared].map((d) => ({ id: d.id, title: d.title, kind: d.kind, role: d.role }));
   }),
 
+  /**
+   * Обложки досье для узлов графа расследования: только доступные для чтения, одним запросом. Отдельно от
+   * самого расследования — фото бывают по мегабайту, а граф пересылается при каждом сохранении.
+   */
+  covers: authedProcedure.input(z.object({ ids: z.array(z.string()).max(2000) })).query(async ({ ctx, input }) => {
+    const heads = await ctx.deps.dossiers.heads([...new Set(input.ids)]);
+    return Object.fromEntries(heads.filter((h) => h.coverMediaUrl && can(ctx.user.id, 'read', h)).map((h) => [h.id, h.coverMediaUrl!]));
+  }),
+
   get: authedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const d = await load(ctx, input.id, 'read');
     // Участникам нужны только название и обложка — шапки, а не полные досье с элементами.

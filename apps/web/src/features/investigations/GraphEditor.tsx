@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background, BackgroundVariant, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, ReactFlowProvider,
   addEdge, useEdgesState, useNodesState, useReactFlow,
@@ -11,7 +11,9 @@ import { FolderOpen, LayoutGrid, Maximize, Plus, Trash2, X } from 'lucide-react'
 import {
   CREDIBILITY_LABELS, NODE_TYPE_LABELS, newId, type Fact, type GraphEdge, type GraphNode, type NodeType,
 } from '@ft/shared';
-import { Button, Field, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
+import { Button, Field, FilePicker, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
+import { SquareCropDialog } from '../../components/SquareCropDialog.tsx';
+import { centerSquare, isSquare, loadImage } from '../../lib/squareImage.ts';
 import { MarkdownView } from '../../components/Markdown.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorCode, errorText } from '../../lib/errors.ts';
@@ -69,8 +71,45 @@ const fromFlow = (nodes: EntityNode[], edges: RelEdge[]): { nodes: GraphNode[]; 
   })),
 });
 
+/** Поле «Изображение» в свойствах узла: у персоны с досье — его фото, иначе загрузка своей картинки 128×128. */
+function NodeImageField({ image, fromDossier, own, editable, onFile, onClear }: {
+  image: string | undefined;
+  fromDossier: boolean;
+  own: boolean;
+  editable: boolean;
+  onFile: (file: File | undefined) => void;
+  onClear: () => void;
+}) {
+  if (!editable && !image) return null;
+  return (
+    <div className="space-y-1.5">
+      <span className="block font-mono text-[11px] uppercase tracking-widest text-dim">Изображение</span>
+      <div className="flex items-center gap-3">
+        {image && <img src={image} alt="" className="size-16 shrink-0 rounded-lg border border-line object-cover" />}
+        <div className="min-w-0 flex-1 space-y-1.5">
+          {fromDossier ? (
+            <span className="block text-xs text-mute">Фото из привязанного досье</span>
+          ) : editable ? (
+            <>
+              <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
+              {own && <button type="button" onClick={onClear} className="cursor-pointer font-mono text-[11px] text-mute hover:text-danger">убрать изображение</button>}
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Обложки привязанных досье (id → URL): узлы берут их отсюда, а не из данных графа — в граф они не сохраняются. */
+const CoversContext = createContext<Record<string, string>>({});
+
+/** Картинка узла: обложка привязанного досье, иначе своя (props.image). */
+const nodeImage = (data: EntityData, covers: Record<string, string>) => (data.dossierId && covers[data.dossierId]) || data.props.image || undefined;
+
 function EntityNodeView({ data, selected }: NodeProps<EntityNode>) {
   const { icon: Icon, color } = NODE_STYLE[data.type];
+  const image = nodeImage(data, useContext(CoversContext));
   return (
     <div
       className={clsx('min-w-40 max-w-60 rounded-xl border bg-panel/95 px-3 py-2.5 backdrop-blur transition', selected ? 'shadow-glow' : 'shadow-[0_0_18px_var(--ft-shadow)]')}
@@ -78,9 +117,13 @@ function EntityNodeView({ data, selected }: NodeProps<EntityNode>) {
     >
       <Handle type="target" position={Position.Top} className="!size-2.5" />
       <div className="flex items-center gap-2">
-        <span className="grid size-7 shrink-0 place-items-center rounded-lg" style={{ background: withAlpha(color, 12), color }}>
-          <Icon size={15} />
-        </span>
+        {image ? (
+          <img src={image} alt="" draggable={false} className="size-10 shrink-0 rounded-lg border object-cover" style={{ borderColor: withAlpha(color, 33) }} />
+        ) : (
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg" style={{ background: withAlpha(color, 12), color }}>
+            <Icon size={15} />
+          </span>
+        )}
         <div className="min-w-0">
           <div className="truncate text-[13px] font-semibold leading-tight">{data.label}</div>
           <div className="font-mono text-[9px] uppercase tracking-wider" style={{ color: withAlpha(color, 80) }}>
@@ -101,6 +144,7 @@ function EntityNodeView({ data, selected }: NodeProps<EntityNode>) {
 }
 
 const nodeTypes = { entity: EntityNodeView };
+const NO_COVERS: Record<string, string> = {};
 
 export function GraphEditor(props: {
   investigationId: string;
@@ -133,6 +177,25 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const dossiers = trpc.dossiers.options.useQuery(undefined, { enabled: editable });
+  // Обложки привязанных досье — отдельным запросом (ключ — отсортированный список id, чтобы не дёргать на каждое движение).
+  const dossierIds = useMemo(() => [...new Set(nodes.map((n) => n.data.dossierId).filter((x): x is string => !!x))].sort(), [nodes]);
+  const coverKey = dossierIds.join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const coverIds = useMemo(() => dossierIds, [coverKey]);
+  const covers = trpc.dossiers.covers.useQuery({ ids: coverIds }, { enabled: coverIds.length > 0, staleTime: 60_000, retry: false, placeholderData: (p) => p });
+  const coverMap = covers.data ?? NO_COVERS;
+  // Своя картинка узла: неквадратная идёт через редактор обрезки.
+  const [crop, setCrop] = useState<{ nodeId: string; image: HTMLImageElement } | null>(null);
+  async function pickImage(nodeId: string, props: Record<string, string>, file: File | undefined) {
+    if (!file) return;
+    try {
+      const img = await loadImage(file);
+      if (isSquare(img)) patchNode(nodeId, { props: { ...props, image: centerSquare(img) } });
+      else setCrop({ nodeId, image: img });
+    } catch (e) {
+      toast(errorText(e), 'error');
+    }
+  }
 
   const save = trpc.investigations.saveGraph.useMutation({
     onSuccess: (inv) => {
@@ -275,6 +338,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
 
   return (
     <div ref={rootRef} className="relative h-full">
+      <CoversContext.Provider value={coverMap}>
       <ReactFlow
         nodes={nodes}
         edges={edges.map((e) => (e.id === selected?.id ? { ...e, style: edgeStyle(e.data?.credibility ?? '6', true) } : e))}
@@ -310,6 +374,16 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         <Controls showInteractive={false} position="bottom-left" />
         <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => NODE_STYLE[(n as EntityNode).data.type].color} maskColor={withAlpha('var(--color-bg)', 70)} />
       </ReactFlow>
+      </CoversContext.Provider>
+      <SquareCropDialog
+        image={crop?.image ?? null}
+        onCancel={() => setCrop(null)}
+        onDone={(dataUrl) => {
+          const n = crop && nodes.find((x) => x.id === crop.nodeId);
+          if (n) patchNode(n.id, { props: { ...n.data.props, image: dataUrl } });
+          setCrop(null);
+        }}
+      />
 
       {hint && (
         <div
@@ -373,6 +447,17 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                   }}
                 />
               </Field>
+              <NodeImageField
+                image={nodeImage(selNode.data, coverMap)}
+                fromDossier={!!(selNode.data.dossierId && coverMap[selNode.data.dossierId])}
+                own={!!selNode.data.props.image}
+                editable={editable}
+                onFile={(f) => void pickImage(selNode.id, selNode.data.props, f)}
+                onClear={() => {
+                  const { image: _old, ...rest } = selNode.data.props;
+                  patchNode(selNode.id, { props: rest });
+                }}
+              />
               <Field label="Тип">
                 <Select value={selNode.data.type} disabled={!editable} onChange={(e) => patchNode(selNode.id, { type: e.target.value as NodeType })} className="w-full">
                   {(Object.keys(NODE_TYPE_LABELS) as NodeType[]).map((t) => <option key={t} value={t}>{NODE_TYPE_LABELS[t]}</option>)}

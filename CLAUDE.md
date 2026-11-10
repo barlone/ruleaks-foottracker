@@ -343,6 +343,10 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   in export), an edge's is `GraphEdge.label` (≤ 2000); both are 3-row textareas in the side panel. The graph shows an
   edge as «relation · first three words…» (`edgeLabel`), and hovering a node or edge shows the full note in a tooltip
   positioned inside the editor root (absolute, not fixed — React Flow transforms).
+- Graph node images: a node linked to a dossier shows the dossier cover, fetched separately by `dossiers.covers`
+  (readable ones only; not part of the graph payload, which is re-sent on every save) through `CoversContext`; any
+  other node may carry its own `props.image` — a 128×128 WebP data URL made by `lib/squareImage.ts`, non-square
+  files go through `components/SquareCropDialog.tsx` (pan + zoom, Telegram-avatar style). Not drawn in the PDF graph.
 - Person glyphs (`features/dossiers/glyphs.ts`) are ordinary `PHOTO_ALBUM` media items with an SVG data URL, also set as the
   cover: nothing else has to know about them, but anything that counts or lists photos must skip them with `glyphOf`.
 - User settings: `users.settings` jsonb holds only non-default keys, `@ft/shared` holds the schema and defaults (a new

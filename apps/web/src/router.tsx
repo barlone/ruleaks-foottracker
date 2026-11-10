@@ -79,6 +79,8 @@ export const dossiersRoute = createRoute({
 export const dossierRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dossiers/$id',
+  // from — id группы, из которой открыли или создали это досье: справа от названия появляется возврат в неё.
+  validateSearch: z.object({ from: text }),
   component: lazyRouteComponent(() => import('./features/dossiers/DossierPage.tsx'), 'DossierPage'),
 });
 

@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
   ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2, X,
 } from 'lucide-react';
@@ -76,6 +76,7 @@ function groupAttributes(ids: string[], byId: Map<string, Of<'attribute'>>): str
 
 export function DossierPage() {
   const { id } = useParams({ from: '/dossiers/$id' });
+  const { from: fromGroup } = useSearch({ from: '/dossiers/$id' });
   const navigate = useNavigate();
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
@@ -89,6 +90,7 @@ export function DossierPage() {
     },
   };
   const update = trpc.dossiers.update.useMutation(onDone);
+  const createDossier = trpc.dossiers.create.useMutation();
   const addItem = trpc.dossiers.addItem.useMutation(onDone);
   const updateItem = trpc.dossiers.updateItem.useMutation(onDone);
   const removeItem = trpc.dossiers.removeItem.useMutation(onDone);
@@ -160,14 +162,17 @@ export function DossierPage() {
                   <Input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onBlur={() => setEditTitle(null)} className="h-12 text-2xl! font-extrabold" />
                 </form>
               ) : (
-                <h1 className="group flex items-center gap-2 text-3xl font-extrabold tracking-tight">
-                  {d.title}
-                  {editable && (
-                    <button onClick={() => setEditTitle(d.title)} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
-                      <Pencil size={16} />
-                    </button>
-                  )}
-                </h1>
+                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                  <h1 className="group flex items-center gap-2 text-3xl font-extrabold tracking-tight">
+                    {d.title}
+                    {editable && (
+                      <button onClick={() => setEditTitle(d.title)} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+                        <Pencil size={16} />
+                      </button>
+                    )}
+                  </h1>
+                  {fromGroup && fromGroup !== d.id && <BackToGroup id={fromGroup} />}
+                </div>
               )}
               <TagsBar
                 tags={d.tags}
@@ -214,6 +219,12 @@ export function DossierPage() {
                 editable={editable}
                 selfId={d.id}
                 onChange={(memberIds) => update.mutate({ id, version: d.version, patch: { memberIds } })}
+                onCreate={async (title) => {
+                  // Новая персона сразу включается в группу; переход в неё — с возвратом в эту группу.
+                  const created = await createDossier.mutateAsync({ kind: 'person', title, summaryMd: '' });
+                  await update.mutateAsync({ id, version: d.version, patch: { memberIds: [...d.memberIds, created.id] } });
+                  void navigate({ to: '/dossiers/$id', params: { id: created.id }, search: { from: id } });
+                }}
               />
             </Card>
           )}
@@ -731,15 +742,31 @@ function DeleteBtn({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** Возврат в группу, из которой открыли или создали досье (?from=): текст-кнопка справа от названия. */
+function BackToGroup({ id }: { id: string }) {
+  const g = trpc.dossiers.get.useQuery({ id }, { select: (x) => x.title, staleTime: 60_000 });
+  return (
+    <Link to="/dossiers/$id" params={{ id }} className="inline-flex items-center gap-1.5 font-mono text-xs text-mute transition hover:text-mint">
+      <ArrowLeft size={13} /> в группу{g.data ? ` «${g.data}»` : ''}
+    </Link>
+  );
+}
+
 function MembersEditor({
-  memberIds, members, editable, selfId, onChange,
+  memberIds, members, editable, selfId, onChange, onCreate,
 }: {
   memberIds: string[];
   members: { id: string; title: string; coverMediaUrl: string | null }[];
   editable: boolean;
   selfId: string;
   onChange: (ids: string[]) => void;
+  /** Создать досье персоны, включить в группу и перейти в него. */
+  onCreate: (title: string) => Promise<void>;
 }) {
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const options = trpc.dossiers.options.useQuery(undefined, { enabled: editable });
   const candidates = (options.data ?? []).filter((o) => o.kind === 'person' && o.id !== selfId && !memberIds.includes(o.id));
   return (
@@ -749,17 +776,47 @@ function MembersEditor({
         {members.map((m) => (
           <div key={m.id} className="group flex items-center gap-2 rounded-full border border-line py-1 pl-1 pr-3">
             <span className="size-7 overflow-hidden rounded-full bg-bg-soft">{m.coverMediaUrl && <img src={m.coverMediaUrl} alt="" className="size-full object-cover" />}</span>
-            <Link to="/dossiers/$id" params={{ id: m.id }} className="text-sm hover:text-mint">{m.title}</Link>
+            <Link to="/dossiers/$id" params={{ id: m.id }} search={{ from: selfId }} className="text-sm hover:text-mint">{m.title}</Link>
             {editable && <button onClick={() => onChange(memberIds.filter((x) => x !== m.id))} className="cursor-pointer text-mute hover:text-danger">×</button>}
           </div>
         ))}
       </div>
-      {editable && candidates.length > 0 && (
-        <Select value="" onChange={(e) => e.target.value && onChange([...memberIds, e.target.value])}>
-          <option value="">+ добавить участника…</option>
-          {candidates.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-        </Select>
+      {editable && (
+        <div className="flex flex-wrap items-center gap-2">
+          {candidates.length > 0 && (
+            <Select value="" onChange={(e) => e.target.value && onChange([...memberIds, e.target.value])}>
+              <option value="">+ добавить участника…</option>
+              {candidates.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+            </Select>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => { setTitle(''); setError(null); setCreating(true); }} title="Создать досье персоны и включить его в группу">
+            <Plus size={13} /> Новое досье
+          </Button>
+        </div>
       )}
+      <Dialog open={creating} onOpenChange={(v) => !busy && setCreating(v)} title="Новое досье в группе">
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!title.trim() || busy) return;
+            setBusy(true);
+            setError(null);
+            onCreate(title.trim())
+              .then(() => setCreating(false))
+              .catch((err) => setError(errorText(err)))
+              .finally(() => setBusy(false));
+          }}
+        >
+          <Field label="Название" hint="Досье персоны будет создано, включено в эту группу и сразу открыто.">
+            <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Фамилия Имя Отчество" />
+          </Field>
+          {error && <div className="font-mono text-xs text-danger">{error}</div>}
+          <div className="flex justify-end">
+            <Button type="submit" variant="primary" disabled={!title.trim() || busy}>Создать</Button>
+          </div>
+        </form>
+      </Dialog>
     </div>
   );
 }

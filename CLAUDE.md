@@ -334,6 +334,9 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   `ATTR_PAIRS` (`attrTypes.ts`: names + bdays, pasps + infos) can be linked. Children are shown right under the
   parent, indented, with a chain icon that unlinks, plus a pair line (`PairActions`): copy «parent child» and, for
   names + bdays, a name search. `color` and `parentId` are UI-only: not exported, not in PDF.
+- Group members (`MembersEditor`): «Новое досье» creates a person dossier, adds it to the group and opens it with
+  `?from=<group id>`; member links carry the same `from`. `/dossiers/$id?from=` shows «← в группу …» right of the
+  title (`BackToGroup`), like `/search?from=` shows the way back to the dossier.
 - Dossier notes (`NotesList` in `DossierPage.tsx`, dnd-kit): a collapsed note shows a four-dot handle; while one is
   dragged every note is force-collapsed (`forceCollapsed`, own state kept) and the order goes to `reorderItems`.
 - Graph notes (`investigations/GraphEditor.tsx`): a node's «Пояснение» is `props.note` (so it travels with `props`

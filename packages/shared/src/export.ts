@@ -124,6 +124,11 @@ export const ExportInvestigation = z.object({
     label: z.string(),
     /** Досье узла, если вошло в файл. */
     dossier: Key.nullable(),
+    /**
+     * Узел внутреннего графа: ключ узла-контейнера. Необязательное дополнение v1: в файлах без внутренних графов
+     * поля нет; сайт, не знающий о нём, поле отбросит и покажет такие узлы на верхнем уровне.
+     */
+    parent: Key.nullable().optional(),
     props: GraphNode.shape.props,
     position: GraphNode.shape.position,
   })),

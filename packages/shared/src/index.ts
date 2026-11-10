@@ -6,6 +6,7 @@ export * from './google.ts';
 export * from './attrTypes.ts';
 export * from './media.ts';
 export * from './highlight.ts';
+export * from './graph.ts';
 export * from './id.ts';
 export * from './export.ts';
 export * from './tsquery.ts';

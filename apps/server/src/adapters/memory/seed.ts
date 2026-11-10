@@ -134,13 +134,13 @@ export const seedInvestigations: SeedInvestigation[] = [
     version: 5,
     updatedAt: t('2026-10-03T21:00:00Z'),
     nodes: [
-      { id: 'n-petrov', type: 'person', label: 'Петров А. С.', dossierId: 'd-petrov', props: { role: 'Директор' }, position: { x: 0, y: 0 } },
-      { id: 'n-sokolova', type: 'person', label: 'Соколова И. В.', dossierId: 'd-sokolova', props: {}, position: { x: 380, y: -40 } },
-      { id: 'n-sv', type: 'organization', label: 'ООО «Северный ветер»', dossierId: null, props: { inn: '7701234567' }, position: { x: -60, y: 220 } },
-      { id: 'n-ip', type: 'organization', label: 'ИП Соколова', dossierId: null, props: {}, position: { x: 420, y: 200 } },
-      { id: 'n-adm', type: 'organization', label: 'Администрация г. Энска', dossierId: null, props: {}, position: { x: 180, y: 420 } },
-      { id: 'n-tender', type: 'event', label: 'Тендер № 0148-22 (благоустройство)', dossierId: null, props: { date: '2022-05-17' }, position: { x: 460, y: 420 } },
-      { id: 'n-car', type: 'asset', label: 'Авто А123ВС777', dossierId: null, props: {}, position: { x: -300, y: 40 } },
+      { id: 'n-petrov', type: 'person', label: 'Петров А. С.', dossierId: 'd-petrov', props: { role: 'Директор' }, parentId: null, position: { x: 0, y: 0 } },
+      { id: 'n-sokolova', type: 'person', label: 'Соколова И. В.', dossierId: 'd-sokolova', props: {}, parentId: null, position: { x: 380, y: -40 } },
+      { id: 'n-sv', type: 'organization', label: 'ООО «Северный ветер»', dossierId: null, props: { inn: '7701234567' }, parentId: null, position: { x: -60, y: 220 } },
+      { id: 'n-ip', type: 'organization', label: 'ИП Соколова', dossierId: null, props: {}, parentId: null, position: { x: 420, y: 200 } },
+      { id: 'n-adm', type: 'organization', label: 'Администрация г. Энска', dossierId: null, props: {}, parentId: null, position: { x: 180, y: 420 } },
+      { id: 'n-tender', type: 'event', label: 'Тендер № 0148-22 (благоустройство)', dossierId: null, props: { date: '2022-05-17' }, parentId: null, position: { x: 460, y: 420 } },
+      { id: 'n-car', type: 'asset', label: 'Авто А123ВС777', dossierId: null, props: {}, parentId: null, position: { x: -300, y: 40 } },
     ],
     edges: [
       { id: 'e-1', source: 'n-petrov', target: 'n-sv', relation: 'руководит', credibility: '1', factIds: ['f-1'] },
@@ -173,9 +173,9 @@ export const seedInvestigations: SeedInvestigation[] = [
     version: 2,
     updatedAt: t('2026-09-20T12:00:00Z'),
     nodes: [
-      { id: 'p-1', type: 'person', label: 'Волков И. П.', dossierId: null, props: {}, position: { x: 0, y: 0 } },
-      { id: 'p-2', type: 'organization', label: 'Автошкола «Старт»', dossierId: null, props: {}, position: { x: 300, y: 0 } },
-      { id: 'p-3', type: 'organization', label: 'Автошкола «Финиш»', dossierId: null, props: {}, position: { x: 300, y: 160 } },
+      { id: 'p-1', type: 'person', label: 'Волков И. П.', dossierId: null, props: {}, parentId: null, position: { x: 0, y: 0 } },
+      { id: 'p-2', type: 'organization', label: 'Автошкола «Старт»', dossierId: null, props: {}, parentId: null, position: { x: 300, y: 0 } },
+      { id: 'p-3', type: 'organization', label: 'Автошкола «Финиш»', dossierId: null, props: {}, parentId: null, position: { x: 300, y: 160 } },
     ],
     edges: [
       { id: 'pe-1', source: 'p-1', target: 'p-2', relation: 'учредитель', credibility: '1', factIds: [] },

@@ -2,16 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   Background, BackgroundVariant, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, ReactFlowProvider,
   addEdge, useEdgesState, useNodesState, useReactFlow,
-  type Connection, type Edge, type Node, type NodeProps,
+  type Connection, type Edge, type Node, type NodeProps, type OnBeforeDelete,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Link, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { FolderOpen, LayoutGrid, Maximize, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, FolderOpen, ImageOff, ImagePlus, LayoutGrid, LogIn, Maximize, MoreHorizontal, Network, Plus, Trash2, X } from 'lucide-react';
 import {
   CREDIBILITY_LABELS, NODE_DOSSIER_KIND, NODE_TYPE_LABELS, newId, type Fact, type GraphEdge, type GraphNode, type NodeType,
 } from '@ft/shared';
-import { Button, Field, FilePicker, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
+import { Button, Field, Input, Select, Spinner, Tag, Textarea } from '../../components/ui.tsx';
 import { SquareCropDialog } from '../../components/SquareCropDialog.tsx';
 import { centerSquare, isSquare, loadImage } from '../../lib/squareImage.ts';
 import { MarkdownView } from '../../components/Markdown.tsx';
@@ -25,8 +25,12 @@ import { NODE_STYLE, RELATIONS, edgeStyle, withAlpha } from './nodeStyle.ts';
 // Визуальный редактор связей. Состояние графа живёт локально (React Flow),
 // на сервер уходит целиком с задержкой (автосохранение) и версией для
 // оптимистичной блокировки. Персона ссылается на досье — двойной клик открывает его.
+//
+// Два уровня: у узла верхнего уровня может быть внутренний граф (узлы с parentId = его id). В состоянии лежат все
+// узлы и связи сразу; показан один уровень — остальные помечены hidden (React Flow их не рисует и не учитывает в
+// fitView). Сохраняется по-прежнему весь граф целиком.
 
-type EntityData = { label: string; type: NodeType; dossierId: string | null; props: Record<string, string>; factCount: number };
+type EntityData = { label: string; type: NodeType; dossierId: string | null; parentId: string | null; props: Record<string, string>; factCount: number };
 type EntityNode = Node<EntityData, 'entity'>;
 type RelEdge = Edge<{ relation: string; credibility: GraphEdge['credibility']; factIds: string[]; note?: string }>;
 
@@ -41,28 +45,34 @@ function edgeLabel(relation: string, note?: string): string {
   return relation.trim().toLowerCase() === 'связь' ? short : `${relation} · ${short}`;
 }
 
-const toFlowNodes = (nodes: GraphNode[], facts: Fact[]): EntityNode[] =>
+/** level — id узла, внутри которого сейчас находимся; null — верхний уровень. */
+const toFlowNodes = (nodes: GraphNode[], facts: Fact[], level: string | null): EntityNode[] =>
   nodes.map((n) => ({
     id: n.id,
     type: 'entity',
     position: n.position,
-    data: { label: n.label, type: n.type, dossierId: n.dossierId, props: n.props, factCount: facts.filter((f) => f.nodeIds.includes(n.id)).length },
+    hidden: (n.parentId ?? null) !== level,
+    data: { label: n.label, type: n.type, dossierId: n.dossierId, parentId: n.parentId ?? null, props: n.props, factCount: facts.filter((f) => f.nodeIds.includes(n.id)).length },
   }));
 
-const toFlowEdges = (edges: GraphEdge[]): RelEdge[] =>
-  edges.map((e) => ({
+/** Связь лежит на уровне своих узлов. */
+const toFlowEdges = (edges: GraphEdge[], nodes: GraphNode[], level: string | null): RelEdge[] => {
+  const parent = new Map(nodes.map((n) => [n.id, n.parentId ?? null]));
+  return edges.map((e) => ({
     id: e.id,
     source: e.source,
     target: e.target,
+    hidden: parent.get(e.source) !== level,
     label: edgeLabel(e.relation, e.label),
     data: { relation: e.relation, credibility: e.credibility, factIds: e.factIds, note: e.label },
     style: edgeStyle(e.credibility),
     markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: edgeStyle(e.credibility).stroke },
   }));
+};
 
 const fromFlow = (nodes: EntityNode[], edges: RelEdge[]): { nodes: GraphNode[]; edges: GraphEdge[] } => ({
   nodes: nodes.map((n) => ({
-    id: n.id, type: n.data.type, label: n.data.label, dossierId: n.data.dossierId, props: n.data.props,
+    id: n.id, type: n.data.type, label: n.data.label, dossierId: n.data.dossierId, parentId: n.data.parentId, props: n.data.props,
     position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
   })),
   edges: edges.map((e) => ({
@@ -71,52 +81,51 @@ const fromFlow = (nodes: EntityNode[], edges: RelEdge[]): { nodes: GraphNode[]; 
   })),
 });
 
-/** Поле «Изображение» в свойствах узла: у персоны с досье — его фото, иначе загрузка своей картинки 128×128. */
-function NodeImageField({ image, fromDossier, own, editable, onFile, onClear }: {
-  image: string | undefined;
-  fromDossier: boolean;
-  own: boolean;
+/**
+ * Общее для всех узлов: обложки привязанных досье (id → URL; в граф не сохраняются), число узлов во внутреннем
+ * графе, право правки и действия. Значение меняется редко — перетаскивание узлов его не трогает.
+ */
+interface GraphCtx {
+  covers: Record<string, string>;
+  childCount: Record<string, number>;
   editable: boolean;
-  onFile: (file: File | undefined) => void;
-  onClear: () => void;
-}) {
-  if (!editable && !image) return null;
-  return (
-    <div className="space-y-1.5">
-      <span className="block font-mono text-[11px] uppercase tracking-widest text-dim">Изображение</span>
-      <div className="flex items-center gap-3">
-        {image && <img src={image} alt="" className="size-16 shrink-0 rounded-lg border border-line object-cover" />}
-        <div className="min-w-0 flex-1 space-y-1.5">
-          {fromDossier ? (
-            <span className="block text-xs text-mute">Фото из привязанного досье</span>
-          ) : editable ? (
-            <>
-              <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
-              {own && <button type="button" onClick={onClear} className="cursor-pointer font-mono text-[11px] text-mute hover:text-danger">убрать изображение</button>}
-            </>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
+  /** Открыть меню блока под его кнопкой. */
+  openMenu: (id: string, button: HTMLElement) => void;
+  /** Войти во внутренний граф узла. */
+  enter: (id: string) => void;
 }
-
-/** Обложки привязанных досье (id → URL): узлы берут их отсюда, а не из данных графа — в граф они не сохраняются. */
-const CoversContext = createContext<Record<string, string>>({});
+const GraphContext = createContext<GraphCtx>({ covers: {}, childCount: {}, editable: false, openMenu: () => {}, enter: () => {} });
 
 /** Картинка узла: обложка привязанного досье, иначе своя (props.image). */
 const nodeImage = (data: EntityData, covers: Record<string, string>) => (data.dossierId && covers[data.dossierId]) || data.props.image || undefined;
 
-function EntityNodeView({ data, selected }: NodeProps<EntityNode>) {
+function EntityNodeView({ id, data, selected }: NodeProps<EntityNode>) {
   const { icon: Icon, color } = NODE_STYLE[data.type];
-  const image = nodeImage(data, useContext(CoversContext));
+  const g = useContext(GraphContext);
+  const image = nodeImage(data, g.covers);
+  // Внутренний граф есть только у узлов верхнего уровня.
+  const inner = data.parentId === null ? g.childCount[id] ?? 0 : 0;
+  const hasMenu = g.editable || !!data.dossierId || inner > 0;
   return (
     <div
-      className={clsx('min-w-40 max-w-60 rounded-xl border bg-panel/95 px-3 py-2.5 backdrop-blur transition', selected ? 'shadow-glow' : 'shadow-[0_0_18px_var(--ft-shadow)]')}
+      className={clsx('relative min-w-40 max-w-60 rounded-xl border bg-panel/95 px-3 py-2.5 backdrop-blur transition', selected ? 'shadow-glow' : 'shadow-[0_0_18px_var(--ft-shadow)]')}
       style={{ borderColor: selected ? color : withAlpha(color, 33) }}
     >
       <Handle type="target" position={Position.Top} className="!size-2.5" />
-      <div className="flex items-center gap-2">
+      {hasMenu && (
+        <button
+          type="button"
+          data-node-menu-btn
+          title="Действия с блоком"
+          // nodrag/nopan: нажатие не начинает перетаскивание; stopPropagation — не выделяет узел и не открывает досье.
+          onClick={(e) => { e.stopPropagation(); g.openMenu(id, e.currentTarget); }}
+          onDoubleClick={(e) => e.stopPropagation()}
+          className="nodrag nopan absolute right-1 top-1 grid h-4 w-5 cursor-pointer place-items-center rounded text-mute transition hover:bg-mint/10 hover:text-mint"
+        >
+          <MoreHorizontal size={14} />
+        </button>
+      )}
+      <div className={clsx('flex items-center gap-2', hasMenu && 'pr-4')}>
         {image ? (
           <img src={image} alt="" draggable={false} className="size-10 shrink-0 rounded-lg border object-cover" style={{ borderColor: withAlpha(color, 33) }} />
         ) : (
@@ -132,10 +141,21 @@ function EntityNodeView({ data, selected }: NodeProps<EntityNode>) {
           </div>
         </div>
       </div>
-      {(data.dossierId || data.factCount > 0) && (
-        <div className="mt-1.5 flex gap-1.5 font-mono text-[9px] text-mute">
+      {(data.dossierId || data.factCount > 0 || inner > 0) && (
+        <div className="mt-1.5 flex items-center gap-1.5 font-mono text-[9px] text-mute">
           {data.dossierId && <span className="text-mint">● досье</span>}
           {data.factCount > 0 && <span>{data.factCount} факт.</span>}
+          {inner > 0 && (
+            <button
+              type="button"
+              title="Войти внутрь"
+              onClick={(e) => { e.stopPropagation(); g.enter(id); }}
+              onDoubleClick={(e) => e.stopPropagation()}
+              className="nodrag nopan inline-flex cursor-pointer items-center gap-1 text-dim transition hover:text-mint"
+            >
+              <Network size={9} /> внутри: {inner}
+            </button>
+          )}
         </div>
       )}
       <Handle type="source" position={Position.Bottom} className="!size-2.5" />
@@ -143,8 +163,23 @@ function EntityNodeView({ data, selected }: NodeProps<EntityNode>) {
   );
 }
 
+/** Пункт меню блока. */
+function MenuItem({ icon, danger, onClick, children }: { icon: React.ReactNode; danger?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx('flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs transition', danger ? 'text-dim hover:bg-danger/10 hover:text-danger' : 'text-dim hover:bg-mint/10 hover:text-text')}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="min-w-0">{children}</span>
+    </button>
+  );
+}
+
 const nodeTypes = { entity: EntityNodeView };
 const NO_COVERS: Record<string, string> = {};
+const MENU_WIDTH = 224;
 
 export function GraphEditor(props: {
   investigationId: string;
@@ -163,8 +198,11 @@ export function GraphEditor(props: {
 }
 
 function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, facts, editable, focus }: Parameters<typeof GraphEditor>[0]) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<EntityNode>(toFlowNodes(srcNodes, facts));
-  const [edges, setEdges, onEdgesChange] = useEdgesState<RelEdge>(toFlowEdges(srcEdges));
+  const [nodes, setNodes, onNodesChange] = useNodesState<EntityNode>(toFlowNodes(srcNodes, facts, null));
+  const [edges, setEdges, onEdgesChange] = useEdgesState<RelEdge>(toFlowEdges(srcEdges, srcNodes, null));
+  // Уровень: id узла, внутри которого находимся (null — верхний). В ref — для эффектов и отложенных вызовов.
+  const [level, setLevel] = useState<string | null>(null);
+  const levelRef = useRef<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const versionRef = useRef(version);
   // Счётчик правок и номер правки, ушедшей в последнем сохранении: правка во время запроса не теряется —
@@ -218,8 +256,12 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
     if (version !== versionRef.current && (!dirty || conflict.current)) {
       versionRef.current = version;
       conflict.current = false;
-      setNodes(toFlowNodes(srcNodes, facts));
-      setEdges(toFlowEdges(srcEdges));
+      // Узла, внутри которого мы были, в новой версии может не быть — тогда возвращаемся наверх.
+      const lvl = srcNodes.some((n) => n.id === levelRef.current && !n.parentId) ? levelRef.current : null;
+      levelRef.current = lvl;
+      setLevel(lvl);
+      setNodes(toFlowNodes(srcNodes, facts, lvl));
+      setEdges(toFlowEdges(srcEdges, srcNodes, lvl));
       setDirty(false);
     } else {
       setNodes((ns) => ns.map((n) => ({ ...n, data: { ...n.data, factCount: facts.filter((f) => f.nodeIds.includes(n.id)).length } })));
@@ -242,8 +284,14 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, nodes, edges, saving]);
 
+  // Переход к узлу по ссылке (из фактов): сначала на его уровень, потом показать сам узел.
   useEffect(() => {
-    if (focus) setTimeout(() => rf.fitView({ nodes: [{ id: focus }], maxZoom: 1.2, duration: 400 }), 50);
+    if (!focus) return;
+    const target = srcNodes.find((n) => n.id === focus);
+    if (target && (target.parentId ?? null) !== levelRef.current) enter(target.parentId ?? null, false);
+    const t = setTimeout(() => rf.fitView({ nodes: [{ id: focus }], maxZoom: 1.2, duration: 400 }), 150);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, rf]);
 
   const touch = () => {
@@ -267,12 +315,86 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   const selNode = selected?.kind === 'node' ? nodes.find((n) => n.id === selected.id) : undefined;
   const selEdge = selected?.kind === 'edge' ? edges.find((e) => e.id === selected.id) : undefined;
 
+  /** Сменить уровень: показать узлы и связи нужного, остальное скрыть. Правкой графа это не считается. */
+  function enter(next: string | null, fit = true) {
+    const parent = new Map(rf.getNodes().map((n) => [n.id, n.data.parentId]));
+    levelRef.current = next;
+    setLevel(next);
+    setNodes((ns) => ns.map((n) => ({ ...n, hidden: n.data.parentId !== next, selected: false })));
+    setEdges((es) => es.map((e) => ({ ...e, hidden: parent.get(e.source) !== next, selected: false })));
+    setSelected(null);
+    setMenu(null);
+    setHint(null);
+    // Узлы нового уровня сначала должны отрисоваться и получить размеры.
+    if (fit) setTimeout(() => rf.fitView({ padding: 0.25, maxZoom: 1.2, duration: 300 }), 120);
+  }
+  const enterRef = useRef(enter);
+  enterRef.current = enter;
+  const levelNode = level ? nodes.find((n) => n.id === level) : undefined;
+
+  // Число узлов во внутренних графах. Ключ — строка, чтобы значение не менялось при перетаскивании.
+  const childKey = nodes.map((n) => n.data.parentId).filter((x): x is string => !!x).sort().join(',');
+  const childCount = useMemo(() => {
+    const count: Record<string, number> = {};
+    for (const id of childKey ? childKey.split(',') : []) count[id] = (count[id] ?? 0) + 1;
+    return count;
+  }, [childKey]);
+
+  // Меню блока: открывается кнопкой в правом верхнем углу узла, рисуется в корне редактора (внутри узла его
+  // перекрывали бы соседние узлы), закрывается нажатием мимо, Esc и движением графа.
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number; confirm: boolean } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const imageFor = useRef<string | null>(null);
+  const openMenu = useCallback((id: string, button: HTMLElement) => {
+    const r = rootRef.current?.getBoundingClientRect();
+    const b = button.getBoundingClientRect();
+    const x = Math.max(8, Math.min(b.left - (r?.left ?? 0), (r?.width ?? MENU_WIDTH + 16) - MENU_WIDTH - 8));
+    setMenu((m) => (m?.id === id ? null : { id, x, y: b.bottom - (r?.top ?? 0) + 4, confirm: false }));
+  }, []);
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Element;
+      if (!menuRef.current?.contains(t) && !t.closest?.('[data-node-menu-btn]')) setMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menu]);
+  const menuNode = menu ? nodes.find((n) => n.id === menu.id) : undefined;
+  const graphCtx = useMemo<GraphCtx>(
+    () => ({ covers: coverMap, childCount, editable, openMenu, enter: (id) => enterRef.current(id) }),
+    [coverMap, childCount, editable, openMenu],
+  );
+
+  /** Удалить узел вместе с его внутренним графом и всеми их связями. */
+  function removeNode(id: string) {
+    const gone = new Set([id, ...nodes.filter((n) => n.data.parentId === id).map((n) => n.id)]);
+    setNodes((ns) => ns.filter((n) => !gone.has(n.id)));
+    setEdges((es) => es.filter((e) => !gone.has(e.source) && !gone.has(e.target)));
+    if (selected && (gone.has(selected.id) || edges.some((e) => e.id === selected.id && (gone.has(e.source) || gone.has(e.target))))) setSelected(null);
+    setMenu(null);
+    touch();
+  }
+
+  // Клавиша Delete не удаляет узел с внутренним графом: это делается из меню блока, с подтверждением.
+  const onBeforeDelete: OnBeforeDelete<EntityNode, RelEdge> = async ({ nodes: doomed }) => {
+    if (!doomed.some((n) => childCount[n.id])) return true;
+    toast('У объекта есть внутренний граф — удалите его через меню блока', 'error');
+    return false;
+  };
+
   function addNode(type: NodeType) {
     const center = rf.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
     const id = newId();
     setNodes((ns) => [
       ...ns.map((n) => ({ ...n, selected: false })),
-      { id, type: 'entity', position: { x: center.x - 80 + Math.random() * 40, y: center.y - 30 + Math.random() * 40 }, selected: true, data: { label: NODE_TYPE_LABELS[type], type, dossierId: null, props: {}, factCount: 0 } },
+      { id, type: 'entity', position: { x: center.x - 80 + Math.random() * 40, y: center.y - 30 + Math.random() * 40 }, selected: true, data: { label: NODE_TYPE_LABELS[type], type, dossierId: null, parentId: levelRef.current, props: {}, factCount: 0 } },
     ]);
     setSelected({ kind: 'node', id });
     touch();
@@ -294,14 +416,9 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
     touch();
   }
 
-  function removeSelected() {
-    if (!selected) return;
-    if (selected.kind === 'node') {
-      setNodes((ns) => ns.filter((n) => n.id !== selected.id));
-      setEdges((es) => es.filter((e) => e.source !== selected.id && e.target !== selected.id));
-    } else {
-      setEdges((es) => es.filter((e) => e.id !== selected.id));
-    }
+  function removeSelectedEdge() {
+    if (selected?.kind !== 'edge') return;
+    setEdges((es) => es.filter((e) => e.id !== selected.id));
     setSelected(null);
     touch();
   }
@@ -312,8 +429,9 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
     const g = await new ELK().layout({
       id: 'root',
       layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'DOWN', 'elk.spacing.nodeNode': '60', 'elk.layered.spacing.nodeNodeBetweenLayers': '90' },
-      children: nodes.map((n) => ({ id: n.id, width: n.measured?.width ?? 180, height: n.measured?.height ?? 60 })),
-      edges: edges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
+      // Только текущий уровень: скрытые узлы и связи остаются на своих местах.
+      children: nodes.filter((n) => !n.hidden).map((n) => ({ id: n.id, width: n.measured?.width ?? 180, height: n.measured?.height ?? 60 })),
+      edges: edges.filter((e) => !e.hidden).map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
     });
     const pos = new Map(g.children?.map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]));
     setNodes((ns) => ns.map((n) => ({ ...n, position: pos.get(n.id) ?? n.position })));
@@ -338,7 +456,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
 
   return (
     <div ref={rootRef} className="relative h-full">
-      <CoversContext.Provider value={coverMap}>
+      <GraphContext.Provider value={graphCtx}>
       <ReactFlow
         nodes={nodes}
         edges={edges.map((e) => (e.id === selected?.id ? { ...e, style: edgeStyle(e.data?.credibility ?? '6', true) } : e))}
@@ -359,7 +477,9 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         onNodeMouseLeave={() => setHint(null)}
         onEdgeMouseEnter={(ev, e) => showHint(ev, e.data?.note)}
         onEdgeMouseLeave={() => setHint(null)}
-        onNodeDragStart={() => setHint(null)}
+        onNodeDragStart={() => { setHint(null); setMenu(null); }}
+        onMoveStart={() => setMenu(null)}
+        onBeforeDelete={onBeforeDelete}
         onNodeDoubleClick={(_, n) => n.data.dossierId && navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId } })}
         nodesDraggable={editable}
         nodesConnectable={editable}
@@ -374,7 +494,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         <Controls showInteractive={false} position="bottom-left" />
         <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => NODE_STYLE[(n as EntityNode).data.type].color} maskColor={withAlpha('var(--color-bg)', 70)} />
       </ReactFlow>
-      </CoversContext.Provider>
+      </GraphContext.Provider>
       <SquareCropDialog
         image={crop?.image ?? null}
         onCancel={() => setCrop(null)}
@@ -382,6 +502,71 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
           const n = crop && nodes.find((x) => x.id === crop.nodeId);
           if (n) patchNode(n.id, { props: { ...n.data.props, image: dataUrl } });
           setCrop(null);
+        }}
+      />
+
+      {/* Меню блока */}
+      {menu && menuNode && (() => {
+        const n = menuNode;
+        const inner = childCount[n.id] ?? 0;
+        const fromDossier = !!(n.data.dossierId && coverMap[n.data.dossierId]);
+        return (
+          <div ref={menuRef} className="absolute z-30 overflow-hidden rounded-lg border border-line bg-panel py-1 shadow-glow-sm" style={{ left: menu.x, top: menu.y, width: MENU_WIDTH }}>
+            {n.data.parentId === null && (editable || inner > 0) && (
+              <MenuItem icon={<LogIn size={13} />} onClick={() => enter(n.id)}>
+                Войти внутрь{inner > 0 && <span className="ml-1.5 font-mono text-[10px] text-mute">объектов: {inner}</span>}
+              </MenuItem>
+            )}
+            {n.data.dossierId && (
+              <MenuItem icon={<FolderOpen size={13} />} onClick={() => void navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId! } })}>Открыть досье</MenuItem>
+            )}
+            {editable && !fromDossier && (
+              <MenuItem
+                icon={<ImagePlus size={13} />}
+                onClick={() => {
+                  imageFor.current = n.id;
+                  setMenu(null);
+                  fileRef.current?.click();
+                }}
+              >
+                {n.data.props.image ? 'Заменить изображение…' : 'Добавить изображение…'}
+              </MenuItem>
+            )}
+            {editable && !fromDossier && n.data.props.image && (
+              <MenuItem
+                icon={<ImageOff size={13} />}
+                onClick={() => {
+                  const { image: _old, ...rest } = n.data.props;
+                  patchNode(n.id, { props: rest });
+                  setMenu(null);
+                }}
+              >
+                Убрать изображение
+              </MenuItem>
+            )}
+            {editable && fromDossier && <div className="px-3 py-1.5 text-[11px] text-mute">Изображение — фото из привязанного досье</div>}
+            {editable && (
+              <>
+                <div className="my-1 border-t border-line-soft" />
+                {/* Блок с внутренним графом удаляется вторым нажатием. */}
+                <MenuItem icon={<Trash2 size={13} />} danger onClick={() => (inner > 0 && !menu.confirm ? setMenu({ ...menu, confirm: true }) : removeNode(n.id))}>
+                  {menu.confirm ? `Точно удалить? Внутри объектов: ${inner}` : 'Удалить блок'}
+                </MenuItem>
+              </>
+            )}
+          </div>
+        );
+      })()}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          const n = nodes.find((x) => x.id === imageFor.current);
+          if (n) void pickImage(n.id, n.data.props, file);
         }}
       />
 
@@ -396,6 +581,24 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
 
       {/* Панель инструментов */}
       <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-panel/90 p-1.5 backdrop-blur">
+        {/* Внутри объекта: возврат на верхний уровень и название объекта. */}
+        {level && (
+          <>
+            <button onClick={() => enter(null)} title="Вернуться на верхний уровень" className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs text-mint transition hover:bg-mint/10">
+              <ArrowLeft size={13} /> Связи
+            </button>
+            {levelNode && (() => {
+              const { icon: Icon, color } = NODE_STYLE[levelNode.data.type];
+              return (
+                <span className="flex h-8 max-w-56 items-center gap-1.5 px-1 text-xs font-semibold" title={`Внутри: ${levelNode.data.label}`}>
+                  <Icon size={14} style={{ color }} className="shrink-0" />
+                  <span className="truncate">{levelNode.data.label}</span>
+                </span>
+              );
+            })()}
+            <span className="mx-1 h-5 w-px bg-line" />
+          </>
+        )}
         {editable &&
           (Object.keys(NODE_STYLE) as NodeType[]).map((t) => {
             const { icon: Icon, color } = NODE_STYLE[t];
@@ -447,17 +650,6 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                   }}
                 />
               </Field>
-              <NodeImageField
-                image={nodeImage(selNode.data, coverMap)}
-                fromDossier={!!(selNode.data.dossierId && coverMap[selNode.data.dossierId])}
-                own={!!selNode.data.props.image}
-                editable={editable}
-                onFile={(f) => void pickImage(selNode.id, selNode.data.props, f)}
-                onClear={() => {
-                  const { image: _old, ...rest } = selNode.data.props;
-                  patchNode(selNode.id, { props: rest });
-                }}
-              />
               <Field label="Тип">
                 <Select value={selNode.data.type} disabled={!editable} onChange={(e) => patchNode(selNode.id, { type: e.target.value as NodeType })} className="w-full">
                   {(Object.keys(NODE_TYPE_LABELS) as NodeType[]).map((t) => <option key={t} value={t}>{NODE_TYPE_LABELS[t]}</option>)}
@@ -549,9 +741,10 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
             </div>
           )}
 
-          {editable && (
-            <Button variant="danger" size="sm" className="mt-5 w-full" onClick={removeSelected}>
-              <Trash2 size={13} /> Удалить {selNode ? 'узел' : 'связь'}
+          {/* Узел удаляется из меню блока (кнопка в его правом верхнем углу). */}
+          {editable && selEdge && (
+            <Button variant="danger" size="sm" className="mt-5 w-full" onClick={removeSelectedEdge}>
+              <Trash2 size={13} /> Удалить связь
             </Button>
           )}
         </aside>

@@ -3,6 +3,7 @@ import {
   TagColor, TagText, newId, normalizeRelationText,
   type ExportDossier, type ExportDossierItem, type ExportImage, type ExportInvestigation, type Source,
 } from '@ft/shared';
+import { sameLevelEdges } from '@ft/shared';
 import type { z } from 'zod';
 import { Conflict, type Deps, type DossierContent, type InvestigationContent } from '../ports.ts';
 import { ImportError, type ExportPackage } from './read.ts';
@@ -268,21 +269,25 @@ class Converter {
       where,
     );
     if (inv.nodes.length > 2000 || inv.edges.length > 5000) throw new ImportError('BAD_FILE', `${where}: слишком большой граф`);
+    // Внутренний граф: контейнер — только узел верхнего уровня этого же файла; иначе узел поднимается наверх.
+    const topKeys = new Set(inv.nodes.filter((n) => !n.parent).map((n) => n.key));
+    const graphNodes = inv.nodes.map((n) => this.parse(GraphNode, {
+      id: nodes.get(n.key), type: n.type, label: n.label, dossierId: (n.dossier && this.dossierIds.get(n.dossier)) || null,
+      parentId: (n.parent && topKeys.has(n.parent) && nodes.get(n.parent)) || null,
+      props: n.props, position: n.position,
+    }, where));
     return {
       ...head,
       tags: inv.tags,
-      nodes: inv.nodes.map((n) => this.parse(GraphNode, {
-        id: nodes.get(n.key), type: n.type, label: n.label, dossierId: (n.dossier && this.dossierIds.get(n.dossier)) || null,
-        props: n.props, position: n.position,
-      }, where)),
-      edges: inv.edges.flatMap((e) => {
+      nodes: graphNodes,
+      edges: sameLevelEdges(graphNodes, inv.edges.flatMap((e) => {
         const source = nodes.get(e.source);
         const target = nodes.get(e.target);
         if (!source || !target) return [];
         return [this.parse(GraphEdge, {
           id: newId(), source, target, relation: e.relation, label: e.label, credibility: e.credibility, factIds: pick(facts, e.facts),
         }, where)];
-      }),
+      })),
       facts: inv.facts.map((f) => this.parse(Fact, {
         id: facts.get(f.key), textMd: this.markdown(f.textMd), occurredAt: f.occurredAt, sources: f.sources.map((s) => this.source(s)),
         nodeIds: pick(nodes, f.nodes), createdAt: f.createdAt,

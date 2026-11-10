@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ExportRequest, Fact, PdfRequest, GraphEdge, GraphNode, Hypothesis, InvestigationVisibility, ShareRole, newId, type Investigation,
 } from '@ft/shared';
+import { badParentNodes, sameLevelEdges } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { exportInvestigation } from '../export/build.ts';
 import { investigationPdf } from '../pdf/report.ts';
@@ -80,8 +81,9 @@ export const investigationsRouter = router({
         if (!n.dossierId && prev && !readable.has(prev)) return { ...n, dossierId: prev };
         return n;
       });
-      const ids = new Set(nodes.map((n) => n.id));
-      const edges = input.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
+      // Два уровня: контейнер внутреннего графа — существующий узел верхнего уровня. Связи — в пределах уровня.
+      if (badParentNodes(nodes).length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_GRAPH_LEVEL' });
+      const edges = sameLevelEdges(nodes, input.edges);
       return present(ctx, await ctx.deps.investigations.saveGraph(input.id, input.version, nodes, edges));
     }),
 

@@ -3,6 +3,7 @@ import {
   CREDIBILITY_LABELS, attrDisplayValue, NODE_TYPE_LABELS, POST_KIND_LABELS,
   type Dossier, type DossierItem, type Investigation, type PdfRequest, type Source,
 } from '@ft/shared';
+import { nodeTitles } from '@ft/shared';
 import { can } from '../authz.ts';
 import { exportFileName } from '../export/build.ts';
 import type { Deps } from '../ports.ts';
@@ -254,21 +255,30 @@ export class Report {
     out.push({ text: [{ text: 'Расследование', style: 'muted' }, { text: '   ' }, ...this.tags(inv.tags)], margin: [0, 0, 0, 8] });
     if (inv.descriptionMd.trim()) out.push(h2('Описание'), ...this.md(inv.descriptionMd));
 
-    const graph = graphSvg(inv.nodes, inv.edges);
+    // Верхний уровень графа; ниже — внутренние графы его узлов (graphSvg сам отбрасывает связи чужого уровня).
+    const graph = graphSvg(inv.nodes.filter((n) => !n.parentId), inv.edges);
     out.push(h2('Граф связей'), graph ? { svg: graph.svg, fit: [515, 600], alignment: 'center' } : empty('Граф пуст'));
     if (graph) {
       out.push({ text: 'Линия: сплошная — подтверждено или вероятно, пунктир — возможно или сомнительно, точки — маловероятно или нельзя оценить.', style: 'small', margin: [0, 4, 0, 0] });
+    }
+    for (const box of inv.nodes.filter((n) => !n.parentId)) {
+      const inner = graphSvg(inv.nodes.filter((n) => n.parentId === box.id), inv.edges);
+      if (!inner) continue;
+      out.push(
+        { text: clean(`Внутри объекта «${box.label || NODE_TYPE_LABELS[box.type]}»`), bold: true, fontSize: 10, margin: [0, 12, 0, 6] },
+        { svg: inner.svg, fit: [515, 500], alignment: 'center' },
+      );
     }
 
     // Факты — хронологически, с номерами: на номера ссылаются связи и гипотезы.
     const facts = [...inv.facts].sort((a, b) => (a.occurredAt ?? '9999').localeCompare(b.occurredAt ?? '9999') || a.createdAt.localeCompare(b.createdAt));
     const factNo = new Map(facts.map((f, i) => [f.id, i + 1]));
-    const nodeLabel = new Map(inv.nodes.map((n) => [n.id, n.label || NODE_TYPE_LABELS[n.type]]));
+    const nodeLabel = nodeTitles(inv.nodes); // вложенный узел — «Контейнер › Узел"
 
     if (inv.nodes.length) {
       out.push(tableSection('Объекты', [70, '*', 120, 140], ['Тип', 'Название', 'Досье', 'Свойства'], inv.nodes.map((n) => [
         { text: NODE_TYPE_LABELS[n.type], color: '#555' },
-        { text: clean(n.label || '—') },
+        { text: clean(nodeLabel.get(n.id) ?? '—') },
         n.dossierId && this.titles.has(n.dossierId) ? this.link(this.titles.get(n.dossierId)!, n.dossierId) : { text: '' },
         { text: clean(Object.entries(n.props).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('\n')), style: 'small' },
       ])));

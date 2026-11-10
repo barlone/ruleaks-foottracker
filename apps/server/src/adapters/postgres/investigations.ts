@@ -63,8 +63,8 @@ export class PgInvestigations implements InvestigationRepo {
          WHERE s.investigation_id = $1 ORDER BY s.created_at`,
         [id],
       ),
-      this.db.query<{ id: string; type: GraphNode['type']; label: string; dossier_id: string | null; props: Record<string, string>; x: number; y: number }>(
-        `SELECT n.id, n.type, n.label, d.id AS dossier_id, n.props, n.x, n.y
+      this.db.query<{ id: string; type: GraphNode['type']; label: string; dossier_id: string | null; parent_id: string | null; props: Record<string, string>; x: number; y: number }>(
+        `SELECT n.id, n.type, n.label, d.id AS dossier_id, n.parent_id, n.props, n.x, n.y
          FROM graph_nodes n LEFT JOIN dossiers d ON d.id = n.dossier_id AND d.deleted_at IS NULL
          WHERE n.investigation_id = $1 ORDER BY n.created_at, n.id`,
         [id],
@@ -103,7 +103,7 @@ export class PgInvestigations implements InvestigationRepo {
       visibility: inv.visibility,
       shares: shares.rows.map((s) => ({ userId: s.user_id, displayName: s.display_name, role: s.role })),
       nodes: nodes.rows.map((n) => ({
-        id: n.id, type: n.type, label: n.label, dossierId: n.dossier_id, props: n.props ?? {}, position: { x: n.x, y: n.y },
+        id: n.id, type: n.type, label: n.label, dossierId: n.dossier_id, parentId: n.parent_id, props: n.props ?? {}, position: { x: n.x, y: n.y },
       })),
       edges: edges.rows.map((e) => ({
         id: e.id, source: e.source, target: e.target, relation: e.relation, ...(e.label ? { label: e.label } : {}),
@@ -243,8 +243,11 @@ export class PgInvestigations implements InvestigationRepo {
 
 /** Граф целиком: узлы и связи из списка (upsert по id), остальные удаляются; связи ↔ факты — заново. */
 async function writeGraph(c: Tx, id: string, nodes: GraphNode[], edges: GraphEdge[]) {
+  // Контейнер внутреннего графа — только узел верхнего уровня из этого же списка (уровней два).
+  const top = new Set(nodes.filter((n) => !n.parentId).map((n) => n.id));
   const nodeRows = nodes.map((n) => ({
     id: newObjectId(n.id), type: n.type, label: n.label, dossier_id: isUuid(n.dossierId) ? n.dossierId : null,
+    parent_id: n.parentId && top.has(n.parentId) && isUuid(n.parentId) ? n.parentId : null,
     props: n.props ?? {}, x: n.position.x, y: n.position.y,
   }));
   // Узел с тем же id из другого расследования не перезаписывается (WHERE в ON CONFLICT).
@@ -259,6 +262,15 @@ async function writeGraph(c: Tx, id: string, nodes: GraphNode[], edges: GraphEdg
            props = EXCLUDED.props, x = EXCLUDED.x, y = EXCLUDED.y
        WHERE graph_nodes.investigation_id = EXCLUDED.investigation_id`,
     [id, json(nodeRows)],
+  );
+  // Родители — отдельным запросом, когда все узлы уже в таблице, и только из этого расследования. До удаления
+  // лишних: узел, вынесенный из удаляемого контейнера, иначе ушёл бы каскадом вместе с ним.
+  await c.query(
+    `UPDATE graph_nodes n SET parent_id = p.id
+     FROM jsonb_to_recordset($2::jsonb) AS r(id uuid, parent_id uuid)
+     LEFT JOIN graph_nodes p ON p.id = r.parent_id AND p.investigation_id = $1
+     WHERE n.id = r.id AND n.investigation_id = $1 AND n.parent_id IS DISTINCT FROM p.id`,
+    [id, json(nodeRows.map((n) => ({ id: n.id, parent_id: n.parent_id })))],
   );
   await c.query(`DELETE FROM graph_nodes WHERE investigation_id = $1 AND NOT (id = ANY($2::uuid[]))`, [id, nodeRows.map((n) => n.id)]);
 

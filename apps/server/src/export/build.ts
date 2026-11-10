@@ -169,6 +169,7 @@ class Builder {
       tags: inv.tags.map((t) => ({ text: t.text, color: t.color })),
       nodes: inv.nodes.map((n) => ({
         key: nodes.get(n.id)!, type: n.type, label: n.label, dossier: (n.dossierId && this.dossierKeys.get(n.dossierId)) || null,
+        ...(n.parentId && nodes.has(n.parentId) ? { parent: nodes.get(n.parentId)! } : {}),
         props: n.props, position: n.position,
       })),
       edges: inv.edges.flatMap((e, n) => {

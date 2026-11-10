@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { CalendarDays, Pencil, Plus, Trash2 } from 'lucide-react';
-import type { Fact } from '@ft/shared';
+import { nodeTitles, type Fact } from '@ft/shared';
 import { MarkdownEditor, MarkdownView } from '../../components/Markdown.tsx';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { SourceFields } from '../../components/SourceFields.tsx';
@@ -35,6 +35,7 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
     [inv.facts, filter],
   );
   const nodeById = new Map(inv.nodes.map((n) => [n.id, n]));
+  const titles = nodeTitles(inv.nodes); // узел внутреннего графа — «Контейнер › Узел»
 
   return (
     <div className="h-full overflow-auto">
@@ -44,7 +45,7 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
           <button onClick={() => setFilter(null)} className={`cursor-pointer rounded-md px-2 py-1 font-mono text-xs ${!filter ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint'}`}>все</button>
           {inv.nodes.map((n) => (
             <button key={n.id} onClick={() => setFilter(n.id)} className={`cursor-pointer rounded-md px-2 py-1 font-mono text-xs ${filter === n.id ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint'}`}>
-              {n.label}
+              {titles.get(n.id)}
             </button>
           ))}
           {editable && <Button variant="primary" size="sm" className="ml-auto" onClick={() => setEditing('new')}><Plus size={14} /> Факт</Button>}
@@ -76,7 +77,7 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
                       const { icon: Icon, color } = NODE_STYLE[n.type];
                       return (
                         <Link key={nid} to="/investigations/$id" params={{ id: inv.id }} search={{ tab: 'graph', focus: nid }} className="inline-flex items-center gap-1 rounded-md border border-line-soft px-1.5 py-0.5 text-xs text-dim hover:border-line hover:text-text">
-                          <Icon size={11} style={{ color }} /> {n.label}
+                          <Icon size={11} style={{ color }} /> {titles.get(n.id)}
                         </Link>
                       );
                     })}
@@ -116,6 +117,7 @@ function FactForm({
   const [date, setDate] = useState(fact?.occurredAt?.slice(0, 10) ?? '');
   const [nodeIds, setNodeIds] = useState<string[]>(fact?.nodeIds ?? []);
   const [source, setSource] = useState<SourceDraft>(fact?.sources[0] ?? emptySource());
+  const titles = nodeTitles(nodes);
 
   return (
     <form
@@ -144,7 +146,7 @@ function FactForm({
                 onClick={() => setNodeIds(on ? nodeIds.filter((x) => x !== n.id) : [...nodeIds, n.id])}
                 className={`cursor-pointer rounded-md border px-2 py-1 text-xs ${on ? 'border-mint bg-mint/15 text-mint' : 'border-line-soft text-dim hover:border-line'}`}
               >
-                {n.label}
+                {titles.get(n.id)}
               </button>
             );
           })}

@@ -386,6 +386,15 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   `NODE_STYLE` and the PDF `COLOR`). `NODE_DOSSIER_KIND` says which types link to a dossier and of which kind:
   `person` → person dossier, `group` («Группа персон») → group dossier; the side panel offers only dossiers of that kind
   and a node still named by default takes the dossier title.
+- Graph levels (two, never more): a top-level node may hold an inner graph — nodes whose `GraphNode.parentId` is its id
+  (`graph_nodes.parent_id`, cascade delete); an edge lives on the level of its nodes. `@ft/shared` `graph.ts` has the
+  rules (`badParentNodes` → `BAD_REQUEST BAD_GRAPH_LEVEL` in `saveGraph`, `sameLevelEdges`, `nodeTitles` =
+  «Container › Node» for lists outside the graph). `GraphEditor` keeps the whole graph in state and shows one level by
+  marking the rest `hidden` (`enter(id | null)`); the save still sends everything. The export file carries the
+  container as an optional `parent` key (additive to v1); the PDF draws inner graphs as separate schemes.
+- Block menu («⋯» in a node's top-right corner, rendered in the editor root, not inside the node): enter, open dossier,
+  add / remove image, delete. Image and node deletion are only there, not in the side panel. A node with an inner
+  graph is deleted by a second click in the menu; the Delete key refuses it (`onBeforeDelete`).
 - Graph node images: a node linked to a dossier shows the dossier cover, fetched separately by `dossiers.covers`
   (readable ones only; not part of the graph payload, which is re-sent on every save) through `CoversContext`; any
   other node may carry its own `props.image` — a 128×128 WebP data URL made by `lib/squareImage.ts`, non-square

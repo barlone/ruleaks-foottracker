@@ -76,6 +76,9 @@ sets the per-site timeout and concurrency (see «Personal pages search» below).
 `false`) switches «Поиск по Google»; `[google-search]` holds the service account's master token, the request timeout
 and the pause between searches — an empty token means fake demo answers (see «Google search» below).
 
+`[server] secure-cookie` (default `true`) sets the cookies' Secure flag; it no longer depends on `host`, because
+production listens on 127.0.0.1 behind nginx (browsers accept Secure cookies on http://localhost, so dev works).
+
 `[server] trust-proxy` (default `false`) makes Fastify take the client address from `X-Forwarded-For`; production runs behind
 nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone.
 
@@ -148,7 +151,8 @@ obvious from the schema:
   files and tells the user to keep big files on their Google Drive and add a link. Import is not capped.
   Google Drive links (`lib/driveLinks.ts`): a share link pasted into the media URL field is stored as the Drive
   thumbnail URL (`thumbnail?id=…&sz=w1600`; the file must be shared «by link»), and for a video `embedUrl` holds the
-  Drive `…/preview` player, opened in an iframe dialog from the gallery (lightbox is images only). `embedUrl` is not
+  Drive `…/preview` player, opened in an iframe dialog from the gallery (lightbox is images only); the schema accepts
+  only that player (`DRIVE_EMBED_RE`) — any other URL would frame a foreign page in a shared dossier. `embedUrl` is not
   in the export v1 format: an exported video comes back as its thumbnail image.
 - Dossiers/investigations are soft-deleted (`deleted_at`); search history "clear" sets `hidden_at`, and a search that
   was attached to a dossier as a snapshot is `pinned`.
@@ -268,9 +272,12 @@ registrations, a TypeScript port of three OSINT tools (`apps/server/src/pages/`)
   Probes that submit a real registration (password in the body) or password-recovery form are flagged `sideEffect`
   (`isSideEffect`) and skipped unless `[pages-search] side-effect-probes = true`: they can create an account on the
   target's address or notify them. All probe requests go through `pages/outbound.ts` (`outboundFetch`): redirects are
-  followed manually (≤5 hops, 301/302/303 → GET) and every hop must be http(s) to a public address — literal IPs and
-  DNS answers in loopback/private/link-local/CGNAT ranges are refused (`OutboundBlocked` → status `unknown`), so a site
-  cannot bounce the server to localhost, the DB, scanstore or cloud metadata.
+  followed manually (≤5 hops, 301/302/303 → GET) and every hop must be http(s) to a public address (`isPublicIp`:
+  only ipaddr.js `unicast`, IPv4-mapped IPv6 reduced to IPv4 — `[::ffff:7f00:1]` is loopback). Literal IPs are checked
+  per hop; names are checked at connect time by the `lookup` of an undici `Agent`, so a second DNS answer cannot
+  rebind to an internal address — hence `fetch` from the `undici` package, not the global one (its agent does not fit
+  Node's bundled undici). Refusals are `OutboundBlocked` → status `unknown`, so a site cannot bounce the server to
+  localhost, the DB, scanstore or cloud metadata.
 
 `jobs.ts` runs all checks for a query (nickname sites + e-mail sites) through `concurrency` workers; each `SiteResult`
 carries `by: 'username' | 'email'`, shown in the UI as «по нику» / «по e-mail». Jobs live in server memory (one running

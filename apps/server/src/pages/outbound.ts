@@ -1,50 +1,69 @@
-import { lookup } from 'node:dns/promises';
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'node:dns';
 import { isIP } from 'node:net';
+import ipaddr from 'ipaddr.js';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 // Исходящие запросы поиска личных страниц идут к сотням чужих сайтов из манифестов. Любой из них (или подменённая
 // запись в манифесте) может ответить редиректом на внутренний адрес — localhost, базу, scanstore, метаданные облака —
-// и сервер сходил бы туда своими сетевыми правами. Поэтому редиректы здесь следуются вручную: каждый адрес цепочки
-// должен быть http(s) и вести не в частную сеть (проверяется и буквальный IP, и результат DNS-запроса имени).
+// и сервер сходил бы туда своими сетевыми правами. Поэтому:
+// - редиректы следуются вручную, каждый адрес цепочки должен быть http(s), а буквальный IP — публичным;
+// - имя проверяется в момент соединения: свой lookup у агента undici отвергает непубличные адреса. Отдельная
+//   проверка DNS до fetch не годится — fetch разрешает имя ещё раз, и второй ответ может указать внутрь (rebinding).
+// Запросы идут через fetch из пакета undici, а не глобальный: глобальному fetch агент из пакета не подходит
+// (другая копия undici внутри Node).
 
 /** Больше переходов по редиректам не делаем (как лимит fetch). */
 const MAX_REDIRECTS = 5;
 
 export class OutboundBlocked extends Error {}
 
-/** IPv4 внутри частного, loopback, link-local (в т. ч. метаданные облака 169.254.169.254), CGNAT или 0.0.0.0/8. */
-function privateV4(ip: string): boolean {
-  const [a, b] = ip.split('.').map(Number) as [number, number];
-  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+/**
+ * Публичный ли адрес: только диапазон unicast по ipaddr.js. Отсекаются частные сети, loopback, link-local
+ * (в т. ч. метаданные облака 169.254.169.254), CGNAT, 0.0.0.0/8, TEST-NET, 198.18/15, 240/4, broadcast, multicast,
+ * unique-local, NAT64 (64:ff9b::/96), 6to4, Teredo. IPv4-mapped IPv6 (::ffff:7f00:1 = 127.0.0.1) сводится к IPv4.
+ * Неразборчивый адрес — не публичный.
+ */
+export function isPublicIp(ip: string): boolean {
+  if (!ipaddr.isValid(ip)) return false;
+  const a = ipaddr.process(ip);
+  if (a.range() !== 'unicast') return false;
+  // ::/96 — устаревшие IPv4-compatible адреса (::7f00:1); ipaddr.js считает их unicast.
+  if (a.kind() === 'ipv6' && a.toByteArray().slice(0, 12).every((b) => b === 0)) return false;
+  return true;
 }
 
-/** IPv6: loopback, unspecified, unique-local, link-local, а также IPv4-mapped — по правилам IPv4. */
-function privateV6(ip: string): boolean {
-  const s = ip.toLowerCase();
-  if (s === '::1' || s === '::') return true;
-  const mapped = /^(?:0*:)*ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(s);
-  if (mapped) return privateV4(mapped[1]!);
-  return /^f[cd]/.test(s) || /^fe[89ab]/.test(s);
-}
+const BLOCKED = 'адрес во внутренней сети';
 
-export const isPrivateIp = (ip: string): boolean => (isIP(ip) === 4 ? privateV4(ip) : isIP(ip) === 6 ? privateV6(ip) : false);
-
-/** Отказ, если адрес не http(s) или его хост — внутренний (буквально или по DNS). */
-export async function assertPublic(u: URL): Promise<void> {
+/** Отказ, если адрес не http(s) или его хост — localhost / непубличный IP. Имена проверяет lookup агента. */
+export function assertPublic(u: URL): void {
   if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new OutboundBlocked(`схема ${u.protocol} не разрешена`);
   const host = u.hostname.replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.localhost')) throw new OutboundBlocked('адрес во внутренней сети');
-  if (isIP(host)) {
-    if (isPrivateIp(host)) throw new OutboundBlocked('адрес во внутренней сети');
-    return;
-  }
-  // Имя: все адреса, в которые оно разрешается, должны быть публичными (иначе rebinding на внутренний адрес).
-  let addrs: { address: string }[];
-  try {
-    addrs = await lookup(host, { all: true });
-  } catch {
-    return; // не разрешилось — fetch сам ответит ошибкой сети
-  }
-  if (addrs.some((a) => isPrivateIp(a.address))) throw new OutboundBlocked('адрес во внутренней сети');
+  if (host === 'localhost' || host.endsWith('.localhost')) throw new OutboundBlocked(BLOCKED);
+  if (isIP(host) && !isPublicIp(host)) throw new OutboundBlocked(BLOCKED);
+}
+
+type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
+
+/**
+ * lookup для net/tls.connect: разрешает имя и отказывает, если хоть один адрес непубличный. Вызывается при каждом
+ * новом соединении, и соединяется сокет именно с проверенными адресами. С autoSelectFamily Node просит all: true.
+ */
+function safeLookup(hostname: string, options: LookupOptions, callback: LookupCallback): void {
+  dnsLookup(hostname, { ...options, all: true }, (err, addrs) => {
+    if (err) return callback(err, []);
+    if (!addrs.length) return callback(Object.assign(new Error(`адрес ${hostname} не найден`), { code: 'ENOTFOUND' }), []);
+    if (addrs.some((a) => !isPublicIp(a.address))) return callback(new OutboundBlocked(BLOCKED), []);
+    if (options.all) return callback(null, addrs);
+    callback(null, addrs[0]!.address, addrs[0]!.family);
+  });
+}
+
+const agent = new Agent({ connect: { lookup: safeLookup } });
+
+/** undici заворачивает ошибку соединения в TypeError: fetch failed { cause } — достаём наш отказ из цепочки. */
+function blockedCause(e: unknown): OutboundBlocked | null {
+  for (let c = e, i = 0; c instanceof Error && i < 5; c = c.cause, i++) if (c instanceof OutboundBlocked) return c;
+  return null;
 }
 
 export interface OutboundInit {
@@ -65,8 +84,14 @@ export async function outboundFetch(url: string, init: OutboundInit): Promise<Re
   let { method, body } = init;
   const headers = { ...init.headers };
   for (let hop = 0; ; hop++) {
-    await assertPublic(current);
-    const res = await fetch(current, { method, headers, body, redirect: 'manual', signal: init.signal });
+    assertPublic(current);
+    let res: Response;
+    try {
+      // Response из пакета undici совместим с глобальным по поведению; типы у них разные копии.
+      res = (await undiciFetch(current, { method, headers, body, redirect: 'manual', signal: init.signal, dispatcher: agent })) as unknown as Response;
+    } catch (e) {
+      throw blockedCause(e) ?? e;
+    }
     const location = res.headers.get('location');
     if (!init.follow || !location || res.status < 300 || res.status > 399 || hop >= MAX_REDIRECTS) return res;
     await res.body?.cancel().catch(() => undefined);

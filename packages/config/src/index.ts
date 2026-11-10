@@ -67,6 +67,8 @@ const SECTIONS = {
     'session-ttl-days': int(30, 1, 365),
     /** Сервер за обратным прокси (nginx, Cloudflare): адрес клиента брать из X-Forwarded-For. */
     'trust-proxy': bool(false),
+    /** Флаг Secure у cookie. false — только для входа по голому http не с localhost (браузеры принимают Secure на http://localhost). */
+    'secure-cookie': bool(true),
   }),
   telegram: z.object({
     'bot-username': str('ruleaks_bot'),
@@ -172,8 +174,10 @@ export interface AppConfig {
     host: string;
     port: number;
     cookieSecret: string;
-    /** Сервер слушает только локальный интерфейс (dev-login разрешён, cookie без Secure). */
+    /** Сервер слушает только локальный интерфейс (dev-login разрешён). За nginx на том же хосте — тоже true. */
     loopback: boolean;
+    /** Cookie с флагом Secure (по умолчанию да: прод — за HTTPS, а http://localhost браузеры считают безопасным). */
+    secureCookie: boolean;
     devLogin: boolean;
     sessionTtlMs: number;
     /** Доверять X-Forwarded-For (req.ip — адрес клиента, а не прокси). */
@@ -291,6 +295,7 @@ export function loadConfig(): AppConfig {
       loopback,
       devLogin: c.server['dev-login'],
       trustProxy: c.server['trust-proxy'],
+      secureCookie: c.server['secure-cookie'],
     },
     telegram: {
       botUsername: c.telegram['bot-username'].replace(/^@/, ''),
@@ -402,6 +407,9 @@ function validate(cfg: AppConfig) {
   }
   if (mode === 'password-sha256' && !/^[0-9a-f]{64}$/.test(cfg.auth.passwordSha256)) {
     missing.push('[config] password-sha256 (64 hex-символа: npm run password-hash)');
+  }
+  if (!cfg.server.secureCookie) {
+    cfg.warnings.push('[server] secure-cookie = false: cookie сессии уходит и по http — только для отладки в локальной сети');
   }
   if (!cfg.server.loopback) {
     if (!cfg.server.trustProxy) {

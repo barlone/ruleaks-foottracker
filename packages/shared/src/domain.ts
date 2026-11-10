@@ -192,6 +192,12 @@ export const LinkItem = z.object({
   platform: Platform.default('web'),
 });
 
+/**
+ * Встраиваемый плеер Гугл-диска — единственный адрес, который сайт открывает в iframe (web: drivePreviewUrl).
+ * Любой другой адрес в общем досье встроил бы чужую страницу в интерфейс сайта (например, поддельную форму входа).
+ */
+export const DRIVE_EMBED_RE = /^https:\/\/drive\.google\.com\/file\/d\/[\w-]{10,}\/preview$/;
+
 export const MediaItem = z.object({
   ...itemBase,
   type: z.literal('media'),
@@ -202,7 +208,7 @@ export const MediaItem = z.object({
   caption: z.string().max(1000).optional(),
   album: z.string().max(128).optional(),
   /** Видео: адрес встраиваемого плеера для iframe (Гугл-диск …/preview); url тогда — кадр или миниатюра. */
-  embedUrl: z.string().url().max(2048).optional(),
+  embedUrl: z.string().max(2048).regex(DRIVE_EMBED_RE, 'Встроить можно только плеер Гугл-диска').optional(),
 });
 
 export const NoteItem = z.object({

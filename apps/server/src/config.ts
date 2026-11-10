@@ -36,6 +36,9 @@ export const config = {
   /** Секрет подписи ссылок входа от бота ('' — вход по ссылке выключен) и срок их жизни. */
   loginSecret: appConfig.telegram.loginSecret,
   loginLinkTtlMs: appConfig.telegram.loginLinkTtlMs,
-  /** Cookie с флагом Secure, когда сервер доступен не только с localhost (значит, за HTTPS). */
-  secureCookie: !appConfig.server.loopback,
+  /**
+   * Cookie с флагом Secure ([server] secure-cookie, по умолчанию да). Раньше флаг зависел от host, но на проде
+   * сервер слушает 127.0.0.1 за nginx — и cookie сессии уходила без Secure.
+   */
+  secureCookie: appConfig.server.secureCookie,
 };

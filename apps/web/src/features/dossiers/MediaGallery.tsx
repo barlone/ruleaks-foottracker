@@ -8,7 +8,7 @@ import 'yet-another-react-lightbox/styles.css';
 import 'yet-another-react-lightbox/plugins/captions.css';
 import { GripVertical, Pencil, Play, Star, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
-import type { DossierItem } from '@ft/shared';
+import { DRIVE_EMBED_RE, type DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { DELETE_GAP, Dialog } from '../../components/ui.tsx';
 
@@ -76,7 +76,8 @@ export function MediaGallery({
       />
       {/* Видео: встраиваемый плеер (Гугл-диск) — iframe в окне, Lightbox работает только с картинками и прямыми файлами. */}
       <Dialog open={!!video} onOpenChange={(v) => !v && setVideo(null)} title={video?.caption || 'Видео'} wide>
-        {video && <iframe src={video.embedUrl} title={video.caption ?? 'Видео'} allow="autoplay; fullscreen" allowFullScreen className="aspect-video w-full rounded-lg border border-line bg-bg" />}
+        {/* Адрес проверен схемой при сохранении; здесь — ещё раз, на случай старых или пришедших в обход данных. */}
+        {video?.embedUrl && DRIVE_EMBED_RE.test(video.embedUrl) && <iframe src={video.embedUrl} title={video.caption ?? 'Видео'} allow="autoplay; fullscreen" allowFullScreen className="aspect-video w-full rounded-lg border border-line bg-bg" />}
       </Dialog>
     </>
   );

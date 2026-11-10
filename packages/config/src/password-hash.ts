@@ -5,6 +5,7 @@ import { createInterface, type Interface } from 'node:readline';
 import { text } from 'node:stream/consumers';
 import { parse } from 'ini';
 import { findConfig } from './index.ts';
+import { setIniValue } from './ini-edit.ts';
 
 // npm run password-hash — sha256 пароля записывается в config.ini: [config] password-sha256.
 // В терминале пароль вводится без эха (дважды), затем можно сразу включить auth = password-sha256;
@@ -43,36 +44,6 @@ async function readPassword(): Promise<string> {
   const first = await ask('Пароль: ', true);
   if (first && (await ask('Ещё раз: ', true)) !== first) fail('Пароли не совпадают');
   return first;
-}
-
-const isSection = (line: string) => /^\s*\[([^\]]+)\]\s*$/.exec(line)?.[1]!.trim();
-
-/** Ставит key = value в секции section: заменяет строку ключа, иначе дописывает в конец секции (или создаёт секцию). */
-function setIniValue(src: string, section: string, key: string, value: string): string {
-  const eol = src.includes('\r\n') ? '\r\n' : '\n';
-  const lines = src.split(/\r?\n/);
-  const line = `${key} = ${value}`;
-  const start = lines.findIndex((l) => isSection(l) === section);
-  if (start < 0) {
-    // Новая секция — перед первой существующей, чтобы [config] оставалась вверху файла.
-    const first = lines.findIndex((l) => isSection(l) !== undefined);
-    if (first < 0) lines.push(...(lines.at(-1) === '' ? [] : ['']), `[${section}]`, line);
-    else lines.splice(first, 0, `[${section}]`, line, '');
-    return lines.join(eol);
-  }
-  let end = lines.findIndex((l, i) => i > start && isSection(l) !== undefined);
-  if (end < 0) end = lines.length;
-  for (let i = start + 1; i < end; i++) {
-    const l = lines[i]!;
-    if (l.includes('=') && l.slice(0, l.indexOf('=')).trim() === key) {
-      lines[i] = line;
-      return lines.join(eol);
-    }
-  }
-  let at = end;
-  while (at > start + 1 && lines[at - 1]!.trim() === '') at--;
-  lines.splice(at, 0, line);
-  return lines.join(eol);
 }
 
 const password = await readPassword();

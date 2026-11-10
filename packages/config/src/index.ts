@@ -3,6 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import { parse } from 'ini';
 import { z } from 'zod';
 
+export { getIniValue, setIniValue } from './ini-edit.ts';
+
 // Конфигурация RuLeaks.Следопыт: config.ini в корне репозитория (шаблон — config.example.ini).
 // Любой ключ переопределяется переменной окружения FT_<СЕКЦИЯ>_<КЛЮЧ>,
 // например [project-db] password → FT_PROJECT_DB_PASSWORD. Путь к файлу — FT_CONFIG.
@@ -53,6 +55,8 @@ const SECTIONS = {
     'geo-search': bool(false),
     /** Раздел «Поиск личных страниц» (сервер опрашивает сайты из манифеста Sherlock; секция [pages-search]). */
     'pages-search': bool(true),
+    /** Раздел «Поиск по Google» (перенос GHunt; аккаунт Google для запросов — секция [google-search]). */
+    'google-search': bool(false),
   }),
   server: z.object({
     host: str('127.0.0.1'),
@@ -114,6 +118,14 @@ const SECTIONS = {
     /** Выполнять и пробы по e-mail с побочным действием (настоящая регистрация / восстановление пароля на сайте). */
     'side-effect-probes': bool(false),
   }),
+  'google-search': z.object({
+    /** Мастер-токен Android (aas_et/…) служебного аккаунта Google: npm run google-login. Пусто — имитация. */
+    'master-token': str(),
+    /** Сколько ждать ответа одного запроса к Google. */
+    'timeout-sec': int(20, 1, 120),
+    /** Пауза между поисками: Google блокирует аккаунт и адрес сервера за частые запросы. */
+    'min-interval-sec': int(3, 0, 600),
+  }),
 };
 
 const Schema = z.object({
@@ -126,6 +138,7 @@ const Schema = z.object({
   'geo-search': SECTIONS['geo-search'].prefault({}),
   'scanstore-api': SECTIONS['scanstore-api'].prefault({}),
   'pages-search': SECTIONS['pages-search'].prefault({}),
+  'google-search': SECTIONS['google-search'].prefault({}),
 });
 
 type Raw = z.infer<typeof Schema>;
@@ -189,6 +202,8 @@ export interface AppConfig {
   scanstore: { enabled: boolean; url: string; token: string; timeoutMs: number };
   /** Поиск личных страниц по имени пользователя (манифест сайтов Sherlock). */
   pages: { enabled: boolean; timeoutMs: number; concurrency: number; sideEffectProbes: boolean };
+  /** Поиск по Google (перенос GHunt). masterToken пуст — имитация с вымышленными данными. В браузер токен не уходит. */
+  google: { enabled: boolean; masterToken: string; timeoutMs: number; minIntervalMs: number };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
 }
@@ -315,8 +330,18 @@ export function loadConfig(): AppConfig {
       concurrency: c['pages-search'].concurrency,
       sideEffectProbes: c['pages-search']['side-effect-probes'],
     },
+    google: {
+      enabled: c.config['google-search'],
+      masterToken: c['google-search']['master-token'],
+      timeoutMs: c['google-search']['timeout-sec'] * 1000,
+      minIntervalMs: c['google-search']['min-interval-sec'] * 1000,
+    },
     warnings,
   };
+
+  if (cfg.google.enabled && !cfg.google.masterToken) {
+    warnings.push('[google-search] master-token не задан: «Поиск по Google» отвечает вымышленными данными (имитация) — получите токен: npm run google-login');
+  }
 
   if (cfg.geo.enabled && cfg.geo.tiles === 'raster' && !loopback) {
     warnings.push('[geo-search] tiles = raster на сервере не на localhost: публичный сервер тайлов не рассчитан на продакшен и видит, какие районы смотрят пользователи — используйте tiles = pmtiles');
@@ -361,6 +386,9 @@ function validate(cfg: AppConfig) {
   if (cfg.scanstore.enabled) {
     if (!isUrl(cfg.scanstore.url)) missing.push('[scanstore-api] url');
     if (!cfg.scanstore.token) missing.push('[scanstore-api] token');
+  }
+  if (cfg.google.enabled && cfg.google.masterToken && !cfg.google.masterToken.startsWith('aas_et/')) {
+    missing.push('[google-search] master-token (мастер-токен Android начинается с aas_et/ — npm run google-login)');
   }
   const { mode } = cfg.auth;
   if (mode !== 'bot-db') {
@@ -413,5 +441,6 @@ export function describeConfig(cfg: AppConfig): string[] {
     `сканы:     ${cfg.scanstore.enabled ? `${cfg.scanstore.url} (таймаут ${cfg.scanstore.timeoutMs / 1000} с)` : 'выключены'}`,
     `геопоиск:  ${!cfg.geo.enabled ? 'выключен' : cfg.geo.tiles === 'raster' ? `растровые тайлы ${new URL(cfg.geo.rasterUrl.replace(/[{}]/g, '')).host}` : `PMTiles ${cfg.geo.pmtiles}`}`,
     `страницы:  ${cfg.pages.enabled ? `поиск личных страниц (таймаут ${cfg.pages.timeoutMs / 1000} с, параллельно ${cfg.pages.concurrency})` : 'выключен'}`,
+    `Google:    ${!cfg.google.enabled ? 'выключен' : cfg.google.masterToken ? `поиск по Google (таймаут ${cfg.google.timeoutMs / 1000} с, пауза ${cfg.google.minIntervalMs / 1000} с)` : 'имитация — мастер-токен не задан'}`,
   ];
 }

@@ -1,0 +1,25 @@
+Каталог apps/server/src/google — перенос на TypeScript логики проекта GHunt:
+
+  GHunt — https://github.com/mxrch/GHunt
+  Copyright (C) mxrch, Malfrats Industries / HideAndSec
+  Лицензия: GNU Affero General Public License v3.0 (AGPL-3.0)
+  Перенос сделан по ревизии 5ee893929c51c7a8a665b199bbae04ce85a662b4 (2026-04-10).
+
+Что перенесено (файл GHunt → файл здесь):
+
+  ghunt/helpers/auth.py, apis/accounts.py   → session.ts   (мастер-токен Android → токены OAuth и cookie сессии)
+  ghunt/objects/apis.py                     → session.ts   (SAPISIDHASH, ключи API, заголовки)
+  ghunt/knowledge/{keys,sig,people}.py,
+  ghunt/config.py                           → knowledge.ts (ключи API, подписи пакетов, шаблон pb для Карт)
+  ghunt/apis/peoplepa.py, parsers/people.py → people.ts
+  ghunt/helpers/utils.py (flathash)         → flathash.ts
+  ghunt/apis/playgateway.py, protos/*       → playgames.ts, proto.ts (gRPC и Protocol Buffers — вручную)
+  ghunt/apis/playgames.py, helpers/…        → playgames.ts
+  ghunt/helpers/gmaps.py                    → maps.ts
+  ghunt/apis/calendar.py, helpers/…         → calendar.ts
+  ghunt/modules/email.py                    → email.ts
+  ghunt/modules/login.py                    → ../tools/google-login.ts
+
+AGPL-3.0 — «заразная» лицензия с сетевой оговоркой (§13): производная работа, с которой пользователи
+взаимодействуют по сети, должна распространяться на тех же условиях, а её исходный текст — быть доступен
+этим пользователям. Полный текст лицензии: https://www.gnu.org/licenses/agpl-3.0.txt

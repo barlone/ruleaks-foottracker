@@ -204,6 +204,13 @@ body {
 .md code::before, .md code::after { content: none; }
 .md code { font-family: var(--font-mono); background: rgb(var(--ft-mint-rgb) / 0.08); padding: 1px 5px; border-radius: 2px; font-weight: 400; }
 .md a.mention { text-decoration: none; border-bottom: 1px dashed var(--color-mint); }
+/* Выделение цветом (<mark data-color>, @ft/shared highlight.ts): полупрозрачный фон, цвет текста — как вокруг. */
+.md mark { --hl: #ffc85c; background: color-mix(in srgb, var(--hl) 38%, transparent); color: inherit; padding: 0 2px; border-radius: 2px; }
+.md mark[data-color='green'] { --hl: #2ee0ac; }
+.md mark[data-color='blue'] { --hl: #6cb8ff; }
+.md mark[data-color='violet'] { --hl: #a78bfa; }
+.md mark[data-color='red'] { --hl: #ff5c7a; }
+.md mark[data-color='orange'] { --hl: #ff8a4c; }
 
 /* TipTap */
 .tiptap { outline: none; min-height: 120px; }

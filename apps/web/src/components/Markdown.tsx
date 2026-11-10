@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Link } from '@tanstack/react-router';
-import { EditorContent, useEditor, type Editor } from '@tiptap/react';
+import { EditorContent, Mark, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from '@tiptap/markdown';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -10,19 +10,86 @@ import Mention from '@tiptap/extension-mention';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import clsx from 'clsx';
-import { Bold, Code, Heading2, Italic, List, ListChecks, ListOrdered, Quote, Strikethrough } from 'lucide-react';
+import { Bold, Code, Heading2, Highlighter, Italic, List, ListChecks, ListOrdered, Quote, Strikethrough, X } from 'lucide-react';
+import { HIGHLIGHT_COLORS, HIGHLIGHT_DEFAULT, MARK_CLOSE_RE, MARK_OPEN_RE, MARK_SPAN_RE, highlightKey, type HighlightKey } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
 
 // Markdown — формат хранения всех текстов (сводки, заметки, факты, гипотезы).
 // Упоминание досье: набрать «@» — вставляется обычная ссылка [@Название](/dossiers/<id>),
 // поэтому текст остаётся чистым Markdown и читается где угодно.
 
+// Выделение цветом хранится как <mark data-color="yellow">…</mark> (@ft/shared highlight.ts).
+
+interface MdNode { type: string; value?: string; children?: MdNode[]; data?: Record<string, unknown> }
+
+/**
+ * remark-плагин показа: пара html-узлов <mark …> … </mark> внутри одного абзаца становится элементом mark.
+ * Остальной HTML в тексте по-прежнему не исполняется — react-markdown показывает его как текст.
+ */
+function remarkHighlight() {
+  const walk = (node: MdNode) => {
+    if (!node.children) return;
+    const out: MdNode[] = [];
+    const open: MdNode[] = [];
+    const push = (n: MdNode) => (open.length ? open[open.length - 1]!.children! : out).push(n);
+    for (const child of node.children) {
+      walk(child);
+      const tag = child.type === 'html' ? (child.value ?? '').trim() : '';
+      const m = tag ? MARK_OPEN_RE.exec(tag) : null;
+      if (m) {
+        const el: MdNode = { type: 'highlight', children: [], data: { hName: 'mark', hProperties: { dataColor: highlightKey(m[1]) } } };
+        push(el);
+        open.push(el);
+      } else if (tag && open.length && MARK_CLOSE_RE.test(tag)) {
+        open.pop();
+      } else {
+        push(child);
+      }
+    }
+    node.children = out;
+  };
+  return (tree: unknown) => walk(tree as MdNode);
+}
+
+/** Марка TipTap: в редакторе — <mark data-color>, в Markdown — тот же тег; внутри остаётся обычная разметка. */
+const Highlight = Mark.create({
+  name: 'highlight',
+  addAttributes() {
+    return {
+      color: {
+        default: HIGHLIGHT_DEFAULT,
+        parseHTML: (el: HTMLElement) => highlightKey(el.getAttribute('data-color')),
+        renderHTML: (attrs: { color?: string }) => ({ 'data-color': highlightKey(attrs.color) }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'mark' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['mark', HTMLAttributes, 0];
+  },
+  markdownTokenName: 'highlight',
+  markdownTokenizer: {
+    name: 'highlight',
+    level: 'inline',
+    start: (src: string) => src.indexOf('<mark'),
+    tokenize(src, _tokens, lexer) {
+      const m = MARK_SPAN_RE.exec(src);
+      if (!m) return undefined;
+      return { type: 'highlight', raw: m[0], color: highlightKey(m[1]), tokens: lexer.inlineTokens(m[2]!) };
+    },
+  },
+  parseMarkdown: (token, helpers) => helpers.applyMark('highlight', helpers.parseInline(token.tokens ?? []), { color: token.color }),
+  renderMarkdown: (node, h) => `<mark data-color="${highlightKey(node.attrs?.color)}">${h.renderChildren(node)}</mark>`,
+});
+
 export function MarkdownView({ source, className }: { source: string; className?: string }) {
   if (!source.trim()) return <p className={clsx('font-mono text-sm text-mute', className)}>—</p>;
   return (
     <div className={clsx('md', className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkHighlight]}
         components={{
           a: ({ href, children }) =>
             href?.startsWith('/') ? (
@@ -56,6 +123,7 @@ export function MarkdownEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
       Markdown,
+      Highlight,
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder }),
@@ -149,6 +217,65 @@ function toPopup(p: SuggestionProps, index: number) {
   };
 }
 
+/** Кнопка «Выделить цветом»: палитра из шести цветов и сброс; работает по выделенному тексту. */
+function HighlightButton({ editor }: { editor: Editor }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const active = editor.isActive('highlight');
+  const current = active ? (editor.getAttributes('highlight').color as HighlightKey) : null;
+  const pick = (color: HighlightKey | null) => {
+    setOpen(false);
+    const c = editor.chain().focus();
+    if (color) c.setMark('highlight', { color }).run();
+    else c.unsetMark('highlight').run();
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        title="Выделить цветом"
+        // mousedown без потери выделения в редакторе
+        onMouseDown={(e) => { e.preventDefault(); setOpen((v) => !v); }}
+        className={clsx('grid size-7 cursor-pointer place-items-center rounded-md transition', active || open ? 'bg-mint/15 text-mint' : 'text-mute hover:bg-mint/5 hover:text-mint')}
+      >
+        <Highlighter size={15} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 flex items-center gap-1.5 rounded-lg border border-line bg-panel p-2 shadow-glow-sm">
+          {HIGHLIGHT_COLORS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              title={c.label}
+              onMouseDown={(e) => { e.preventDefault(); pick(c.key); }}
+              className={clsx('size-6 cursor-pointer rounded-md border border-text/25 transition hover:scale-110', current === c.key && 'ring-2 ring-mint ring-offset-2 ring-offset-panel')}
+              style={{ background: c.color }}
+            />
+          ))}
+          <button
+            type="button"
+            title="Убрать выделение"
+            onMouseDown={(e) => { e.preventDefault(); pick(null); }}
+            className="grid size-6 cursor-pointer place-items-center rounded-md border border-text/25 text-dim transition hover:text-danger"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Toolbar({ editor }: { editor: Editor }) {
   const btn = (active: boolean, onClick: () => void, icon: ReactNode, title: string) => (
     <button
@@ -168,6 +295,7 @@ function Toolbar({ editor }: { editor: Editor }) {
       {btn(editor.isActive('italic'), () => c().toggleItalic().run(), <Italic size={15} />, 'Курсив')}
       {btn(editor.isActive('strike'), () => c().toggleStrike().run(), <Strikethrough size={15} />, 'Зачёркнутый')}
       {btn(editor.isActive('code'), () => c().toggleCode().run(), <Code size={15} />, 'Код')}
+      <HighlightButton editor={editor} />
       <span className="mx-1 w-px bg-line-soft" />
       {btn(editor.isActive('bulletList'), () => c().toggleBulletList().run(), <List size={15} />, 'Список')}
       {btn(editor.isActive('orderedList'), () => c().toggleOrderedList().run(), <ListOrdered size={15} />, 'Нумерованный')}

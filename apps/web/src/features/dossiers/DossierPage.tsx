@@ -10,6 +10,7 @@ import {
 import {
   ATTR_PAIRS, ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, pairAllowed, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND, fmtBytes,
   POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection,
+  stripHighlight,
 } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
@@ -663,7 +664,7 @@ function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const firstLine = note.markdown.split('\n').map((l) => l.replace(/^[#>*\-\s]+/, '').trim()).find(Boolean) ?? '';
+  const firstLine = stripHighlight(note.markdown).split('\n').map((l) => l.replace(/^[#>*\-\s]+/, '').trim()).find(Boolean) ?? '';
 
   async function save() {
     if (draft === null) return;

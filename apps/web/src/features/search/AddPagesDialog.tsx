@@ -21,12 +21,14 @@ export interface PendingPage {
 }
 
 export function AddPagesDialog({
-  open, onOpenChange, pages, username,
+  open, onOpenChange, pages, username, note,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   pages: PendingPage[];
   username: string;
+  /** Примечание источника вместо стандартного «Поиск личных страниц…» (ссылки из других разделов поиска). */
+  note?: string;
 }) {
   const options = trpc.dossiers.options.useQuery(undefined, { enabled: open });
   const utils = trpc.useUtils();
@@ -67,7 +69,7 @@ export function AddPagesDialog({
           url: p.url,
           title: p.site,
           platform: guessPlatform(p.url),
-          source: { kind: 'url' as const, ref: p.url, note: `Поиск личных страниц${p.by === 'email' ? ' по e-mail' : p.by === 'username' ? ' по нику' : ''}: ${username}`, reliability: 'C' as const, credibility: '3' as const, capturedAt },
+          source: { kind: 'url' as const, ref: p.url, note: note ?? `Поиск личных страниц${p.by === 'email' ? ' по e-mail' : p.by === 'username' ? ' по нику' : ''}: ${username}`, reliability: 'C' as const, credibility: '3' as const, capturedAt },
         })),
       });
       await utils.dossiers.invalidate();

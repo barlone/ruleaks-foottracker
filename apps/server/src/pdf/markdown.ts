@@ -1,8 +1,10 @@
 import { marked, type Token, type Tokens } from 'marked';
 import type { Content } from 'pdfmake/interfaces';
+import { MARK_CLOSE_RE, MARK_OPEN_RE, highlightPaperColor } from '@ft/shared';
 
 // Markdown (формат всех длинных текстов сайта) → блоки pdfmake. Поддерживается то, что умеет редактор и GFM:
-// заголовки, абзацы, списки, цитаты, код, таблицы, линии, жирный/курсив/зачёркнутый, ссылки, изображения.
+// заголовки, абзацы, списки, цитаты, код, таблицы, линии, жирный/курсив/зачёркнутый, ссылки, изображения,
+// выделение цветом (<mark data-color="…">, см. @ft/shared highlight.ts).
 // Ссылка [@Имя](/dossiers/<id>) ведёт к разделу этого досье в отчёте, если он есть, иначе остаётся текстом.
 
 export interface MdContext {
@@ -19,10 +21,26 @@ const LINK = '#1a6fb5';
 /** В Roboto нет эмодзи — вместо них были бы пустые квадраты. */
 export const clean = (s: string) => s.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]/gu, '');
 
-function inline(tokens: Token[] | undefined, ctx: MdContext, style: Omit<Inline, 'text'> = {}): Inline[] {
+function inline(tokens: Token[] | undefined, ctx: MdContext, base: Omit<Inline, 'text'> = {}): Inline[] {
   const out: Inline[] = [];
+  // Выделение цветом: открывающий и закрывающий теги — отдельные html-токены того же уровня.
+  let style = base;
+  const marks: Omit<Inline, 'text'>[] = [];
   for (const t of tokens ?? []) {
     switch (t.type) {
+      case 'html': {
+        const raw = t.raw.trim();
+        const open = MARK_OPEN_RE.exec(raw);
+        if (open) {
+          marks.push(style);
+          style = { ...style, background: highlightPaperColor(open[1]) };
+        } else if (MARK_CLOSE_RE.test(raw) && marks.length) {
+          style = marks.pop()!;
+        } else {
+          out.push({ ...style, text: clean(t.raw) });
+        }
+        break;
+      }
       case 'strong':
         out.push(...inline((t as Tokens.Strong).tokens, ctx, { ...style, bold: true }));
         break;
@@ -56,7 +74,7 @@ function inline(tokens: Token[] | undefined, ctx: MdContext, style: Omit<Inline,
         break;
       }
       default:
-        // escape, html и прочее — как текст.
+        // escape и прочее — как текст.
         out.push({ ...style, text: clean('text' in t && typeof t.text === 'string' ? t.text : t.raw) });
     }
   }

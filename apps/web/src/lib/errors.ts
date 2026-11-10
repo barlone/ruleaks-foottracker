@@ -36,6 +36,8 @@ const MESSAGES: Record<string, string> = {
   SCANSTORE_UNAVAILABLE: 'Хранилище сканов документов недоступно',
   PAGES_DISABLED: 'Поиск личных страниц выключен в настройках сервера',
   PAGES_BUSY: 'Сервер сейчас выполняет слишком много поисков страниц — повторите через минуту',
+  GOOGLE_DISABLED: 'Поиск по Google выключен в настройках сервера',
+  GOOGLE_BUSY: 'Очередь поиска по Google заполнена — повторите через минуту',
 };
 
 export function errorText(e: unknown): string {

@@ -24,6 +24,7 @@ npm run build          # web production build (apps/web/dist)
 npm run typecheck -w @ft/server   # one workspace
 npm run db -- status | up [N] | down [N] | create <name> | manual <file>   # DB migrations against [project-db]
 npm run scans-check -- <uuid>   # scanstore → app chain without browser/nginx (meta, image, sha256, /scans route)
+npm run google-login [-- <token>]   # master token of the service Google account → [google-search] master-token
                        # db-upgrade.cmd = `up` + `status` (like `alembic upgrade head`)
 ```
 
@@ -57,7 +58,8 @@ secret so a password change ends all sessions, and only the solo user's sessions
 `[bot-db]`/`dev-login` are forced off, and `deps.soloUserId` is upserted at startup from `user-tg-id`/`user-name`.
 Bot-only procedures (`start`/`status`/`devConfirm`) answer `NOT_FOUND`; the web reads `auth.mode`.
 `npm run password-hash` asks for the password and writes the hash into `config.ini` line by line (comments kept;
-offers to switch `auth`; creates the file from the template if missing; `-- --print` only prints).
+offers to switch `auth`; creates the file from the template if missing; `-- --print` only prints). The line-by-line
+ini editing is `packages/config/src/ini-edit.ts` (`setIniValue` / `getIniValue`), shared with `npm run google-login`.
 
 Each data source is switched independently by its `enabled` flag:
 
@@ -70,7 +72,9 @@ Each data source is switched independently by its `enabled` flag:
 
 `[config] geo-search` (default `false`) switches the «Поиск по геоданным» section; `[geo-search]` configures its map
 (see «Geo search» below). `[config] pages-search` (default `true`) switches «Поиск личных страниц»; `[pages-search]`
-sets the per-site timeout and concurrency (see «Personal pages search» below).
+sets the per-site timeout and concurrency (see «Personal pages search» below). `[config] google-search` (default
+`false`) switches «Поиск по Google»; `[google-search]` holds the service account's master token, the request timeout
+and the pause between searches — an empty token means fake demo answers (see «Google search» below).
 
 `[server] trust-proxy` (default `false`) makes Fastify take the client address from `X-Forwarded-For`; production runs behind
 nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone.
@@ -277,11 +281,46 @@ only `found` until the job ends. `pages.config` is `null` when `[config] pages-s
 refresh them periodically. Found pages go to a dossier's «Соцсети и ссылки» via `AddPagesDialog` (the `by` reaches the
 source note).
 
+### Google search (GHunt port)
+
+`/search/google` (`features/search/GoogleSearchPage.tsx`, `routers/google.ts`, `apps/server/src/google/`): a TypeScript
+port of [GHunt](https://github.com/mxrch/GHunt) (AGPL-3.0 — see `google/NOTICE.ghunt` for the file map and the upstream
+revision). Search-type buttons above the input are GHunt's modules (`GOOGLE_MODES` in `@ft/shared`, `google.ts`); only
+`email` is ported (`ready: true`), the rest are disabled buttons and the server rejects them. Porting another module =
+flip `ready`, extend the `Start` schema in the router and `GoogleHunter`.
+
+- **One service Google account.** The config holds only its Android master token (`[google-search] master-token`,
+  `aas_et/…`; `npm run google-login` exchanges a one-time `oauth2_4/…` token from `accounts.google.com/EmbeddedSetup`,
+  or takes a master token / GHunt Companion string / GHunt `creds.m`, validates it and writes it to `config.ini`).
+  `session.ts` derives everything else in memory: per-app OAuth tokens (`android.googleapis.com/auth`), web-session
+  cookies (Chrome token → `OAuthLogin` uberauth → `MergeSession`, checked by `CheckCookie`) and the `SAPISIDHASH`
+  header + web-client API key/Origin for the internal web APIs. No OSIDs — the email module does not need them.
+- **`email.ts`** (= `ghunt email`): People lookup (`people.ts`, fatal if it fails) → Play Games (`playgames.ts`: gRPC
+  search by e-mail, then the games HTTP API) → Maps contributor stats (`maps.ts`, no auth) → public calendar
+  (`calendar.ts`). The last three are `GoogleSection`s (`ok` / `error` / `skipped`) so one failing does not sink the
+  report. The report shape is `GoogleEmailReport` in `@ft/shared`.
+- **Hand-rolled pieces**: gRPC over `node:http2` (`net.ts` `grpcUnary` — Node's fetch is HTTP/1.1) and a minimal
+  protobuf writer/reader (`proto.ts`; field numbers reach 3·10⁸, so tags are computed arithmetically, not with 32-bit
+  shifts); a PNG decoder + average hash (`flathash.ts`) replacing PIL/imagehash for «default profile picture» — the
+  photo is requested as a 64 px PNG (`=s64-rp`) and compared with two reference hashes (GHunt's old silhouette and the
+  current `/a/default-user`, which GHunt's hash does not match).
+- **`net.ts`**: `gfetch` never follows redirects (a redirect to `/sorry` = captcha → `BLOCKED`), enforces an allowlist
+  of Google hosts and a per-request timeout. `GoogleError` codes (`AUTH`, `BLOCKED`, `TIMEOUT`, `HTTP`, `PARSE`) map
+  to generic Russian texts for the user (`googleErrorText`); Google's actual answer goes to the server log as
+  `google: …`. The profile-photo URL comes from Google's response, so it is fetched through `pages/outbound.ts`.
+- **`jobs.ts`**: in-memory jobs like the pages search (an hour of «История», polled every second, shown in
+  `ProgressDialog` by step), but strictly sequential with `min-interval-sec` between runs — one account, and Google
+  answers bursts with captchas and account locks. One unfinished job per user, `MAX_PENDING` per process → `GOOGLE_BUSY`.
+- **No master token → `DemoHunter`** (`demo.ts`): fake, address-deterministic reports and a warning banner (addresses
+  with `nobody`/`none` are «not found»). The authenticated chain (session cookies, People, Play Games data, Calendar)
+  has never been run against Google — that needs a real burner account; the demo covers the UI only.
+- Found links (Maps contributor page, calendar .ics) go to a dossier through `AddPagesDialog` (its `note` prop).
+
 ### Progress window
 
 `components/ProgressDialog.tsx` is the modal for long processes (gauge, status line, elapsed time, «Отмена»; Esc =
 cancel, no closing by clicking outside). Two ways to drive it: `<ProgressDialog>` with props when the state comes from a
-polled server job (pages search), or `useProcess()` + `<ProcessDialog>` for browser-side async flows — `run(title, fn)`
+polled server job (pages search, Google search), or `useProcess()` + `<ProcessDialog>` for browser-side async flows — `run(title, fn)`
 shows the window for the promise, `p.set()` moves the bar, `p.signal` goes into tRPC calls via the vanilla client
 (`utils.client.x.mutate(input, { signal })` — `useMutation` has no signal), cancel rejects with `ProcessCancelled`
 (`isCancelled(e)` — don't toast it). Used by `ExportDialog` (file/PDF), `ImportDialog` (upload chunks are determinate,
@@ -358,6 +397,11 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   (`rememberedScope` in `lib/listView.ts`): a link to the bare list (`/dossiers`, sidebar) reopens the remembered scope.
 - Markdown is the storage format for all long text; `@` in the TipTap editor inserts a plain link
   `[@Title](/dossiers/<id>)` rather than a custom node, so stored text stays portable.
+- Colour highlighting in Markdown is inline HTML `<mark data-color="yellow">…</mark>` with a colour *name* from
+  `HIGHLIGHT_COLORS` (`@ft/shared` `highlight.ts`, also the tag regexes). Three places must agree: the TipTap `Highlight`
+  mark in `components/Markdown.tsx` (own marked tokenizer, so Markdown inside the mark survives), the `remarkHighlight`
+  plugin of `MarkdownView` (only this tag pair becomes an element; other HTML stays text — no `rehype-raw`) and
+  `pdf/markdown.ts` (tinted `background`). One-line previews strip the tags with `stripHighlight`.
 - Every dossier item and fact carries a `source` with an Admiralty-code rating (reliability A–F, credibility 1–6),
   rendered by `SourceBadge`.
 - Dialogs center without CSS transforms and editor popups are positioned relative to the editor wrapper: `fixed`

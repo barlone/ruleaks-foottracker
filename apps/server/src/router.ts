@@ -9,6 +9,7 @@ import { importsRouter } from './routers/imports.ts';
 import { geoRouter } from './routers/geo.ts';
 import { scansRouter } from './routers/scans.ts';
 import { pagesRouter } from './routers/pages.ts';
+import { googleRouter } from './routers/google.ts';
 import { settingsRouter } from './routers/settings.ts';
 
 export const appRouter = router({
@@ -23,6 +24,7 @@ export const appRouter = router({
   geo: geoRouter,
   scans: scansRouter,
   pages: pagesRouter,
+  google: googleRouter,
 });
 
 /** Тип импортирует фронтенд (только тип — код сервера в бандл не попадает). */

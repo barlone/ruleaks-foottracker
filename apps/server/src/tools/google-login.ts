@@ -10,7 +10,8 @@ import { GoogleSession, masterAuth, oauthForApp } from '../google/session.ts';
 //
 // Что принимает (аргументом или в ответ на вопрос):
 //   oauth2_4/…   одноразовый токен: войдите служебным аккаунтом на https://accounts.google.com/EmbeddedSetup,
-//                после входа возьмите значение cookie oauth_token (DevTools → Application → Cookies) — живёт минуты;
+//                после входа возьмите значение cookie oauth_token (DevTools → Application → Cookies) — живёт минуты
+//                и срабатывает один раз (повторный запуск с ним даёт BadAuthentication — нужен свежий);
 //   aas_et/…     готовый мастер-токен (например, из GHunt);
 //   base64       строка расширения GHunt Companion (JSON с полем oauth_token);
 //   путь         файл учётных данных GHunt (~/.malfrats/ghunt/creds.m).
@@ -19,14 +20,26 @@ import { GoogleSession, masterAuth, oauthForApp } from '../google/session.ts';
 //
 // Используйте отдельный аккаунт Google, не личный: мастер-токен даёт доступ ко всему аккаунту,
 // а за нетипичные запросы Google может аккаунт заблокировать.
+//
+// Выход — через process.exitCode, а не process.exit(): на Windows выход во время закрытия readline
+// роняет процесс ассертом libuv (UV_HANDLE_CLOSING). Поэтому вся работа в main(), readline закрывается
+// один раз в finally, и цикл событий завершается сам.
 
 const ROOT = resolve(import.meta.dirname, '../../../..');
 const printOnly = process.argv.includes('--print');
 const ctx: Ctx = { timeoutMs: 30_000, signal: new AbortController().signal };
 
+/** Остановить работу с сообщением пользователю и кодом выхода (без process.exit). */
+class ExitError extends Error {
+  readonly code: number;
+  constructor(message: string, code = 1) {
+    super(message);
+    this.code = code;
+  }
+}
+
 function fail(msg: string): never {
-  console.error(msg);
-  process.exit(1);
+  throw new ExitError(msg);
 }
 
 const rl = process.stdin.isTTY ? createInterface({ input: process.stdin, output: process.stdout }) : null;
@@ -47,53 +60,73 @@ function tokenFrom(input: string): string {
   fail('Не распознано: нужен токен oauth2_4/…, мастер-токен aas_et/…, строка GHunt Companion или путь к creds.m');
 }
 
-const arg = process.argv.slice(2).find((a) => !a.startsWith('--'));
-const input = arg ?? (rl ? await rl.question('oauth_token (oauth2_4/…), мастер-токен (aas_et/…), строка Companion или путь к creds.m:\n> ') : fail('Передайте токен аргументом: npm run google-login -- <токен>'));
-let token = tokenFrom(input);
+async function main(): Promise<void> {
+  const arg = process.argv.slice(2).find((a) => !a.startsWith('--'));
+  const input = arg ?? (rl ? await rl.question('oauth_token (oauth2_4/…), мастер-токен (aas_et/…), строка Companion или путь к creds.m:\n> ') : fail('Передайте токен аргументом: npm run google-login -- <токен>'));
+  let token = tokenFrom(input);
+
+  try {
+    if (token.startsWith('oauth2_4/')) {
+      const m = await masterAuth(token, ctx);
+      console.log(`Аккаунт: ${m.name || '—'} <${m.email}>`);
+      token = m.masterToken;
+    }
+    // helpers/auth.py check_master_token, затем создание cookie сессии — то, что сервер сделает при первом поиске.
+    await oauthForApp(token, PLAYGAMES_APP, ctx);
+    await oauthForApp(token, CHROME_APP, ctx);
+    await new GoogleSession(token).sessionCookies(ctx);
+    console.log('Мастер-токен действителен: токены OAuth выдаются, веб-сессия создаётся.');
+  } catch (e) {
+    if (e instanceof ExitError) throw e;
+    // oauth2_4/… одноразовый: при BadAuthentication подскажем взять свежий.
+    const extra = e instanceof GoogleError && /BadAuthentication/.test(e.message) && token.startsWith('oauth2_4/')
+      ? '\nТокен oauth_token одноразовый и живёт минуты — войдите на accounts.google.com/EmbeddedSetup заново и возьмите новый.'
+      : '';
+    fail((e instanceof GoogleError ? `Google: ${e.message}` : `Ошибка: ${(e as Error).message}`) + extra);
+  }
+
+  if (printOnly) {
+    console.log(`master-token = ${token}`);
+    return;
+  }
+
+  const found = findConfig();
+  const file = found ?? join(ROOT, 'config.ini');
+  if (!existsSync(file)) {
+    if (found) fail(`Файл конфигурации не найден: ${file}`); // путь из FT_CONFIG
+    copyFileSync(join(ROOT, 'config.example.ini'), file);
+    console.log(`Создан ${file} из config.example.ini — заполните остальные секции.`);
+  }
+
+  let src = setIniValue(readFileSync(file, 'utf8'), 'google-search', 'master-token', token);
+  let enabled = ['true', 'yes', 'on', '1'].includes((getIniValue(src, 'config', 'google-search') ?? '').toLowerCase());
+  if (!enabled && rl) {
+    const a = (await rl.question('Раздел «Поиск по Google» выключен. Включить ([config] google-search = true)? [Д/н] ')).trim().toLowerCase();
+    if (['', 'д', 'да', 'y', 'yes'].includes(a)) {
+      src = setIniValue(src, 'config', 'google-search', 'true');
+      enabled = true;
+    }
+  }
+  writeFileSync(file, src, 'utf8');
+
+  console.log(`Мастер-токен записан: ${file} → [google-search] master-token`);
+  if (!enabled) console.log('Раздел не включён: [config] google-search = false.');
+  if (process.env.FT_GOOGLE_SEARCH_MASTER_TOKEN !== undefined) console.log('Внимание: FT_GOOGLE_SEARCH_MASTER_TOKEN в окружении перекрывает значение из файла.');
+  console.log('Перезапустите сервер.');
+}
 
 try {
-  if (token.startsWith('oauth2_4/')) {
-    const m = await masterAuth(token, ctx);
-    console.log(`Аккаунт: ${m.name || '—'} <${m.email}>`);
-    token = m.masterToken;
-  }
-  // helpers/auth.py check_master_token, затем создание cookie сессии — то, что сервер сделает при первом поиске.
-  await oauthForApp(token, PLAYGAMES_APP, ctx);
-  await oauthForApp(token, CHROME_APP, ctx);
-  await new GoogleSession(token).sessionCookies(ctx);
-  console.log('Мастер-токен действителен: токены OAuth выдаются, веб-сессия создаётся.');
+  await main();
 } catch (e) {
-  rl?.close();
-  fail(e instanceof GoogleError ? `Google: ${e.message}` : `Ошибка: ${(e as Error).message}`);
-}
-
-if (printOnly) {
-  rl?.close();
-  console.log(`master-token = ${token}`);
-  process.exit(0);
-}
-
-const found = findConfig();
-const file = found ?? join(ROOT, 'config.ini');
-if (!existsSync(file)) {
-  if (found) fail(`Файл конфигурации не найден: ${file}`); // путь из FT_CONFIG
-  copyFileSync(join(ROOT, 'config.example.ini'), file);
-  console.log(`Создан ${file} из config.example.ini — заполните остальные секции.`);
-}
-
-let src = setIniValue(readFileSync(file, 'utf8'), 'google-search', 'master-token', token);
-let enabled = ['true', 'yes', 'on', '1'].includes((getIniValue(src, 'config', 'google-search') ?? '').toLowerCase());
-if (!enabled && rl) {
-  const a = (await rl.question('Раздел «Поиск по Google» выключен. Включить ([config] google-search = true)? [Д/н] ')).trim().toLowerCase();
-  if (['', 'д', 'да', 'y', 'yes'].includes(a)) {
-    src = setIniValue(src, 'config', 'google-search', 'true');
-    enabled = true;
+  if (e instanceof ExitError) {
+    console.error(e.message);
+    process.exitCode = e.code;
+  } else {
+    console.error((e as Error)?.stack ?? String(e));
+    process.exitCode = 1;
   }
+} finally {
+  // Закрываем readline и снимаем удержание stdin, чтобы процесс завершился сам, без process.exit.
+  rl?.close();
+  process.stdin.unref?.();
 }
-rl?.close();
-writeFileSync(file, src, 'utf8');
-
-console.log(`Мастер-токен записан: ${file} → [google-search] master-token`);
-if (!enabled) console.log('Раздел не включён: [config] google-search = false.');
-if (process.env.FT_GOOGLE_SEARCH_MASTER_TOKEN !== undefined) console.log('Внимание: FT_GOOGLE_SEARCH_MASTER_TOKEN в окружении перекрывает значение из файла.');
-console.log('Перезапустите сервер.');

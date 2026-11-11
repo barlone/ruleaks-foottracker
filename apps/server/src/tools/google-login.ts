@@ -65,17 +65,18 @@ async function main(): Promise<void> {
   const input = arg ?? (rl ? await rl.question('oauth_token (oauth2_4/…), мастер-токен (aas_et/…), строка Companion или путь к creds.m:\n> ') : fail('Передайте токен аргументом: npm run google-login -- <токен>'));
   let token = tokenFrom(input);
 
+  // Основная проверка — мастер-токен: обмен oauth_token (если дали его) и выдача токенов OAuth приложений.
+  // Это и есть то, что обязательно для сохранения: без действующего мастер-токена смысла нет.
   try {
     if (token.startsWith('oauth2_4/')) {
       const m = await masterAuth(token, ctx);
       console.log(`Аккаунт: ${m.name || '—'} <${m.email}>`);
       token = m.masterToken;
     }
-    // helpers/auth.py check_master_token, затем создание cookie сессии — то, что сервер сделает при первом поиске.
+    // helpers/auth.py check_master_token.
     await oauthForApp(token, PLAYGAMES_APP, ctx);
     await oauthForApp(token, CHROME_APP, ctx);
-    await new GoogleSession(token).sessionCookies(ctx);
-    console.log('Мастер-токен действителен: токены OAuth выдаются, веб-сессия создаётся.');
+    console.log('Мастер-токен действителен: токены OAuth выдаются.');
   } catch (e) {
     if (e instanceof ExitError) throw e;
     // oauth2_4/… одноразовый: при BadAuthentication подскажем взять свежий.
@@ -83,6 +84,19 @@ async function main(): Promise<void> {
       ? '\nТокен oauth_token одноразовый и живёт минуты — войдите на accounts.google.com/EmbeddedSetup заново и возьмите новый.'
       : '';
     fail((e instanceof GoogleError ? `Google: ${e.message}` : `Ошибка: ${(e as Error).message}`) + extra);
+  }
+
+  // Вторичная проверка — веб-сессия (cookie для People API и Календаря). Её сбой не мешает сохранить токен:
+  // Play Игры и Карты работают и без неё, а веб-сессию сервер создаёт сам при первом поиске. Печатаем
+  // диагностику (имена cookie, ответ CheckCookie) — по ней видно, на чём именно споткнулась сессия.
+  try {
+    await new GoogleSession(token, (m) => console.log(m), true).sessionCookies(ctx);
+    console.log('Веб-сессия создаётся — доступны все разделы (профиль, Play Игры, Карты, Календарь).');
+  } catch (e) {
+    const msg = e instanceof GoogleError ? e.message : (e as Error).message;
+    console.warn(`\nВнимание: веб-сессия не создалась (${msg}).`);
+    console.warn('Поиск по профилю (People API) и Календарь пока работать не будут; Play Игры и Карты — будут.');
+    console.warn('Мастер-токен действителен и будет сохранён — разберёмся с веб-сессией отдельно.\n');
   }
 
   if (printOnly) {

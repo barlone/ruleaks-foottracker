@@ -74,13 +74,16 @@ export function sapisidHash(sapisid: string, origin: string, now = Date.now()): 
 export class GoogleSession {
   private readonly masterToken: string;
   private readonly log: (msg: string) => void;
+  /** Подробный лог (имена cookie, ответ CheckCookie) — для диагностики входа (npm run google-login). */
+  private readonly debug: boolean;
   private readonly tokens = new Map<string, { token: string; expiry: number }>();
   private cookies: Record<string, string> | null = null;
   private cookiesCheckedAt = 0;
 
-  constructor(masterToken: string, log: (msg: string) => void = () => undefined) {
+  constructor(masterToken: string, log: (msg: string) => void = () => undefined, debug = false) {
     this.masterToken = masterToken;
     this.log = log;
+    this.debug = debug;
   }
 
   /** objects/apis.py _check_and_gen_authorization_token: токен приложения из кэша, пока не истёк. */
@@ -117,6 +120,7 @@ export class GoogleSession {
     })}`, { headers: WEB_HEADERS }, ctx);
     const cookies = setCookies(merge);
     await merge.body?.cancel().catch(() => undefined);
+    if (this.debug) this.log(`google: MergeSession → HTTP ${merge.status}, cookie: ${Object.keys(cookies).join(', ') || 'нет'}`);
     if (!cookies.SAPISID) throw new GoogleError('AUTH', `MergeSession не выдал cookie сессии (HTTP ${merge.status}, cookie: ${Object.keys(cookies).join(', ') || 'нет'})`);
     this.log(`google: создана веб-сессия служебного аккаунта (cookie: ${Object.keys(cookies).length})`);
     return cookies;
@@ -129,7 +133,10 @@ export class GoogleSession {
     }, ctx);
     await res.body?.cancel().catch(() => undefined);
     const location = res.headers.get('location') ?? '';
-    return res.status === 302 && !location.startsWith('https://support.google.com') && !location.startsWith('https://accounts.google.com/CookieMismatch');
+    const ok = res.status === 302 && !location.startsWith('https://support.google.com') && !location.startsWith('https://accounts.google.com/CookieMismatch');
+    // Адрес в Location без query (там может быть continue-токен) — для диагностики.
+    if (this.debug) this.log(`google: CheckCookie → HTTP ${res.status}${location ? `, Location ${location.split('?')[0]}` : ''} → ${ok ? 'принято' : 'не принято'}`);
+    return ok;
   }
 
   /** helpers/auth.py check_and_gen: действующие cookie сессии — из памяти или созданные заново. */

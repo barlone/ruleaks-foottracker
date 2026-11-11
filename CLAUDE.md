@@ -300,7 +300,7 @@ flip `ready`, extend the `Start` schema in the router and `GoogleHunter`.
   `aas_et/…`; `npm run google-login` exchanges a one-time `oauth2_4/…` token from `accounts.google.com/EmbeddedSetup`,
   or takes a master token / GHunt Companion string / GHunt `creds.m`, validates it and writes it to `config.ini`).
   `session.ts` derives everything else in memory: per-app OAuth tokens (`android.googleapis.com/auth`), web-session
-  cookies (Chrome token → `OAuthLogin` uberauth → `MergeSession`, checked by `CheckCookie`) and the `SAPISIDHASH`
+  cookies (Chrome token → `OAuthLogin` uberauth → `MergeSession`) and the `SAPISIDHASH`
   header + web-client API key/Origin for the internal web APIs. No OSIDs — the email module does not need them.
 - **`email.ts`** (= `ghunt email`): People lookup (`people.ts`, fatal if it fails) → Play Games (`playgames.ts`: gRPC
   search by e-mail, then the games HTTP API) → Maps contributor stats (`maps.ts`, no auth) → public calendar
@@ -315,12 +315,16 @@ flip `ready`, extend the `Start` schema in the router and `GoogleHunter`.
   of Google hosts and a per-request timeout. `GoogleError` codes (`AUTH`, `BLOCKED`, `TIMEOUT`, `HTTP`, `PARSE`) map
   to generic Russian texts for the user (`googleErrorText`); Google's actual answer goes to the server log as
   `google: …`. The profile-photo URL comes from Google's response, so it is fetched through `pages/outbound.ts`.
+- **No `CheckCookie`**: GHunt validates the session with `accounts.google.com/CheckCookie`; Google now answers HTTP
+  200 on a good session (used to be 302) just like on a bad one, so it can no longer tell them apart. The session is
+  instead validated by its real use — `webApi` retries once on 401, dropping and regenerating cookies. Cookies are
+  cached `COOKIE_TTL` (30 min). Play Games search returns gRPC NOT_FOUND (status 5) when the account has no player
+  profile — mapped to a `NOTFOUND` `GoogleError` and treated as «no profile», not an error.
 - **`jobs.ts`**: in-memory jobs like the pages search (an hour of «История», polled every second, shown in
   `ProgressDialog` by step), but strictly sequential with `min-interval-sec` between runs — one account, and Google
   answers bursts with captchas and account locks. One unfinished job per user, `MAX_PENDING` per process → `GOOGLE_BUSY`.
 - **No master token → `DemoHunter`** (`demo.ts`): fake, address-deterministic reports and a warning banner (addresses
-  with `nobody`/`none` are «not found»). The authenticated chain (session cookies, People, Play Games data, Calendar)
-  has never been run against Google — that needs a real burner account; the demo covers the UI only.
+  with `nobody`/`none` are «not found»). The demo covers the UI without a service account.
 - Found links (Maps contributor page, calendar .ics) go to a dossier through `AddPagesDialog` (its `note` prop).
 
 ### Progress window

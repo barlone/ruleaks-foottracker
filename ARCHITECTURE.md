@@ -348,8 +348,10 @@ Wi-Fi BSSID, Digital Asset Links) стоят выключенными кнопк
 
 1. мастер-токен → токен OAuth приложения: `POST android.googleapis.com/auth` «от имени» Android-пакета с его
    подписью (`knowledge.ts`), кэш до срока `Expiry`;
-2. токен Chrome → `accounts.google.com/OAuthLogin` (uberauth) → `MergeSession` → cookie веб-сессии; годность cookie
-   проверяет `CheckCookie` (не чаще раза в 10 минут), негодные создаются заново;
+2. токен Chrome → `accounts.google.com/OAuthLogin` (uberauth) → `MergeSession` → cookie веб-сессии (кэш `COOKIE_TTL`,
+   30 мин); отдельной сверкой cookie не проверяются — Google сломал `CheckCookie` (на годную сессию он теперь
+   отвечает HTTP 200, как и на негодную), настоящая проверка — реальный запрос к API: `webApi` на 401 сбрасывает
+   cookie и пересоздаёт сессию;
 3. cookie `SAPISID` → заголовок `Authorization: SAPISIDHASH <ts>_<sha1(ts SAPISID origin)>` плюс ключ API и Origin
    веб-клиента Google — так ходят внутренние веб-API (People, Calendar).
 
@@ -383,6 +385,9 @@ OSID отдельных сервисов (GHunt их создаёт) поиск�
   `isDefault` / `isMonogram` из ответа People API.
 - **Имя профиля** Google из ответа убрал (в GHunt разбор закомментирован); если оно придёт — попадёт в отчёт.
 - **Отзывы и фото Карт** не разбираются — как и в GHunt (Google сменил формат), только счётчики.
+- **Нет игрового профиля** — gRPC-статус 5 (NOT_FOUND) при поиске игрока: это «профиля нет» (код ошибки `NOTFOUND`,
+  пустой результат), а не сбой.
+- Аутентифицированная цепочка (cookie сессии, People, Карты, Календарь) проверена против живого Google.
 - Запросы идут напрямую на `people-pa.clients6.google.com` (GHunt ходит на `googleapis.com` с этим `Host`).
 
 Остальное:

@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline/promises';
 import { findConfig, getIniValue, setIniValue } from '@ft/config';
 import { CHROME_APP, PLAYGAMES_APP } from '../google/knowledge.ts';
 import { GoogleError, type Ctx } from '../google/net.ts';
+import { lookupByEmail } from '../google/people.ts';
 import { GoogleSession, masterAuth, oauthForApp } from '../google/session.ts';
 
 // npm run google-login — мастер-токен служебного аккаунта Google для «Поиска по Google» (аналог `ghunt login`).
@@ -67,9 +68,11 @@ async function main(): Promise<void> {
 
   // Основная проверка — мастер-токен: обмен oauth_token (если дали его) и выдача токенов OAuth приложений.
   // Это и есть то, что обязательно для сохранения: без действующего мастер-токена смысла нет.
+  let accountEmail: string | null = null;
   try {
     if (token.startsWith('oauth2_4/')) {
       const m = await masterAuth(token, ctx);
+      accountEmail = m.email;
       console.log(`Аккаунт: ${m.name || '—'} <${m.email}>`);
       token = m.masterToken;
     }
@@ -86,15 +89,21 @@ async function main(): Promise<void> {
     fail((e instanceof GoogleError ? `Google: ${e.message}` : `Ошибка: ${(e as Error).message}`) + extra);
   }
 
-  // Вторичная проверка — веб-сессия (cookie для People API и Календаря). Её сбой не мешает сохранить токен:
-  // Play Игры и Карты работают и без неё, а веб-сессию сервер создаёт сам при первом поиске. Печатаем
-  // диагностику (имена cookie, ответ CheckCookie) — по ней видно, на чём именно споткнулась сессия.
+  // Вторичная проверка — веб-сессия (cookie для People API и Календаря): создаётся и проверяется реальным запросом
+  // к People API по адресу самого аккаунта (не CheckCookie — он больше не отличает годную сессию). Её сбой не мешает
+  // сохранить токен: Play Игры и Карты работают без неё, веб-сессию сервер поднимает сам при первом поиске.
   try {
-    await new GoogleSession(token, (m) => console.log(m), true).sessionCookies(ctx);
-    console.log('Веб-сессия создаётся — доступны все разделы (профиль, Play Игры, Карты, Календарь).');
+    const session = new GoogleSession(token, (m) => console.log(m), true);
+    await session.sessionCookies(ctx);
+    if (accountEmail) {
+      const found = await lookupByEmail(session, accountEmail, ctx);
+      console.log(`Веб-сессия работает: People API отвечает (свой аккаунт — ${found ? 'профиль виден' : 'без публичного профиля'}).`);
+    } else {
+      console.log('Веб-сессия создана. People API не проверял — мастер-токен задан напрямую, адрес аккаунта неизвестен.');
+    }
   } catch (e) {
     const msg = e instanceof GoogleError ? e.message : (e as Error).message;
-    console.warn(`\nВнимание: веб-сессия не создалась (${msg}).`);
+    console.warn(`\nВнимание: веб-сессия не прошла проверку (${msg}).`);
     console.warn('Поиск по профилю (People API) и Календарь пока работать не будут; Play Игры и Карты — будут.');
     console.warn('Мастер-токен действителен и будет сохранён — разберёмся с веб-сессией отдельно.\n');
   }

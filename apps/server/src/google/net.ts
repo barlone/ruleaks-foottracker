@@ -3,7 +3,8 @@ import { connect } from 'node:http2';
 // Сеть для «Поиска по Google»: fetch без следования редиректам (как httpx в GHunt — по редиректу Google
 // сообщает о капче и о недействительных cookie), таймаут на запрос, отмена задания и список разрешённых хостов.
 
-export type GoogleErrorCode = 'AUTH' | 'BLOCKED' | 'TIMEOUT' | 'HTTP' | 'PARSE';
+// NOTFOUND — gRPC-статус 5 (Requested entity was not found): для поиска игрока это «профиля нет», а не сбой.
+export type GoogleErrorCode = 'AUTH' | 'BLOCKED' | 'TIMEOUT' | 'HTTP' | 'PARSE' | 'NOTFOUND';
 
 /** Ошибка запроса к Google. message — подробности для журнала сервера; пользователю показывается текст по code. */
 export class GoogleError extends Error {
@@ -159,6 +160,10 @@ export function grpcUnary(host: string, path: string, headers: Record<string, st
       const body = Buffer.concat(chunks);
       if (status === 401 || status === 403 || grpcStatus === '16' || grpcStatus === '7') {
         return done(new GoogleError('AUTH', `${host}: отказ в доступе (HTTP ${status}, grpc-status ${grpcStatus ?? '—'}${grpcMessage ? `: ${grpcMessage}` : ''})`));
+      }
+      // grpc-status 5 = NOT_FOUND: сущности нет (у аккаунта нет игрового профиля) — не сбой, решает вызывающий код.
+      if (grpcStatus === '5') {
+        return done(new GoogleError('NOTFOUND', `${host}: ${grpcMessage ?? 'NOT_FOUND'}`));
       }
       if (status !== 200 || (grpcStatus !== undefined && grpcStatus !== '0')) {
         return done(new GoogleError('HTTP', `${host}: HTTP ${status}, grpc-status ${grpcStatus ?? '—'}${grpcMessage ? `: ${grpcMessage}` : ''}`));

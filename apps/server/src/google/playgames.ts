@@ -54,7 +54,14 @@ async function searchPlayer(session: GoogleSession, text_: string, ctx: Ctx): Pr
   const message = field(2, field(233436060, field(1, text_)));
   const headers: Record<string, string> = { 'user-agent': androidUserAgent(PLAYGAMES_APP.pkg) };
   for (const [k, v] of Object.entries(PLAYGATEWAY_EXT)) headers[`x-goog-ext-${k}-bin`] = v;
-  const reply = await withToken(session, ctx, (token) => grpcUnary(GATEWAY, GET_PAGE, { ...headers, authorization: `OAuth ${token}` }, message, ctx));
+  let reply: Buffer;
+  try {
+    reply = await withToken(session, ctx, (token) => grpcUnary(GATEWAY, GET_PAGE, { ...headers, authorization: `OAuth ${token}` }, message, ctx));
+  } catch (e) {
+    // NOT_FOUND — у аккаунта нет игрового профиля: не ошибка, просто пустой результат.
+    if (e instanceof GoogleError && e.code === 'NOTFOUND') return [];
+    throw e;
+  }
   return all(dig(reply, 1, 192500038, 1, 1), 232977370)
     .map((p) => ({ id: str(p, 6, 1), name: str(p, 6, 3), avatarUrl: str(p, 3, 1) || null }))
     .filter((c) => c.id);

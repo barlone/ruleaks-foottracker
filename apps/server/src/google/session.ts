@@ -12,8 +12,8 @@ import { bodyText, cookieHeader, gfetch, GoogleError, query, setCookies, type Ct
 const ANDROID_AUTH = 'https://android.googleapis.com/auth';
 /** Как у gpsoauth, на который ссылается GHunt: стандартный клиент fetch этот адрес может отвергнуть. */
 const ANDROID_AUTH_UA = 'GoogleAuth/1.4';
-/** Сколько верить проверенным cookie, не спрашивая CheckCookie снова. */
-const COOKIE_CHECK_MS = 10 * 60_000;
+/** Сколько держать созданную веб-сессию, не пересоздавая. Протухшую раньше срока ловит переповтор при 401 в webApi. */
+const COOKIE_TTL_MS = 30 * 60_000;
 
 /** Ответ android.googleapis.com/auth: строки «ключ=значение» (helpers/utils.py parse_oauth_flow_response). */
 export function parseAuthResponse(body: string): Record<string, string> {
@@ -126,29 +126,15 @@ export class GoogleSession {
     return cookies;
   }
 
-  /** helpers/auth.py check_cookies. */
-  private async cookiesValid(cookies: Record<string, string>, ctx: Ctx): Promise<boolean> {
-    const res = await gfetch(`https://accounts.google.com/CheckCookie?${query({ continue: 'https://www.google.com/robots.txt' })}`, {
-      headers: { ...WEB_HEADERS, Cookie: cookieHeader(cookies) },
-    }, ctx);
-    await res.body?.cancel().catch(() => undefined);
-    const location = res.headers.get('location') ?? '';
-    const ok = res.status === 302 && !location.startsWith('https://support.google.com') && !location.startsWith('https://accounts.google.com/CookieMismatch');
-    // Адрес в Location без query (там может быть continue-токен) — для диагностики.
-    if (this.debug) this.log(`google: CheckCookie → HTTP ${res.status}${location ? `, Location ${location.split('?')[0]}` : ''} → ${ok ? 'принято' : 'не принято'}`);
-    return ok;
-  }
-
-  /** helpers/auth.py check_and_gen: действующие cookie сессии — из памяти или созданные заново. */
+  /**
+   * helpers/auth.py check_and_gen, но без CheckCookie. GHunt сверяет cookie запросом к accounts.google.com/CheckCookie
+   * (валидно = 302 на continue). Google это поменял: на годную сессию CheckCookie теперь отвечает HTTP 200, как и на
+   * негодную (страницей входа), — отличить по нему годную сессию нельзя. Настоящая проверка — реальный запрос к API:
+   * webApi() на 401 сбрасывает cookie и пересоздаёт сессию. Здесь cookie только создаются и кэшируются на COOKIE_TTL_MS.
+   */
   async sessionCookies(ctx: Ctx): Promise<Record<string, string>> {
-    if (this.cookies && Date.now() - this.cookiesCheckedAt < COOKIE_CHECK_MS) return this.cookies;
-    if (this.cookies && (await this.cookiesValid(this.cookies, ctx))) {
-      this.cookiesCheckedAt = Date.now();
-      return this.cookies;
-    }
-    this.cookies = null;
+    if (this.cookies && Date.now() - this.cookiesCheckedAt < COOKIE_TTL_MS) return this.cookies;
     const cookies = await this.generateCookies(ctx);
-    if (!(await this.cookiesValid(cookies, ctx))) throw new GoogleError('AUTH', 'созданные cookie сессии Google не проходят проверку CheckCookie');
     this.cookies = cookies;
     this.cookiesCheckedAt = Date.now();
     return cookies;

@@ -523,9 +523,12 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   (`rememberedScope` in `lib/listView.ts`): a link to the bare list (`/dossiers`, sidebar) reopens the remembered scope.
 - Markdown is the storage format for all long text; `@` in the TipTap editor inserts a plain link
   `[@Title](/dossiers/<id>)` rather than a custom node, so stored text stays portable.
+- The TipTap editor lives in `components/MarkdownEditor.tsx` and is never imported directly: `MarkdownEditor` in
+  `components/Markdown.tsx` is a `lazy` wrapper (same props), so TipTap / ProseMirror (~480 kB) stay out of the entry
+  chunk, which eager pages with a create dialog would otherwise drag in. `MarkdownView` stays eager.
 - Colour highlighting in Markdown is inline HTML `<mark data-color="yellow">…</mark>` with a colour *name* from
   `HIGHLIGHT_COLORS` (`@ft/shared` `highlight.ts`, also the tag regexes). Three places must agree: the TipTap `Highlight`
-  mark in `components/Markdown.tsx` (own marked tokenizer, so Markdown inside the mark survives), the `remarkHighlight`
+  mark in `components/MarkdownEditor.tsx` (own marked tokenizer, so Markdown inside the mark survives), the `remarkHighlight`
   plugin of `MarkdownView` (only this tag pair becomes an element; other HTML stays text — no `rehype-raw`) and
   `pdf/markdown.ts` (tinted `background`). One-line previews strip the tags with `stripHighlight`.
 - Every dossier item and fact carries a `source` with an Admiralty-code rating (reliability A–F, credibility 1–6),

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'ini';
 import { z } from 'zod';
@@ -17,6 +18,30 @@ const bool = (def: boolean) =>
     (v) => (typeof v === 'string' ? ['true', 'yes', 'on', '1'].includes(v.trim().toLowerCase()) ? true : ['false', 'no', 'off', '0', ''].includes(v.trim().toLowerCase()) ? false : v : v),
     z.boolean().default(def),
   );
+
+/** Имена подсетей, которые понимает trustProxy Fastify (proxy-addr). */
+const PROXY_NAMES = ['loopback', 'linklocal', 'uniquelocal'];
+const proxyEntryOk = (e: string) => PROXY_NAMES.includes(e) || (/^([^/]+)(?:\/(\d{1,3}))?$/.test(e) && isIP(e.split('/')[0]!) !== 0);
+
+/**
+ * [server] trust-proxy → Fastify trustProxy: false; список адресов и подсетей прокси через запятую — каким доверять;
+ * true — доверять всем (клиент подделает адрес заголовком, только с предупреждением). Числа прокси нет: Fastify 5.12
+ * молча считает число «никому не доверять», поэтому «1»/«2» здесь — ошибка конфигурации, а не true.
+ */
+const trustProxy = z.preprocess(
+  (v) => {
+    if (v === undefined || v === null || typeof v === 'boolean') return v;
+    const s = String(v).trim();
+    const low = s.toLowerCase();
+    if (['true', 'yes', 'on'].includes(low)) return true;
+    if (['false', 'no', 'off', '0', ''].includes(low)) return false;
+    return s.split(',').map((e) => e.trim()).filter(Boolean).join(',');
+  },
+  z.union([
+    z.boolean(),
+    z.string().refine((s) => s.split(',').every(proxyEntryOk), 'false или адреса/подсети прокси через запятую (127.0.0.1, 10.0.0.0/8, loopback)'),
+  ]).default(false),
+);
 const sslmode = z.enum(['disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full']).default('prefer');
 
 const DbSection = z.object({
@@ -68,8 +93,8 @@ const SECTIONS = {
     /** Вход без бота по Telegram ID пользователя (пока бот не умеет подтверждать вход). Только на localhost. */
     'dev-login': bool(true),
     'session-ttl-days': int(30, 1, 365),
-    /** Сервер за обратным прокси (nginx, Cloudflare): адрес клиента брать из X-Forwarded-For. */
-    'trust-proxy': bool(false),
+    /** Сервер за обратным прокси (nginx, Cloudflare): каким прокси верить в X-Forwarded-For (см. trustProxy). */
+    'trust-proxy': trustProxy,
     /** Флаг Secure у cookie. false — только для входа по голому http не с localhost (браузеры принимают Secure на http://localhost). */
     'secure-cookie': bool(true),
   }),
@@ -185,8 +210,8 @@ export interface AppConfig {
     secureCookie: boolean;
     devLogin: boolean;
     sessionTtlMs: number;
-    /** Доверять X-Forwarded-For (req.ip — адрес клиента, а не прокси). */
-    trustProxy: boolean;
+    /** Fastify trustProxy: false, список адресов/подсетей прокси или true (доверять всем). */
+    trustProxy: boolean | string;
   };
   /** Бот: имя для ссылок, секрет подписи ссылок входа (общий с ботом) и срок их жизни. */
   telegram: { botUsername: string; loginSecret: string; loginLinkTtlMs: number };
@@ -422,11 +447,14 @@ function validate(cfg: AppConfig) {
   if (mode === 'password-sha256' && !/^[0-9a-f]{64}$/.test(cfg.auth.passwordSha256)) {
     missing.push('[config] password-sha256 (64 hex-символа: npm run password-hash)');
   }
+  if (cfg.server.trustProxy === true) {
+    cfg.warnings.push('[server] trust-proxy = true: адрес клиента берётся из самого левого X-Forwarded-For, который клиент пишет сам — укажите адрес прокси (127.0.0.1)');
+  }
   if (!cfg.server.secureCookie) {
     cfg.warnings.push('[server] secure-cookie = false: cookie сессии уходит и по http — только для отладки в локальной сети');
   }
   if (!cfg.server.loopback) {
-    if (!cfg.server.trustProxy) {
+    if (cfg.server.trustProxy === false) {
       cfg.warnings.push('[server] trust-proxy = false: за обратным прокси req.ip — адрес прокси, а не клиента (лимит попыток пароля общий на всех)');
     }
     if (mode === 'none') missing.push('[config] auth (none — только при host = 127.0.0.1 / localhost: сайт открыт без входа)');

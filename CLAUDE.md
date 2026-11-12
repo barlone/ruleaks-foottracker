@@ -52,7 +52,8 @@ unknown keys are logged as warnings.
 
 `[config] auth` picks the login mode: `bot-db` (default — login via the bot, subscription and API token from `[bot-db]`),
 `none` (solo, no login — every request runs as the single solo user; loopback only) or `password-sha256` (one user,
-`auth.password` checks sha256 against `password-sha256`, per-IP fail limit; the hash is mixed into the cookie-signing
+`auth.password` checks sha256 against `password-sha256`, fail limit per IP (5/min) and per process (60/min, so rotating
+or spoofed addresses don't help; it also bounds the `fails` map, swept by a timer); the hash is mixed into the cookie-signing
 secret so a password change ends all sessions, and only the solo user's sessions are accepted). In both solo modes
 `SoloBridge` (`adapters/solo.ts`) replaces the bot: access is always active/unlimited, the API token is `[api] token`,
 `[bot-db]`/`dev-login` are forced off, and `deps.soloUserId` is upserted at startup from `user-tg-id`/`user-name`.
@@ -80,7 +81,10 @@ and the pause between searches — an empty token means fake demo answers (see �
 production listens on 127.0.0.1 behind nginx (browsers accept Secure cookies on http://localhost, so dev works).
 
 `[server] trust-proxy` (default `false`) makes Fastify take the client address from `X-Forwarded-For`; production runs behind
-nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone.
+nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone. Values:
+`false`, a comma list of proxy addresses/subnets (`127.0.0.1`, `10.0.0.0/8`, `loopback`) or `true` (trust everyone —
+the leftmost XFF value is client-written, so it only warns). No hop count: Fastify 5.12 treats a number as «trust
+nobody», so digits are a config error. Behind Cloudflare → nginx use `127.0.0.1` plus nginx `real_ip` from Cloudflare.
 
 `[telegram] login-secret` (shared with the bot, ≥32 chars) enables login by a signed one-time link from the bot:
 `/login?tg=…&ts=…&n=…&sig=…[&name=…][&nick=…]`, `sig = base64url(HMAC-SHA256(secret, "tg\nts\nn\nname\nnick"))`,

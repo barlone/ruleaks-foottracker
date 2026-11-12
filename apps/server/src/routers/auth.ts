@@ -33,16 +33,43 @@ const botProcedure = publicProcedure.use(({ next }) => {
 });
 
 // Перебор пароля: не больше MAX_FAILS неудачных попыток с адреса за окно, каждая неудача — с задержкой.
+// Пользователь один, поэтому есть и общий предел MAX_GLOBAL_FAILS на все адреса: перебор со сменой адресов (или с
+// подделанным X-Forwarded-For) упирается в него. Он же ограничивает память: за окно в fails попадает не больше
+// MAX_GLOBAL_FAILS адресов, а устаревшие убирает таймер, даже если с адреса больше не приходят.
+// Цена: пока идёт перебор, новый вход по паролю закрыт и для владельца (открытые сессии работают).
 const FAIL_WINDOW_MS = 60_000;
 const MAX_FAILS = 5;
+const MAX_GLOBAL_FAILS = 60;
 const fails = new Map<string, number[]>();
+let globalFails: number[] = [];
+
+const fresh = (list: number[], now: number) => list.filter((t) => now - t < FAIL_WINDOW_MS);
 
 function recentFails(ip: string): number[] {
-  const now = Date.now();
-  const list = (fails.get(ip) ?? []).filter((t) => now - t < FAIL_WINDOW_MS);
+  const list = fresh(fails.get(ip) ?? [], Date.now());
   if (list.length) fails.set(ip, list);
   else fails.delete(ip);
   return list;
+}
+
+function sweepFails() {
+  const now = Date.now();
+  globalFails = fresh(globalFails, now);
+  for (const [ip, list] of fails) {
+    const left = fresh(list, now);
+    if (left.length) fails.set(ip, left);
+    else fails.delete(ip);
+  }
+}
+
+setInterval(sweepFails, FAIL_WINDOW_MS).unref();
+
+const tooManyFails = (ip: string) => recentFails(ip).length >= MAX_FAILS || fresh(globalFails, Date.now()).length >= MAX_GLOBAL_FAILS;
+
+function recordFail(ip: string) {
+  const now = Date.now();
+  fails.set(ip, [...recentFails(ip), now]);
+  globalFails = [...fresh(globalFails, now), now];
 }
 
 function passwordMatches(password: string): boolean {
@@ -80,9 +107,9 @@ export const authRouter = router({
   password: publicProcedure.input(z.object({ password: z.string().min(1).max(1024) })).mutation(async ({ ctx, input }) => {
     if (config.authMode !== 'password-sha256' || !ctx.deps.soloUserId) throw new TRPCError({ code: 'NOT_FOUND', message: 'NOT_FOUND' });
     const ip = ctx.req.ip;
-    if (recentFails(ip).length >= MAX_FAILS) throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'TOO_MANY_ATTEMPTS' });
+    if (tooManyFails(ip)) throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'TOO_MANY_ATTEMPTS' });
     if (!passwordMatches(input.password)) {
-      fails.set(ip, [...recentFails(ip), Date.now()]);
+      recordFail(ip);
       await new Promise((r) => setTimeout(r, 700));
       throw new TRPCError({ code: 'UNAUTHORIZED', message: 'BAD_PASSWORD' });
     }

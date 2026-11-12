@@ -19,7 +19,8 @@ export const LoginLink = z.object({
 });
 export type LoginLink = z.infer<typeof LoginLink>;
 
-export type LoginLinkFail = 'BAD_LINK' | 'LINK_EXPIRED' | 'LINK_USED';
+/** LINK_STALE — ссылка выдана до запуска процесса: список использованных ссылок тогда пуст, и её одноразовость не проверить. */
+export type LoginLinkFail = 'BAD_LINK' | 'LINK_EXPIRED' | 'LINK_USED' | 'LINK_STALE';
 
 /** Насколько ts может опережать часы сервера (рассинхрон часов бота и сайта). */
 const FUTURE_SKEW_MS = 60_000;
@@ -44,6 +45,14 @@ export function makeLoginLink(secret: string, site: string, tg: string, extra: {
 /** Использованные ссылки — до истечения их срока (после него подпись и так не примется). */
 const used = new Map<string, number>();
 
+/**
+ * Список used живёт в памяти и при перезапуске пропадает — ссылку, по которой уже вошли, можно было бы применить ещё
+ * раз до конца её срока. Поэтому ссылки, выданные не позже секунды запуска (ts — целые секунды), не принимаются вовсе:
+ * пользователь, получивший ссылку перед самым перезапуском, просто запросит новую. Окно остаётся только на
+ * рассинхрон часов бота и сайта (бот спешит — ts «из будущего»).
+ */
+const STARTED_SEC = Math.floor(Date.now() / 1000);
+
 function sweep(now: number) {
   for (const [k, until] of used) if (until <= now) used.delete(k);
 }
@@ -59,6 +68,7 @@ export function verifyLoginLink(secret: string, link: LoginLink, ttlMs: number, 
   if (want.length !== got.length || !timingSafeEqual(want, got)) return { ok: false, code: 'BAD_LINK' };
   const issued = Number(link.ts) * 1000;
   if (issued > now + FUTURE_SKEW_MS || issued + ttlMs < now) return { ok: false, code: 'LINK_EXPIRED' };
+  if (Number(link.ts) <= STARTED_SEC) return { ok: false, code: 'LINK_STALE' };
   sweep(now);
   const key = `${link.tg}:${link.n}`;
   if (used.has(key)) return { ok: false, code: 'LINK_USED' };

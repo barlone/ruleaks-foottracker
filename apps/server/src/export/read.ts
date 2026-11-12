@@ -1,4 +1,4 @@
-import { ERR_INVALID_PASSWORD, TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader, type Entry, type FileEntry } from '@zip.js/zip.js';
+import { ERR_INVALID_PASSWORD, Uint8ArrayReader, Writer, ZipReader, type Entry, type FileEntry } from '@zip.js/zip.js';
 import { EXPORT_VERSION, ExportDossier, ExportInvestigation, ExportMeta, ExportRelation, ExportSearch } from '@ft/shared';
 import type { z } from 'zod';
 import { archivePassword } from './password.ts';
@@ -27,10 +27,36 @@ export interface ExportPackage {
 }
 
 const MAX_ENTRIES = 20_000;
-/** Предел распакованного объёма — защита от «zip-бомбы». */
-const MAX_UNPACKED = 1024 * 1024 * 1024;
+/**
+ * Предел распакованного объёма — защита от «zip-бомбы». Картинки в файле экспорта лежат без сжатия, так что настоящий
+ * файл распаковывается примерно в свой размер: предел — 2 × MAX_IMPORT_BYTES (uploads.ts; не импортируется оттуда —
+ * модули ссылаются друг на друга).
+ */
+const MAX_UNPACKED = 128 * 1024 * 1024;
 
 const isFile = (e: Entry): e is FileEntry => !e.directory;
+
+const tooLarge = () => new ImportError('FILE_TOO_LARGE', 'распакованный объём больше предела');
+
+/**
+ * Распакованные байты с общим бюджетом на весь архив. Размерам из каталога архива верить нельзя: их пишет автор
+ * файла, а Uint8ArrayWriter к тому же сразу выделяет память под заявленный размер. Здесь память растёт только по
+ * мере распаковки, и чтение обрывается, как только бюджет исчерпан.
+ */
+class LimitedWriter extends Writer<Uint8Array> {
+  private chunks: Uint8Array[] = [];
+  constructor(private readonly budget: { left: number }) {
+    super();
+  }
+  override async writeUint8Array(array: Uint8Array): Promise<void> {
+    this.budget.left -= array.length;
+    if (this.budget.left < 0) throw tooLarge();
+    this.chunks.push(array.slice()); // буфер куска zip.js может переиспользовать
+  }
+  override async getData(): Promise<Uint8Array> {
+    return Buffer.concat(this.chunks);
+  }
+}
 
 export async function readPackage(bytes: Uint8Array, password: string): Promise<ExportPackage> {
   const zip = new ZipReader(new Uint8ArrayReader(bytes));
@@ -42,7 +68,11 @@ export async function readPackage(bytes: Uint8Array, password: string): Promise<
       throw new ImportError('BAD_FILE', 'не ZIP-архив');
     }
     if (entries.length > MAX_ENTRIES) throw new ImportError('FILE_TOO_LARGE');
-    if (entries.reduce((n, e) => n + e.uncompressedSize, 0) > MAX_UNPACKED) throw new ImportError('FILE_TOO_LARGE');
+    // Заявленный объём — быстрый отказ до распаковки; фактический считает LimitedWriter.
+    if (entries.reduce((n, e) => n + e.uncompressedSize, 0) > MAX_UNPACKED) throw tooLarge();
+    const budget = { left: MAX_UNPACKED };
+    const bytesOf = (e: FileEntry, password: string) => e.getData(new LimitedWriter(budget), { password });
+    const textOf = async (e: FileEntry, password: string) => new TextDecoder().decode(await bytesOf(e, password));
 
     // Версия формата — по имени файла, без расшифровки.
     const versions = entries.flatMap((e) => /^version\.v(\d{1,3})$/.exec(e.filename)?.[1] ?? []).map(Number);
@@ -59,10 +89,11 @@ export async function readPackage(bytes: Uint8Array, password: string): Promise<
     for (const p of password ? [password, ''] : ['']) {
       const candidate = await archivePassword(p);
       try {
-        metaText = await metaEntry.getData(new TextWriter(), { password: candidate });
+        metaText = await textOf(metaEntry, candidate);
         key = candidate;
         break;
       } catch (e) {
+        if (e instanceof ImportError) throw e;
         if ((e as Error).message !== ERR_INVALID_PASSWORD) throw new ImportError('BAD_FILE', (e as Error).message);
       }
     }
@@ -74,8 +105,9 @@ export async function readPackage(bytes: Uint8Array, password: string): Promise<
       if (!e) throw new ImportError('BAD_FILE', `нет ${path}`);
       let value: unknown;
       try {
-        value = JSON.parse(path === 'meta.info' ? metaText : await e.getData(new TextWriter(), { password: pwd }));
-      } catch {
+        value = JSON.parse(path === 'meta.info' ? metaText : await textOf(e, pwd));
+      } catch (err) {
+        if (err instanceof ImportError) throw err;
         throw new ImportError('BAD_FILE', `не читается ${path}`);
       }
       const r = schema.safeParse(value);
@@ -100,7 +132,7 @@ export async function readPackage(bytes: Uint8Array, password: string): Promise<
     for (const m of c.media) {
       const e = byName.get(m.file);
       if (!e) throw new ImportError('BAD_FILE', `нет ${m.file}`);
-      pkg.media.set(m.file, { mime: m.mime, bytes: await e.getData(new Uint8ArrayWriter(), { password: pwd }) });
+      pkg.media.set(m.file, { mime: m.mime, bytes: await bytesOf(e, pwd) });
     }
     checkRefs(pkg);
     return pkg;

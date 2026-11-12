@@ -5,12 +5,12 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from '@dnd-kit/utilities';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, Maximize2, NotebookPen, Pencil, Plus, Trash2, X,
+  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, MailSearch, Maximize2, NotebookPen, Pencil, Plus, Trash2, X,
 } from 'lucide-react';
 import {
   ATTR_PAIRS, ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, pairAllowed, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND, fmtBytes,
   POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection,
-  stripHighlight,
+  parseEmail, stripHighlight,
 } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
@@ -541,6 +541,7 @@ function AttrRow({ a, child, pair, mode, editable, linkable, onEdit, onRemove, o
           </span>
         ) : (
           <>
+            {a.key === 'emails' && <ResearchEmailLink value={a.value} dossierId={dossierId} />}
             <ValueActions field={a.key} value={a.value} />
             <CopyButton value={attrCopyValue(a.key, a.value)} title={`Скопировать: ${a.label}`} />
             {kind && (
@@ -740,6 +741,21 @@ function DeleteBtn({ onClick }: { onClick: () => void }) {
     <button onClick={onClick} title="Удалить" className={`${DELETE_GAP} cursor-pointer text-mute hover:text-danger`}>
       <Trash2 size={13} />
     </button>
+  );
+}
+
+/**
+ * «Исследовать» у атрибута-адреса: раздел «Исследовать Email» с этим адресом и возвратом в досье (?from=).
+ * Нет раздела ([config] email-search) или значение не адрес — иконки нет.
+ */
+function ResearchEmailLink({ value, dossierId }: { value: string; dossierId: string }) {
+  const cfg = trpc.email.config.useQuery(undefined, { staleTime: Infinity });
+  const email = parseEmail(value)?.email;
+  if (!cfg.data || !email) return null;
+  return (
+    <Link to="/search/email" search={{ q: email, from: dossierId }} title="Исследовать email" aria-label="Исследовать email" className="shrink-0 text-mute transition hover:text-mint">
+      <MailSearch size={14} />
+    </Link>
   );
 }
 

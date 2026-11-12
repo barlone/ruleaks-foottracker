@@ -15,6 +15,7 @@ import { EmailReportView } from './EmailReportView.tsx';
 import { reportLinks } from './emailSearch.ts';
 import { EmailRunContext } from './googleSearch.ts';
 import { useRunOnMount } from './job.ts';
+import { BackToDossier } from './BackToDossier.tsx';
 
 // «Поиск по Email» — GHunt + MOSINT: сервер собирает отчёт по адресу (email.start), страница раз в секунду спрашивает
 // ход работы по частям (email.job) и показывает отчёт. Из найденного (адреса коллег у Hunter, адрес профиля Google)
@@ -87,7 +88,7 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
     const parsed = parseEmail(q);
     if (!parsed) return;
     setValue(parsed.email);
-    void navigate({ search: { q: parsed.email } });
+    void navigate({ search: (prev) => ({ ...prev, q: parsed.email }) }); // from (досье) остаётся
     start.mutate({ query: parsed.email });
     // start из useMutation стабилен по поведению; navigate — тоже.
   }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -103,11 +104,14 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
       <SearchLayout
         title="Исследовать Email"
         titleExtra={(
-          <div className="font-mono text-[11px] text-mute">
-            inspired by{' '}
-            <a href={GHUNT_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">GHunt</a>
-            {' · '}
-            <a href={MOSINT_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">MOSINT</a>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            {params.from && <BackToDossier id={params.from} />}
+            <div className="font-mono text-[11px] text-mute">
+              inspired by{' '}
+              <a href={GHUNT_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">GHunt</a>
+              {' · '}
+              <a href={MOSINT_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">MOSINT</a>
+            </div>
           </div>
         )}
         subtitle="Что известно об адресе электронной почты: аккаунт Google, регистрации на сайтах, утечки и дампы, репутация, домен и его почтовые серверы."

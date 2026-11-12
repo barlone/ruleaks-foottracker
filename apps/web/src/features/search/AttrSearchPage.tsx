@@ -14,6 +14,7 @@ import { AttrExportDialog } from './AttrExportDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout } from './common.tsx';
 import { useRunOnMount, useSearchJob } from './job.ts';
 import { ValueActions } from './ValueActions.tsx';
+import { BackToDossier } from './BackToDossier.tsx';
 import type { FoundGeoPoint } from './GeoPointsMap.tsx';
 import { ScansBox } from './ScansBox.tsx';
 import { useFoundScans } from './foundScans.ts';
@@ -190,16 +191,6 @@ export function AttrSearchPage() {
         </Empty>
       )}
     </SearchLayout>
-  );
-}
-
-/** Возврат в досье, из которого пришли по «Искать» (?from=): текст-кнопка справа от заголовка. */
-function BackToDossier({ id }: { id: string }) {
-  const d = trpc.dossiers.get.useQuery({ id }, { select: (x) => x.title, staleTime: 60_000 });
-  return (
-    <Link to="/dossiers/$id" params={{ id }} className="inline-flex items-center gap-1.5 font-mono text-xs text-mute transition hover:text-mint">
-      <ArrowLeft size={13} /> в досье{d.data ? ` «${d.data}»` : ''}
-    </Link>
   );
 }
 

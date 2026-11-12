@@ -467,6 +467,9 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   `ATTR_PAIRS` (`attrTypes.ts`: names + bdays, pasps + infos) can be linked. Children are shown right under the
   parent, indented, with a chain icon that unlinks, plus a pair line (`PairActions`): copy «parent child» and, for
   names + bdays, a name search. `color` and `parentId` are UI-only: not exported, not in PDF.
+- An `emails` attribute row has an «Исследовать» icon (`ResearchEmailLink`, left of the mailmeteor check; only when the
+  value parses as an address and the Email section is on) → `/search/email?q=…&from=<dossier id>`. `?from=` on `/search`
+  and `/search/email` shows the way back (`features/search/BackToDossier.tsx`) and survives a new search on the page.
 - Group members (`MembersEditor`): «Новое досье» creates a person dossier, adds it to the group and opens it with
   `?from=<group id>`; member links carry the same `from`. `/dossiers/$id?from=` shows «← в группу …» right of the
   title (`BackToGroup`), like `/search?from=` shows the way back to the dossier.

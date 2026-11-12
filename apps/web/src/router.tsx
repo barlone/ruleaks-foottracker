@@ -65,7 +65,8 @@ export const pagesSearchRoute = createRoute({
 export const emailSearchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search/email',
-  validateSearch: z.object({ q: text }),
+  // from — id досье, из которого пришли по «Исследовать» у атрибута-адреса: справа от заголовка — возврат в него.
+  validateSearch: z.object({ q: text, from: text }),
   component: lazyRouteComponent(() => import('./features/search/EmailSearchPage.tsx'), 'EmailSearchPage'),
 });
 

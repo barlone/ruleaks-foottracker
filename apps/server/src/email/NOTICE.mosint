@@ -17,6 +17,12 @@
   social/instagram                                  → ../pages/email-sites.ts (EXTRA; Twitter и Spotify — уже в манифесте blackbird)
   scrape/googlesearch (colly, выдача Google)        → web.ts (выдача DuckDuckGo: Google без JavaScript её не отдаёт)
 
+Проверка существования ящика (smtp.ts) — метод проекта deep-email-validator (src/smtp/smtp.ts: разговор с почтовым
+сервером до RCPT TO), перенесён и дополнен определением catch-all, разбором отказов и STARTTLS:
+
+  deep-email-validator — https://github.com/mfbx9da4/deep-email-validator
+  Лицензия: MIT (тот же текст, что ниже)
+
 Своё, не из MOSINT: регистрация домена по RDAP (rdap.ts — замена возраста домена из EmailRep без ключа), вид домена
 (Gmail / бесплатный / одноразовый / свой — @ft/shared email.ts), от которого зависит набор проверок, и сборка
 отчёта (report.ts, jobs.ts).

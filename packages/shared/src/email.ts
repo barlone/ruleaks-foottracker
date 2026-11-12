@@ -150,6 +150,7 @@ export const EMAIL_DOMAIN_KINDS: Record<EmailDomainKind, string> = {
 /** Части отчёта в порядке показа; по ним же — индикатор хода работы. */
 export const EMAIL_PARTS = [
   { id: 'dns', label: 'DNS и почтовые политики' },
+  { id: 'mailbox', label: 'Существование ящика' },
   { id: 'rdap', label: 'Регистрация домена' },
   { id: 'ipgeo', label: 'Геолокация серверов' },
   { id: 'google', label: 'Аккаунт Google' },
@@ -199,6 +200,49 @@ export interface EmailDns {
   spoofable: boolean;
   /** Подтверждения владения доменом в сторонних сервисах (TXT: google-site-verification, MS=…). */
   verifications: { service: string; value: string }[];
+}
+
+/** Ответ на вопрос «есть ли такой ящик»: существует, нет, сервер принимает всё подряд (понять нельзя), не удалось узнать. */
+export type MailboxVerdict = 'exists' | 'missing' | 'catchall' | 'unknown';
+
+export type MailboxReason =
+  | 'accepted' | 'full' | 'rejected' | 'catchall'
+  | 'no-domain' | 'null-mx' | 'no-mx'
+  | 'no-connect' | 'greylist' | 'blocked' | 'tls' | 'timeout' | 'protocol';
+
+/** Почему вынесен такой вердикт — по-русски. */
+export const MAILBOX_REASONS: Record<MailboxReason, string> = {
+  accepted: 'почтовый сервер принял этот адрес',
+  full: 'ящик есть, но переполнен',
+  rejected: 'почтовый сервер ответил, что такого получателя нет',
+  catchall: 'сервер принимает любые адреса домена, даже случайные, — существует ли именно этот ящик, узнать нельзя',
+  'no-domain': 'домена не существует',
+  'null-mx': 'домен объявил, что почту не принимает',
+  'no-mx': 'у домена нет почтовых серверов',
+  'no-connect': 'нет соединения с почтовым сервером: скорее всего, у хостинга этого сайта закрыт исходящий порт 25',
+  greylist: 'сервер ответил временным отказом (greylisting или недоверие к адресу нашего сервера)',
+  blocked: 'сервер отказал по правилам защиты от спама: репутация, обратная DNS-запись или SPF нашего сервера',
+  tls: 'сервер не стал продолжать без шифрования',
+  timeout: 'сервер не ответил вовремя',
+  protocol: 'сервер прервал разговор',
+};
+
+/**
+ * Проверка ящика у почтового сервера домена (SMTP до RCPT TO, письмо не отправляется) — метод deep-email-validator
+ * с определением catch-all (apps/server/src/email/smtp.ts).
+ */
+export interface EmailMailbox {
+  verdict: MailboxVerdict;
+  reason: MailboxReason;
+  /** Сервер, который отвечал (или до которого не достучались); null — до серверов дело не дошло. */
+  mx: string | null;
+  /** Код и текст ответа сервера, решившего дело (обрезан). */
+  code: number | null;
+  reply: string | null;
+  /** Разговор шёл по STARTTLS. */
+  tls: boolean;
+  /** Принял ли сервер заведомо несуществующий адрес: true — catch-all, false — различает адреса, null — не выяснено. */
+  catchAll: boolean | null;
 }
 
 /** RDAP: регистрация домена. */
@@ -358,6 +402,7 @@ export interface EmailReport {
   local: string;
   domain: EmailDomainInfo;
   dns: EmailSection<EmailDns>;
+  mailbox: EmailSection<EmailMailbox>;
   rdap: EmailSection<EmailRdap | null>;
   ipgeo: EmailSection<EmailIpGeo[]>;
   google: EmailSection<GoogleEmailReport>;

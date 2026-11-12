@@ -12,6 +12,7 @@ import { breachDirectory, emailRep, hibpBreaches, intelx, psbdmp } from './breac
 import { domainDns, hostIps } from './dns.ts';
 import { emailErrorText, type Ctx } from './http.ts';
 import { hunterDomain } from './hunterio.ts';
+import { checkMailbox } from './smtp.ts';
 import { ipGeo, type IpTarget } from './ipgeo.ts';
 import { domainRdap } from './rdap.ts';
 import { webMentions } from './web.ts';
@@ -46,6 +47,7 @@ export function skipReasons(opts: Pick<HuntOptions, 'email'>, kind: ReturnType<t
   const notOwn = kind === 'gmail' ? 'у адреса Gmail домен принадлежит Google' : kind === 'free' ? 'у бесплатного почтового сервиса домен общий для всех' : 'домен одноразовых ящиков общий для всех';
   return {
     dns: null,
+    mailbox: e.smtp.enabled ? null : SKIP_OFF,
     rdap: !e.rdap ? SKIP_OFF : own ? null : notOwn,
     ipgeo: !e.ipGeo ? SKIP_OFF : own ? null : notOwn,
     google: e.google ? null : SKIP_OFF,
@@ -65,7 +67,7 @@ const pending = <T>(): EmailSection<T> => ({ status: 'skipped', reason: 'не п
 export function emptyReport(p: ParsedEmail): EmailReport {
   return {
     email: p.email, local: p.local, domain: emailDomainInfo(p.domain),
-    dns: pending(), rdap: pending(), ipgeo: pending(), google: pending(), sites: pending(), hibp: pending(),
+    dns: pending(), mailbox: pending(), rdap: pending(), ipgeo: pending(), google: pending(), sites: pending(), hibp: pending(),
     breachdirectory: pending(), intelx: pending(), pastes: pending(), emailrep: pending(), hunter: pending(), web: pending(),
   };
 }
@@ -101,6 +103,12 @@ export async function huntEmail(report: EmailReport, opts: HuntOptions, signal: 
 
   await Promise.all([
     dns,
+    // Есть ли ящик — спрашиваем почтовые серверы из DNS (MX).
+    part('mailbox', async () => {
+      await dns;
+      if (report.dns.status !== 'ok') throw new Error('нет данных DNS о почтовых серверах домена');
+      return checkMailbox(email, domain.domain, report.dns.data, { helo: e.smtp.helo, from: e.smtp.from, timeoutMs: e.timeoutMs, signal, log: opts.log });
+    }),
     // Серверы домена: его адрес (A) и основной почтовый сервер (MX) — по данным DNS.
     part('ipgeo', async () => {
       await dns;

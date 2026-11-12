@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
+import { hostname } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'ini';
 import { z } from 'zod';
@@ -175,6 +176,15 @@ const SECTIONS = {
     pastes: bool(false),
     /** Упоминания адреса в вебе: выдача DuckDuckGo (туда уходит адрес). */
     'web-mentions': bool(true),
+    /**
+     * Существует ли ящик: вопрос почтовому серверу домена по SMTP (порт 25, до RCPT TO, письмо не отправляется).
+     * Выключено: нужен открытый исходящий порт 25, а сервер адресата видит соединение с нашего IP.
+     */
+    'smtp-check': bool(false),
+    /** Имя в EHLO — должно совпадать с обратной DNS-записью (PTR) IP сервера; пусто — имя хоста машины. */
+    'smtp-helo': str(),
+    /** Адрес в MAIL FROM (домен, чей SPF разрешает IP сервера); пусто — пустой отправитель <>. */
+    'smtp-from': str(),
     /** Ключи сервисов: пусто — часть отчёта не собирается. */
     'hibp-key': str(),
     /** Ключ RapidAPI с подпиской на BreachDirectory. */
@@ -283,6 +293,8 @@ export interface AppConfig {
     rdap: boolean;
     pastes: boolean;
     web: boolean;
+    /** Проверка ящика по SMTP: helo — имя в EHLO, from — адрес в MAIL FROM ('' — пустой отправитель). */
+    smtp: { enabled: boolean; helo: string; from: string };
     keys: { hibp: string; breachDirectory: string; intelx: string; emailrep: string; hunter: string };
     intelxUrl: string;
   };
@@ -429,6 +441,11 @@ export function loadConfig(): AppConfig {
       rdap: c['email-search'].rdap,
       pastes: c['email-search'].pastes,
       web: c['email-search']['web-mentions'],
+      smtp: {
+        enabled: c['email-search']['smtp-check'],
+        helo: c['email-search']['smtp-helo'].trim() || hostname(),
+        from: c['email-search']['smtp-from'].trim(),
+      },
       keys: {
         hibp: c['email-search']['hibp-key'],
         breachDirectory: c['email-search']['breachdirectory-key'],

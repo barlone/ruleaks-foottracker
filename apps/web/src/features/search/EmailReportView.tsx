@@ -3,8 +3,8 @@ import { Link } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { AtSign, Building2, Database, FileWarning, Globe, KeyRound, Network, ScrollText, ShieldAlert, UserCheck } from 'lucide-react';
 import {
-  EMAIL_DOMAIN_KINDS, EMAIL_PARTS, EMAILREP_FLAGS, HIBP_DATA_CLASSES, emailPartLabel,
-  type BreachDirectoryResult, type EmailDns, type EmailIpGeo, type EmailPartId, type EmailRdap, type EmailRep, type EmailReport,
+  EMAIL_DOMAIN_KINDS, EMAIL_PARTS, EMAILREP_FLAGS, HIBP_DATA_CLASSES, MAILBOX_REASONS, emailPartLabel,
+  type BreachDirectoryResult, type EmailDns, type EmailMailbox, type EmailIpGeo, type EmailPartId, type EmailRdap, type EmailRep, type EmailReport,
   type EmailSection, type EmailSites, type EmailWeb, type HibpBreach, type HunterDomain, type HunterEmail, type IntelxResult, type PasteDump,
 } from '@ft/shared';
 import { Card, CopyButton, Tag, WarnNote } from '../../components/ui.tsx';
@@ -54,6 +54,11 @@ export function EmailReportView({ report, pagesEnabled }: { report: EmailReport;
             {ok(r.dns)?.exists === false && <Tag tone="danger" className="ml-1.5">домена не существует</Tag>}
             {ok(r.dns)?.nullMx && <Tag tone="warn" className="ml-1.5">домен не принимает почту</Tag>}
           </Row>
+          {r.mailbox.status !== 'skipped' && (
+            <Row label="Ящик">
+              {r.mailbox.status === 'error' ? <span className="text-sm text-danger">{r.mailbox.error}</span> : <MailboxView box={r.mailbox.data} />}
+            </Row>
+          )}
           <Row label="Найдено">
             <div className="flex flex-wrap gap-1.5">
               {r.google.status === 'ok' && <Tag tone={google?.found ? 'mint' : 'dim'}>{google?.found ? 'аккаунт Google' : 'аккаунта Google нет'}{google?.demo ? ' (имитация)' : ''}</Tag>}
@@ -114,6 +119,39 @@ export function EmailReportView({ report, pagesEnabled }: { report: EmailReport;
         </Card>
       )}
     </>
+  );
+}
+
+// ---------- Существование ящика ----------
+
+const MAILBOX_TAG: Record<EmailMailbox['verdict'], { label: string; tone: 'mint' | 'danger' | 'warn' | 'dim' }> = {
+  exists: { label: 'существует', tone: 'mint' },
+  missing: { label: 'не существует', tone: 'danger' },
+  catchall: { label: 'проверить нельзя', tone: 'warn' },
+  unknown: { label: 'не удалось проверить', tone: 'dim' },
+};
+
+/** Что ответил почтовый сервер домена на вопрос о получателе (SMTP до RCPT TO, письмо не отправлялось). */
+function MailboxView({ box }: { box: EmailMailbox }) {
+  const tag = MAILBOX_TAG[box.verdict];
+  return (
+    <div className="space-y-1">
+      <div>
+        <Tag tone={tag.tone}>{tag.label}</Tag>
+        <span className="ml-2 text-sm text-dim">{MAILBOX_REASONS[box.reason]}</span>
+      </div>
+      {box.verdict === 'exists' && box.catchAll === false && (
+        <div className="text-xs text-mute">Случайный адрес того же домена сервер отверг — значит, он различает существующие ящики.</div>
+      )}
+      {box.verdict === 'exists' && box.catchAll === null && box.reason === 'accepted' && (
+        <div className="text-xs text-mute">Проверить, не принимает ли сервер любые адреса, не удалось — вывод менее надёжен.</div>
+      )}
+      {box.mx && (
+        <div className="font-mono text-[11px] text-mute">
+          {box.mx}{box.tls ? ' · TLS' : ''}{box.code ? ` · ${box.code}` : ''}{box.reply ? ` ${box.reply}` : ''}
+        </div>
+      )}
+    </div>
   );
 }
 

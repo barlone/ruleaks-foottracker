@@ -386,6 +386,15 @@ Parts (`EMAIL_PARTS`, each an `EmailSection`: `ok` / `error` / `skipped` with a 
 - **dns** (`dns.ts`, system resolver, nothing leaves to third parties): MX (provider by host — `MX_PROVIDERS`, Gmail vs
   Google Workspace), null MX, A/AAAA/NS/TXT, SPF (`all` qualifier, `include:`/`redirect=` → known senders), DMARC
   policy, `spoofable` (no DMARC enforcement and SPF not `-all`, as EmailRep), verification TXT tokens → services.
+- **mailbox** (`smtp.ts`, off by default — `[email-search] smtp-check`): does the mailbox exist — the method of
+  [deep-email-validator](https://github.com/mfbx9da4/deep-email-validator) (MIT) ported, not installed: connect to the
+  MX on port 25, EHLO (+ STARTTLS when offered), `MAIL FROM`, `RCPT TO`, no message sent. Added over the library:
+  a second `RCPT TO` for a random name (accepted too → `catchall`, nothing can be said), 4xx and anti-spam 5xx are
+  `unknown` (`greylist` / `blocked`), not «missing», a refused connection is `no-connect` (outbound port 25 closed),
+  multi-line replies, only public IPs from DNS (`isPublicIp`). Verdict + reason are `EmailMailbox` / `MAILBOX_REASONS`
+  in `@ft/shared`; connection trouble is a verdict, not a part error. `smtp-helo` should equal the server's PTR name,
+  `smtp-from` a real address whose SPF allows the server; the target's mail server logs our IP. Verified against a
+  fake SMTP server (12 scenarios) and one live Gmail «no such user» over STARTTLS.
 - **rdap** (`rdap.ts`): rdap.org bootstrap via `pages/outbound.ts` (it redirects to the registry); the domain and its
   parents; `.ru`/`.рф`/`.su` have no RDAP → `null`. Replaces EmailRep's domain age without a key.
 - **ipgeo** (`ipgeo.ts`): ipapi.co for the domain A and the primary MX host, public IPs only, sequential.

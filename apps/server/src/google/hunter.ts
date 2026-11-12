@@ -1,11 +1,11 @@
 import {
   GOOGLE_ACCOUNT_MODES, parseBssids, parseDalQuery, parseDriveRef,
-  type GoogleDriveReport, type GoogleEmailReport, type GoogleGaiaReport, type GoogleGeoReport, type GoogleModeId, type GoogleReport,
-  type GoogleSection, type GoogleStepId,
+  type GoogleDriveReport, type GoogleEmailReport, type GoogleEmailStep, type GoogleGaiaReport, type GoogleGeoReport, type GoogleModeId,
+  type GoogleReport, type GoogleSection, type GoogleStepId,
 } from '@ft/shared';
 import { publicCalendar } from './calendar.ts';
 import { spiderDal } from './dal.ts';
-import { DemoHunter } from './demo.ts';
+import { DemoHunter, demoGoogleEmail } from './demo.ts';
 import { driveChildCount, driveComments, driveFile, driveSourceApp } from './drive.ts';
 import { geolocate, reverseGeocode } from './geolocate.ts';
 import { mapsStats } from './maps.ts';
@@ -14,10 +14,11 @@ import { lookupByEmail, lookupByGaia } from './people.ts';
 import { playerByEmail } from './playgames.ts';
 import type { GoogleSession } from './session.ts';
 
-// Исполнитель «Поиска по Google»: виды поиска — модули GHunt (modules/email.py, gaia.py, drive.py, geolocate.py,
-// spiderdal.py). Основа каждого вида — один запрос (профиль, файл, координаты, обход связей): его ошибка проваливает
-// поиск. Остальное собирается следом, каждое своим запросом, как GoogleSection — сбой одной части не трогает другие.
-// Видам со служебным аккаунтом (e-mail, Gaia ID, Drive) без мастер-токена отвечает имитация (demo.ts).
+// Исполнитель «Поиска по Google»: виды поиска — модули GHunt (modules/gaia.py, drive.py, geolocate.py, spiderdal.py).
+// Основа каждого вида — один запрос (профиль, файл, координаты, обход связей): его ошибка проваливает поиск.
+// Остальное собирается следом, каждое своим запросом, как GoogleSection — сбой одной части не трогает другие.
+// Видам со служебным аккаунтом (Gaia ID, Drive) без мастер-токена отвечает имитация (demo.ts).
+// modules/email.py — huntGoogleEmail: часть отчёта «Поиска по Email» (apps/server/src/email).
 
 export interface GoogleHunter {
   /** Виды, которые сейчас отвечают имитацией (нет мастер-токена). */
@@ -42,6 +43,50 @@ export function googleErrorText(e: unknown): string {
   }
 }
 
+/** Часть отчёта своим запросом: сбой — текст ошибки в части (подробности — в журнал), отмена — дальше. */
+async function googleSection<T>(what: string, ctx: Ctx, log: (msg: string) => void, run: () => Promise<T>): Promise<GoogleSection<T>> {
+  try {
+    return { status: 'ok', data: await run() };
+  } catch (e) {
+    if (ctx.signal.aborted) throw e;
+    log(`google: ${what} — ${(e as Error)?.message ?? String(e)}`);
+    return { status: 'error', error: googleErrorText(e) };
+  }
+}
+
+/**
+ * modules/email.py: профиль по адресу (обязательный запрос — его ошибка бросается), затем Play Игры, Карты и
+ * публичный календарь. session = null — мастер-токена нет: отвечает имитация.
+ */
+export async function huntGoogleEmail(
+  session: GoogleSession | null, email: string, ctx: Ctx, onStep: (step: GoogleEmailStep) => void, log: (msg: string) => void,
+): Promise<GoogleEmailReport> {
+  if (!session) return demoGoogleEmail(email, ctx, onStep);
+  const skipped = { status: 'skipped' } as const;
+  const report: GoogleEmailReport = { mode: 'email', email, found: false, containers: [], profile: null, playGames: skipped, maps: skipped, calendar: skipped, demo: false };
+
+  onStep('auth');
+  await session.sessionCookies(ctx);
+
+  onStep('people');
+  const person = await lookupByEmail(session, email, ctx);
+  if (!person) return report;
+  report.found = true;
+  report.containers = person.containers;
+  report.profile = person.profile;
+  // Нет контейнера PROFILE — адрес есть только в контактах служебного аккаунта: публичного аккаунта Google нет.
+  if (!person.profile) return report;
+  const { gaiaId, name } = person.profile;
+
+  onStep('playgames');
+  report.playGames = await googleSection('Play Игры', ctx, log, () => playerByEmail(session, email, ctx));
+  onStep('maps');
+  report.maps = await googleSection('Карты', ctx, log, () => mapsStats(gaiaId, ctx));
+  onStep('calendar');
+  report.calendar = await googleSection('Календарь', ctx, log, () => publicCalendar(session, email, name, ctx));
+  return report;
+}
+
 export class GhuntHunter implements GoogleHunter {
   readonly demoModes: readonly GoogleModeId[];
   private readonly session: GoogleSession | null;
@@ -58,7 +103,6 @@ export class GhuntHunter implements GoogleHunter {
   run(mode: GoogleModeId, query: string, ctx: Ctx, onStep: (step: GoogleStepId) => void): Promise<GoogleReport> {
     if (!this.session && GOOGLE_ACCOUNT_MODES.includes(mode)) return this.demo.run(mode, query, ctx, onStep);
     switch (mode) {
-      case 'email': return this.email(this.session!, query, ctx, onStep);
       case 'gaia': return this.gaia(this.session!, query, ctx, onStep);
       case 'drive': return this.drive(this.session!, query, ctx, onStep);
       case 'geolocate': return this.geolocate(query, ctx, onStep);
@@ -70,41 +114,8 @@ export class GhuntHunter implements GoogleHunter {
     }
   }
 
-  private async section<T>(what: string, ctx: Ctx, run: () => Promise<T>): Promise<GoogleSection<T>> {
-    try {
-      return { status: 'ok', data: await run() };
-    } catch (e) {
-      if (ctx.signal.aborted) throw e;
-      this.opts.log(`google: ${what} — ${(e as Error)?.message ?? String(e)}`);
-      return { status: 'error', error: googleErrorText(e) };
-    }
-  }
-
-  /** modules/email.py. */
-  private async email(session: GoogleSession, email: string, ctx: Ctx, onStep: (step: GoogleStepId) => void): Promise<GoogleEmailReport> {
-    const skipped = { status: 'skipped' } as const;
-    const report: GoogleEmailReport = { mode: 'email', email, found: false, containers: [], profile: null, playGames: skipped, maps: skipped, calendar: skipped, demo: false };
-
-    onStep('auth');
-    await session.sessionCookies(ctx);
-
-    onStep('people');
-    const person = await lookupByEmail(session, email, ctx);
-    if (!person) return report;
-    report.found = true;
-    report.containers = person.containers;
-    report.profile = person.profile;
-    // Нет контейнера PROFILE — адрес есть только в контактах служебного аккаунта: публичного аккаунта Google нет.
-    if (!person.profile) return report;
-    const { gaiaId, name } = person.profile;
-
-    onStep('playgames');
-    report.playGames = await this.section('Play Игры', ctx, () => playerByEmail(session, email, ctx));
-    onStep('maps');
-    report.maps = await this.section('Карты', ctx, () => mapsStats(gaiaId, ctx));
-    onStep('calendar');
-    report.calendar = await this.section('Календарь', ctx, () => publicCalendar(session, email, name, ctx));
-    return report;
+  private section<T>(what: string, ctx: Ctx, run: () => Promise<T>): Promise<GoogleSection<T>> {
+    return googleSection(what, ctx, this.opts.log, run);
   }
 
   /** modules/gaia.py: профиль и Карты; Play Игры и календарь ищутся по адресу, его здесь нет. */

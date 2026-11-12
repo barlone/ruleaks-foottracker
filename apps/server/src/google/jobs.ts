@@ -1,11 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { GOOGLE_STEPS, type GoogleModeId, type GoogleReport, type GoogleStepId } from '@ft/shared';
+import { googleSlot } from './account.ts';
 import { googleErrorText, type GoogleHunter } from './hunter.ts';
 
 // Задания «Поиска по Google» — в памяти сервера, как у поиска личных страниц: результат нужен тому, кто искал,
 // перезапуск сервера всё забывает. Все запросы идут от одного служебного аккаунта Google, поэтому поиски
-// выполняются строго по очереди, с паузой между ними: частые запросы Google карает блокировкой аккаунта
-// и адреса сервера. У пользователя — один незавершённый поиск (новый снимает прежний).
+// выполняются строго по очереди, с паузой между ними (googleSlot — общая с «Поиском по Email» очередь): частые
+// запросы Google карает блокировкой аккаунта и адреса сервера. У пользователя — один незавершённый поиск (новый
+// снимает прежний).
 
 export type GoogleJobState = 'running' | 'done' | 'failed' | 'cancelled';
 
@@ -71,9 +73,6 @@ export class GoogleBusy extends Error {
 }
 
 const jobs = new Map<string, Job>();
-/** Очередь: каждое задание ждёт окончания предыдущего. */
-let tail: Promise<void> = Promise.resolve();
-let lastRunAt = 0;
 
 function sweep() {
   const now = Date.now();
@@ -91,33 +90,19 @@ function finish(job: Job, state: Exclude<GoogleJobState, 'running'>) {
   job.touched = Date.now();
 }
 
-const sleep = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve) => {
-    if (signal.aborted) return resolve();
-    const t = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
-      clearTimeout(t);
-      resolve();
-    }, { once: true });
-  });
-
 async function run(job: Job, hunter: GoogleHunter, opts: GoogleJobsOptions) {
   const { signal } = job.ctrl;
-  await sleep(lastRunAt + opts.minIntervalMs - Date.now(), signal);
-  if (signal.aborted) return;
   try {
-    job.report = await hunter.run(job.mode, job.query, { timeoutMs: opts.timeoutMs, signal }, (step) => {
+    job.report = await googleSlot(opts.minIntervalMs, signal, () => hunter.run(job.mode, job.query, { timeoutMs: opts.timeoutMs, signal }, (step) => {
       job.step = step;
       job.touched = Date.now();
-    });
+    }));
     finish(job, signal.aborted ? 'cancelled' : 'done');
   } catch (e) {
     if (signal.aborted) return finish(job, 'cancelled');
     opts.log(`google: поиск не удался — ${(e as Error)?.message ?? String(e)}`);
     job.error = googleErrorText(e);
     finish(job, 'failed');
-  } finally {
-    lastRunAt = Date.now();
   }
 }
 
@@ -141,7 +126,7 @@ export function startJob(userId: string, mode: GoogleModeId, query: string, hunt
     touched: Date.now(),
   };
   jobs.set(job.id, job);
-  tail = tail.then(() => run(job, hunter, opts)).catch(() => finish(job, 'failed'));
+  void run(job, hunter, opts).catch(() => finish(job, 'failed'));
   return view(job);
 }
 

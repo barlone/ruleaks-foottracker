@@ -1,14 +1,19 @@
 import { createContext, useContext } from 'react';
 import type { GoogleModeId } from '@ft/shared';
 
-// «Искать дальше» в поиске по Google: из результата одного вида (участник файла Drive, профиль) запускается поиск
-// другого вида (по e-mail, по Gaia ID) прямо на этой странице. Страница кладёт в контекст свою функцию запуска.
+// «Искать дальше»: из результата (участник файла Drive, профиль аккаунта) запускается следующий поиск — по Gaia ID
+// в «Поиске по Google», по адресу в «Поиске по Email». Страница раздела кладёт в контекст свою функцию запуска:
+// тогда поиск идёт прямо на ней; без контекста (undefined) кнопка ведёт на страницу раздела. null — раздел есть,
+// но искать нельзя (нет подписки): кнопки нет.
 
 export type GoogleRun = (mode: GoogleModeId, query: string) => void;
+export type EmailRun = (email: string) => void;
 
-export const GoogleRunContext = createContext<GoogleRun | null>(null);
+export const GoogleRunContext = createContext<GoogleRun | null | undefined>(undefined);
+export const EmailRunContext = createContext<EmailRun | null | undefined>(undefined);
 
 export const useGoogleRun = () => useContext(GoogleRunContext);
+export const useEmailRun = () => useContext(EmailRunContext);
 
 /** Адрес картинки Google покрупнее: суффикс размера =s100 → =s1024. Адрес data: (имитация) не трогаем. */
 export const bigPhoto = (url: string) => (url.startsWith('https://') ? url.replace(/=s\d+[^=/]*$/, '=s1024') : url);

@@ -2,22 +2,22 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { GOOGLE_MODE_IDS, GOOGLE_QUERY_MAX, googleQueryProblem, normalizeGoogleQuery } from '@ft/shared';
 import { appConfig } from '../config.ts';
+import { googleSession } from '../google/account.ts';
 import { GhuntHunter, type GoogleHunter } from '../google/hunter.ts';
 import { cancelJob, getJob, GoogleBusy, recentJobs, startJob } from '../google/jobs.ts';
-import { GoogleSession } from '../google/session.ts';
 import { activeProcedure, authedProcedure, router } from '../trpc.ts';
 
 // «Поиск по Google» — перенос GHunt (apps/server/src/google). Запросы к Google делает сервер; виды со служебным
 // аккаунтом ([google-search] master-token) — от его имени, без токена они отвечают имитацией (google/demo.ts),
 // а Wi-Fi BSSID и Digital Asset Links ходят в открытые API и работают всегда. Задание живёт в памяти
 // (google/jobs.ts), браузер его опрашивает. Раздел выключается флагом [config] google-search: config → null,
-// остальное — GOOGLE_DISABLED.
+// остальное — GOOGLE_DISABLED. Поиск аккаунта по адресу (ghunt email) — в «Поиске по Email» (routers/email.ts).
 
 const google = appConfig.google;
 const log = (msg: string) => console.log(msg);
 
 const hunter: GoogleHunter | null = google.enabled
-  ? new GhuntHunter(google.masterToken ? new GoogleSession(google.masterToken, log) : null, { reverseGeocodeUrl: google.reverseGeocodeUrl, log })
+  ? new GhuntHunter(googleSession(), { reverseGeocodeUrl: google.reverseGeocodeUrl, log })
   : null;
 
 const JobId = z.string().min(1).max(64);

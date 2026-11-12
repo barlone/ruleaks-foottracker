@@ -22,7 +22,8 @@
   ghunt/apis/geolocation.py, parsers/geolocate.py → geolocate.ts
   ghunt/apis/digitalassetslinks.py, parsers/…,
   helpers/playstore.py                      → dal.ts
-  ghunt/modules/{email,gaia,drive,geolocate,spiderdal}.py → hunter.ts
+  ghunt/modules/{email,gaia,drive,geolocate,spiderdal}.py → hunter.ts (email — huntGoogleEmail, часть отчёта
+                                            «Поиска по Email», ../email; очередь и сессия аккаунта — account.ts)
   ghunt/modules/login.py                    → ../tools/google-login.ts
 
 AGPL-3.0 — «заразная» лицензия с сетевой оговоркой (§13): производная работа, с которой пользователи

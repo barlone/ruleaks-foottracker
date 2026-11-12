@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { Navigate, useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { CalendarDays, FolderPlus, Gamepad2, HardDrive, History, IdCard, Link2, Mail, MapPinned, Wifi } from 'lucide-react';
+import { FolderPlus, HardDrive, History, IdCard, Link2, Wifi } from 'lucide-react';
 import {
   GHUNT_URL, GOOGLE_MODES, GOOGLE_QUERY_MAX, GOOGLE_STEPS, findGoogleMode, googleQueryProblem,
-  type GoogleCalendar, type GoogleEmailReport, type GoogleGaiaReport, type GoogleModeId, type GooglePlayer, type GoogleReport,
+  type GoogleModeId, type GoogleReport,
 } from '@ft/shared';
 import { ProgressDialog } from '../../components/ProgressDialog.tsx';
-import { Button, Card, CopyButton, Empty, Input, Spinner, Tag, WarnNote } from '../../components/ui.tsx';
+import { Button, Card, Empty, Input, Spinner, Tag, WarnNote } from '../../components/ui.tsx';
 import { errorText } from '../../lib/errors.ts';
-import { ago, fmtUtc } from '../../lib/format.ts';
+import { ago } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { AddPagesDialog, type PendingPage } from './AddPagesDialog.tsx';
@@ -17,24 +17,28 @@ import { SearchLayout } from './common.tsx';
 import { GoogleDalResult } from './GoogleDalResult.tsx';
 import { GoogleDriveResult } from './GoogleDriveResult.tsx';
 import { GoogleGeoResult } from './GoogleGeoResult.tsx';
-import { Ext, MapsView, Mono, None, Photo, ProfileCard, Row, SectionCard } from './GoogleParts.tsx';
-import { durationText, GoogleRunContext } from './googleSearch.ts';
+import { AccountResult } from './GoogleParts.tsx';
+import { GoogleRunContext } from './googleSearch.ts';
 import { useRunOnMount } from './job.ts';
 
 // «Поиск по Google» — перенос GHunt: сервер собирает сведения (google.start), страница раз в секунду спрашивает ход
 // работы (google.job) и показывает отчёт. Виды поиска — кнопки над строкой ввода (GOOGLE_MODES, модули GHunt).
-// Из найденного (участник файла, профиль) можно сразу искать дальше — по e-mail или Gaia ID (GoogleRunContext).
+// Из найденного (участник файла, профиль) можно сразу искать дальше — по Gaia ID здесь же (GoogleRunContext),
+// по адресу — в «Поиске по Email» (туда же переехал вид «по e-mail»: ссылки ?mode=email ведут туда).
 
 type Job = RouterOutputs['google']['job'];
 
-const MODE_ICON: Record<GoogleModeId, typeof Mail> = { email: Mail, gaia: IdCard, drive: HardDrive, geolocate: Wifi, spiderdal: Link2 };
+const MODE_ICON: Record<GoogleModeId, typeof IdCard> = { gaia: IdCard, drive: HardDrive, geolocate: Wifi, spiderdal: Link2 };
 
-/** Вид поиска из адреса страницы; неизвестный — по e-mail. */
-const modeOf = (id: string | undefined): GoogleModeId => (id && findGoogleMode(id)?.id) || 'email';
+/** Вид поиска из адреса страницы; неизвестный — по Gaia ID. */
+const modeOf = (id: string | undefined): GoogleModeId => (id && findGoogleMode(id)?.id) || 'gaia';
 
 export function GoogleSearchPage() {
+  const params = useSearch({ from: '/search/google' });
   // null — раздел выключен в config.ini ([config] google-search).
   const cfg = trpc.google.config.useQuery(undefined, { staleTime: Infinity });
+  // Поиск по адресу переехал в «Поиск по Email» — старые ссылки ведут туда.
+  if (params.mode === 'email') return <Navigate to="/search/email" search={{ q: params.q }} replace />;
   if (cfg.isLoading) {
     return (
       <div className="grid h-full place-items-center">
@@ -123,11 +127,11 @@ function GoogleSearch({ demoModes }: { demoModes: GoogleModeId[] }) {
             <a href={GHUNT_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">GHunt</a>
           </div>
         )}
-        subtitle="Что Google раскрывает об аккаунте, файле Drive, точке доступа Wi-Fi и связях сайтов с приложениями."
+        subtitle="Что Google раскрывает об аккаунте по Gaia ID, файле Drive, точке доступа Wi-Fi и связях сайтов с приложениями. Аккаунт по адресу почты — в «Поиске по Email»."
         history={<GoogleHistory activeId={jobId} onOpen={setJobId} />}
       >
         {demoModes.includes(mode) && (
-          <WarnNote>Режим имитации: служебный аккаунт Google на сервере не настроен — ответы по e-mail, Gaia ID и файлу Drive вымышленные.</WarnNote>
+          <WarnNote>Режим имитации: служебный аккаунт Google на сервере не настроен — ответы по Gaia ID и файлу Drive вымышленные.</WarnNote>
         )}
         <Card className="animate-fade-up">
           <div className="mb-4 flex flex-wrap gap-1.5">
@@ -236,13 +240,11 @@ function GoogleHistory({ activeId, onOpen }: { activeId: string | null; onOpen: 
 /** Что показать в верхней панели отчёта и какие ссылки можно унести в досье. */
 function summaryOf(r: GoogleReport): { text: string; links: PendingPage[]; title: string } {
   switch (r.mode) {
-    case 'email':
     case 'gaia': {
       const links: PendingPage[] = [];
       if (r.maps.status === 'ok' && r.maps.data.state === 'ok') links.push({ site: 'Google Карты', url: r.maps.data.profileUrl });
-      if (r.mode === 'email' && r.calendar.status === 'ok' && r.calendar.data.icsUrl) links.push({ site: 'Google Календарь', url: r.calendar.data.icsUrl });
       const extra = r.containers.length > 1 ? ` · контейнеры: ${r.containers.join(', ')}` : '';
-      return { text: r.profile ? `аккаунт найден · Gaia ID ${r.profile.gaiaId}${extra}` : 'аккаунт найден', links, title: r.mode === 'email' ? r.email : r.gaiaId };
+      return { text: r.profile ? `аккаунт найден · Gaia ID ${r.profile.gaiaId}${extra}` : 'аккаунт найден', links, title: r.gaiaId };
     }
     case 'drive':
       return {
@@ -302,7 +304,6 @@ function GoogleResult({ job, loading, error }: { job: Job | undefined; loading: 
         </div>
       )}
 
-      {report.mode === 'email' && <AccountResult report={report} />}
       {report.mode === 'gaia' && <AccountResult report={report} />}
       {report.mode === 'drive' && <GoogleDriveResult report={report} />}
       {report.mode === 'geolocate' && <GoogleGeoResult report={report} />}
@@ -310,108 +311,5 @@ function GoogleResult({ job, loading, error }: { job: Job | undefined; loading: 
 
       <AddPagesDialog open={!!adding} onOpenChange={(v) => !v && setAdding(null)} pages={adding ?? []} username={title} note={`Поиск по Google (${mode.label.toLowerCase()}): ${job.query}`} />
     </>
-  );
-}
-
-/** Отчёт по аккаунту: по e-mail (профиль, Play Игры, Карты, календарь) или по Gaia ID (профиль, Карты). */
-function AccountResult({ report }: { report: GoogleEmailReport | GoogleGaiaReport }) {
-  const what = report.mode === 'email' ? `на адрес ${report.email}` : `с Gaia ID ${report.gaiaId}`;
-  if (!report.found) return <Empty>Аккаунт Google {what} не найден.</Empty>;
-  if (!report.profile) {
-    return (
-      <Card>
-        <div className="text-sm text-warn">
-          Публичного аккаунта Google {what} нет: он встречается только в данных служебного аккаунта
-          {report.containers.length > 0 && <> (контейнеры: {report.containers.join(', ')})</>}.
-        </div>
-      </Card>
-    );
-  }
-  return (
-    <>
-      <ProfileCard profile={report.profile} asked={report.mode === 'email' ? report.email : null} />
-      <div className="grid items-start gap-6 2xl:grid-cols-2">
-        {report.mode === 'email' && <SectionCard title="Play Игры" icon={<Gamepad2 size={13} />} section={report.playGames}>{(p) => <PlayerView player={p} />}</SectionCard>}
-        <SectionCard title="Карты Google" icon={<MapPinned size={13} />} section={report.maps}>{(m) => <MapsView maps={m} />}</SectionCard>
-      </div>
-      {report.mode === 'email' && <SectionCard title="Календарь" icon={<CalendarDays size={13} />} section={report.calendar}>{(c) => <CalendarView calendar={c} />}</SectionCard>}
-      {report.mode === 'gaia' && (
-        <p className="font-mono text-[11px] text-mute">Play Игры и календарь ищутся по адресу почты: если он есть в профиле выше, нажмите на значок поиска рядом с ним.</p>
-      )}
-    </>
-  );
-}
-
-function PlayerView({ player }: { player: GooglePlayer | null }) {
-  if (!player) return <None>Игрового профиля на этот адрес нет.</None>;
-  return (
-    <div className="flex gap-4">
-      {player.avatarUrl && <Photo url={player.avatarUrl} alt="Аватар игрока" className="size-16" />}
-      <div className="min-w-0 flex-1 divide-y divide-line-soft">
-        <Row label="Имя игрока">{player.name || <None />}{player.gamerTag && player.gamerTag !== player.name && <span className="ml-2 font-mono text-xs text-dim">{player.gamerTag}</span>}</Row>
-        <Row label="ID игрока">
-          <span className="inline-flex items-center gap-2"><Mono>{player.id}</Mono><CopyButton value={player.id} title="Скопировать ID игрока" /></span>
-        </Row>
-        {!player.visible ? (
-          <Row label="Профиль"><None>закрыт — игры и достижения не видны</None></Row>
-        ) : (
-          <>
-            {(player.level !== null || player.title) && (
-              <Row label="Уровень">{player.level ?? '—'}{player.title && <span className="ml-2 text-dim">«{player.title}»</span>}{player.xp && <span className="ml-2 font-mono text-xs text-mute">{player.xp} XP</span>}</Row>
-            )}
-            <Row label="Игр / достижений">{player.playedGames} / {player.achievements}</Row>
-            {player.lastPlayed && (
-              <Row label="Последняя игра">{player.lastPlayed.name}{player.lastPlayed.at && <span className="ml-2 font-mono text-xs text-mute">{fmtUtc(player.lastPlayed.at)} UTC</span>}</Row>
-            )}
-            {player.topGame && <Row label="Больше всего достижений">{player.topGame.name} <span className="font-mono text-xs text-mute">({player.topGame.achievements})</span></Row>}
-            {player.games.length > 0 && (
-              <Row label="Игры">
-                <div className="space-y-0.5">
-                  {player.games.map((g, i) => (
-                    <div key={i} className="flex flex-wrap items-baseline gap-x-2">
-                      <span>{g.name}</span>
-                      <span className="font-mono text-[11px] text-mute">{g.lastPlayed ? fmtUtc(g.lastPlayed) : ''}{g.achievements ? ` · достижений ${g.achievements}` : ''}</span>
-                    </div>
-                  ))}
-                  {player.playedGames > player.games.length && <div className="font-mono text-[11px] text-mute">…и ещё {player.playedGames - player.games.length}</div>}
-                </div>
-              </Row>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CalendarView({ calendar }: { calendar: GoogleCalendar }) {
-  if (!calendar.found) return <None>Публичного календаря нет.</None>;
-  return (
-    <div className="divide-y divide-line-soft">
-      <Row label="ID календаря"><span className="font-mono">{calendar.id ?? '—'}</span></Row>
-      {calendar.summary && <Row label="Название">{calendar.summary}</Row>}
-      <Row label="Часовой пояс">{calendar.timeZone ?? <None />}</Row>
-      {calendar.otherNames.length > 0 && (
-        <Row label="Другие имена владельца">
-          <div className="flex flex-wrap gap-1.5">{calendar.otherNames.map((n) => <Tag key={n} tone="info">{n}</Tag>)}</div>
-        </Row>
-      )}
-      {calendar.icsUrl && <Row label="Выгрузка (.ics)"><Ext href={calendar.icsUrl}>{calendar.icsUrl}</Ext></Row>}
-      <Row label={`События: ${calendar.total}`}>
-        {!calendar.events.length ? <None>событий нет</None> : (
-          <div className="space-y-1">
-            {calendar.events.map((e, i) => (
-              <div key={i} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="w-36 shrink-0 font-mono text-[11px] text-mute">{e.start ? `${fmtUtc(e.start)} UTC` : 'весь день'}</span>
-                {e.link ? <a href={e.link} target="_blank" rel="noreferrer" className="hover:text-mint hover:underline">{e.title ?? 'без названия'}</a> : <span>{e.title ?? 'без названия'}</span>}
-                {durationText(e.start, e.end) && <span className="font-mono text-[11px] text-mute">{durationText(e.start, e.end)}</span>}
-                {e.location && <span className="text-xs text-dim">· {e.location}</span>}
-              </div>
-            ))}
-            {calendar.total > calendar.events.length && <div className="font-mono text-[11px] text-mute">Показаны последние {calendar.events.length}.</div>}
-          </div>
-        )}
-      </Row>
-    </div>
   );
 }

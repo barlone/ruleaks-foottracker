@@ -274,7 +274,8 @@ export async function checkEmailSite(site: EmailSite, email: string, opts: Check
     if (isWafChallenge(res, text)) return { ...base, status: 'waf', httpStatus: http, ms: ms() };
 
     // blackbird: занят, если код = eCode, в теле есть eString, нет mString и код не равен mCode.
-    const claimed = http === site.eCode && text.includes(site.eString)
+    // eCode 0 — код ответа не важен (holehe-проверки, где сайт отвечает ошибкой формы то 200, то 400).
+    const claimed = (site.eCode === 0 || http === site.eCode) && text.includes(site.eString)
       && (!site.mString || !text.includes(site.mString))
       && (site.mCode === null || http !== site.mCode);
     return { ...base, status: claimed ? 'claimed' : 'available', httpStatus: http, ms: ms() };

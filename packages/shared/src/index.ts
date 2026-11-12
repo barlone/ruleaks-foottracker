@@ -3,6 +3,7 @@ export * from './settings.ts';
 export * from './itemIdentity.ts';
 export * from './search.ts';
 export * from './google.ts';
+export * from './email.ts';
 export * from './attrTypes.ts';
 export * from './media.ts';
 export * from './highlight.ts';

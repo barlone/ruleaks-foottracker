@@ -7,7 +7,7 @@ import { z } from 'zod';
 // ответу понять, занят ли e-mail. Описание сайта (как в blackbird):
 //   uriCheck  — что запросить ({account} — адрес или его преобразование inputOp);
 //   method/data/headers — особенности запроса (data — тело POST, {account} внутри тоже подставляется);
-//   eCode + eString — «e-mail занят»: такой код ответа и такая строка в теле;
+//   eCode + eString — «e-mail занят»: такой код ответа (0 — любой) и такая строка в теле;
 //   mCode + mString — «свободен»: такой код ответа или такая строка в теле;
 //   inputOp   — преобразование адреса перед подстановкой (sha256 — например, Gravatar);
 //   preCheck  — сначала сходить за cookie и подставить её значение в заголовки (плейсхолдер {<cookieName>_value}).
@@ -115,6 +115,33 @@ const EXTRA: EmailSite[] = [
     nsfw: false,
     // Первый шаг восстановления только перечисляет доступные способы; писем и SMS он не шлёт (так работает holehe,
     // который заявляет, что цель не оповещается).
+    sideEffect: false,
+  },
+  // Instagram — модуль social/instagram MOSINT (и holehe): cookie csrftoken со страницы регистрации, затем проверка
+  // формы регистрации web_create_ajax/attempt — «попытка» только проверяет поля (учётка не создаётся, пароля нет)
+  // и отвечает ошибкой email_is_taken, если адрес занят. Twitter и Spotify из MOSINT уже есть в манифесте blackbird.
+  {
+    name: 'Instagram',
+    urlMain: 'https://www.instagram.com',
+    method: 'POST',
+    uriCheck: 'https://www.instagram.com/api/v1/web/accounts/web_create_ajax/attempt/',
+    data: 'email={account}&first_name=&username=&opt_into_one_tap=false',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': '{csrftoken_value}',
+      Cookie: 'csrftoken={csrftoken_value}',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-IG-App-ID': '936619743392459',
+      Origin: 'https://www.instagram.com',
+      Referer: 'https://www.instagram.com/accounts/emailsignup/',
+    },
+    eCode: 0,
+    eString: 'email_is_taken',
+    mCode: null,
+    mString: null,
+    inputOp: null,
+    preCheck: { url: 'https://www.instagram.com/accounts/emailsignup/', cookieName: 'csrftoken' },
+    nsfw: false,
     sideEffect: false,
   },
 ];

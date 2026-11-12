@@ -3,25 +3,19 @@
 
 export const GHUNT_URL = 'https://github.com/mxrch/GHunt';
 
-/** Запрос целиком: вмещает длинный e-mail или ссылку на файл Drive. */
+/** Запрос целиком: вмещает ссылку на файл Drive. */
 export const GOOGLE_QUERY_MAX = 512;
-/** Простая проверка на e-mail (как в поиске личных страниц). */
-export const GOOGLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Виды поиска — модули GHunt (ghunt/modules/*). account — нужен служебный аккаунт Google (мастер-токен):
  * без него такие виды отвечают имитацией; geolocate и spiderdal ходят в открытые API и аккаунт не используют.
+ * `ghunt email` — в разделе «Поиск по Email» (email.ts): там он часть общего отчёта по адресу.
  */
 export const GOOGLE_MODES = [
   {
-    id: 'email', label: 'По e-mail', account: true,
-    placeholder: 'ivan.petrov@gmail.com',
-    hint: 'Адрес Gmail или любой почты, на которую заведён аккаунт Google: Gaia ID, фото, сервисы, Play Игры, Карты, календарь.',
-  },
-  {
     id: 'gaia', label: 'По Gaia ID', account: true,
     placeholder: '102938475610293847561',
-    hint: 'Профиль по Gaia ID — 21-значному номеру аккаунта Google (его дают поиск по e-mail, отзывы на Картах, участники файлов Drive): фото, сервисы, Карты.',
+    hint: 'Профиль по Gaia ID — 21-значному номеру аккаунта Google (его дают поиск по Email, отзывы на Картах, участники файлов Drive): фото, сервисы, Карты.',
   },
   {
     id: 'drive', label: 'Файл Google Drive', account: true,
@@ -46,15 +40,18 @@ export const findGoogleMode = (id: string) => GOOGLE_MODES.find((m) => m.id === 
 /** Виды, которым нужен служебный аккаунт Google. */
 export const GOOGLE_ACCOUNT_MODES: readonly GoogleModeId[] = GOOGLE_MODES.filter((m) => m.account).map((m) => m.id);
 
+/** Шаги `ghunt email` (часть отчёта «Поиска по Email»). */
+export const GOOGLE_EMAIL_STEPS = [
+  { id: 'auth', label: 'Вход в Google' },
+  { id: 'people', label: 'Профиль аккаунта' },
+  { id: 'playgames', label: 'Play Игры' },
+  { id: 'maps', label: 'Карты Google' },
+  { id: 'calendar', label: 'Календарь' },
+] as const;
+export type GoogleEmailStep = (typeof GOOGLE_EMAIL_STEPS)[number]['id'];
+
 /** Шаги каждого вида в порядке выполнения — по ним идёт индикатор хода работы. */
 export const GOOGLE_STEPS = {
-  email: [
-    { id: 'auth', label: 'Вход в Google' },
-    { id: 'people', label: 'Профиль аккаунта' },
-    { id: 'playgames', label: 'Play Игры' },
-    { id: 'maps', label: 'Карты Google' },
-    { id: 'calendar', label: 'Календарь' },
-  ],
   gaia: [
     { id: 'auth', label: 'Вход в Google' },
     { id: 'people', label: 'Профиль аккаунта' },
@@ -77,9 +74,6 @@ export const GOOGLE_STEPS = {
   ],
 } as const satisfies Record<GoogleModeId, readonly { id: string; label: string }[]>;
 export type GoogleStepId = (typeof GOOGLE_STEPS)[GoogleModeId][number]['id'];
-/** Совместимость: шаги поиска по e-mail. */
-export const GOOGLE_EMAIL_STEPS = GOOGLE_STEPS.email;
-export type GoogleEmailStep = (typeof GOOGLE_STEPS.email)[number]['id'];
 
 // ---------- Разбор ввода ----------
 
@@ -176,7 +170,6 @@ export function googleQueryProblem(mode: GoogleModeId, raw: string): string | nu
   if (!q) return null;
   if (q.length > GOOGLE_QUERY_MAX) return `не длиннее ${GOOGLE_QUERY_MAX} символов`;
   switch (mode) {
-    case 'email': return GOOGLE_EMAIL_RE.test(q) ? null : 'нужен e-mail: имя@gmail.com';
     case 'gaia': return parseGaiaId(q) ? null : 'нужен Gaia ID — 21 цифра';
     case 'drive': return parseDriveRef(q) ? null : 'нужна ссылка на файл или папку Google Drive или их ID';
     case 'geolocate': return parseBssids(q) ? null : `нужен MAC-адрес точки доступа: 30:86:2d:c4:29:d0 (до ${GOOGLE_BSSID_MAX} через пробел)`;
@@ -191,7 +184,6 @@ export function googleQueryProblem(mode: GoogleModeId, raw: string): string | nu
 /** Запрос в том виде, в каком он уходит в поиск и в историю. */
 export function normalizeGoogleQuery(mode: GoogleModeId, raw: string): string {
   const q = raw.trim();
-  if (mode === 'email') return q.toLowerCase();
   if (mode === 'geolocate') return parseBssids(q)?.join(' ') ?? q;
   if (mode === 'spiderdal') {
     const d = parseDalQuery(q);
@@ -302,7 +294,7 @@ export interface GoogleCalendar {
 
 // ---------- Отчёты ----------
 
-/** `ghunt email`. */
+/** `ghunt email` — часть отчёта «Поиска по Email». */
 export interface GoogleEmailReport {
   mode: 'email';
   email: string;
@@ -447,4 +439,4 @@ export interface GoogleDalReport {
   demo: false;
 }
 
-export type GoogleReport = GoogleEmailReport | GoogleGaiaReport | GoogleDriveReport | GoogleGeoReport | GoogleDalReport;
+export type GoogleReport = GoogleGaiaReport | GoogleDriveReport | GoogleGeoReport | GoogleDalReport;

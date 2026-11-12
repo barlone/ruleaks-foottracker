@@ -85,6 +85,8 @@ const SECTIONS = {
     'pages-search': bool(true),
     /** Раздел «Поиск по Google» (перенос GHunt; аккаунт Google для запросов — секция [google-search]). */
     'google-search': bool(false),
+    /** Раздел «Поиск по Email» (GHunt + MOSINT; ключи сервисов — секция [email-search]). */
+    'email-search': bool(true),
   }),
   server: z.object({
     host: str('127.0.0.1'),
@@ -158,6 +160,31 @@ const SECTIONS = {
     /** Сервис обратного геокодирования (API Nominatim) для адреса точки Wi-Fi; пусто — адрес не определяется. */
     'reverse-geocode': str(NOMINATIM_PUBLIC),
   }),
+  'email-search': z.object({
+    /** Сколько ждать ответа одного внешнего сервиса. */
+    'timeout-sec': int(20, 1, 120),
+    /** Аккаунт Google по адресу (ghunt email) — от служебного аккаунта [google-search]; без мастер-токена — имитация. */
+    google: bool(true),
+    /** Регистрации на сайтах по адресу (blackbird, holehe, MOSINT) — настройки опроса из [pages-search]. */
+    sites: bool(true),
+    /** Геолокация серверов домена через ipapi.co (туда уходят IP-адреса домена). */
+    'ip-geo': bool(true),
+    /** Регистрация домена через RDAP (rdap.org). */
+    rdap: bool(true),
+    /** Дампы текстов psbdmp.ws (туда уходит адрес). Выключено: домен сервиса не разрешается (ноябрь 2026). */
+    pastes: bool(false),
+    /** Упоминания адреса в вебе: выдача DuckDuckGo (туда уходит адрес). */
+    'web-mentions': bool(true),
+    /** Ключи сервисов: пусто — часть отчёта не собирается. */
+    'hibp-key': str(),
+    /** Ключ RapidAPI с подпиской на BreachDirectory. */
+    'breachdirectory-key': str(),
+    'intelx-key': str(),
+    /** API Intelligence X: бесплатный ключ — free.intelx.io, платный — 2.intelx.io. */
+    'intelx-url': str('https://free.intelx.io'),
+    'emailrep-key': str(),
+    'hunter-key': str(),
+  }),
 };
 
 const Schema = z.object({
@@ -171,6 +198,7 @@ const Schema = z.object({
   'scanstore-api': SECTIONS['scanstore-api'].prefault({}),
   'pages-search': SECTIONS['pages-search'].prefault({}),
   'google-search': SECTIONS['google-search'].prefault({}),
+  'email-search': SECTIONS['email-search'].prefault({}),
 });
 
 type Raw = z.infer<typeof Schema>;
@@ -241,6 +269,22 @@ export interface AppConfig {
     enabled: boolean; masterToken: string; timeoutMs: number; minIntervalMs: number;
     /** Базовый адрес Nominatim для адреса точки Wi-Fi ('' — не определять). Туда уходят найденные координаты. */
     reverseGeocodeUrl: string;
+  };
+  /**
+   * Поиск по Email (GHunt + MOSINT). Ключи в браузер не уходят. google — часть «аккаунт Google» (сессия и пауза —
+   * из google); sites — регистрации на сайтах (таймаут, параллельность и пробы с побочным действием — из pages).
+   */
+  email: {
+    enabled: boolean;
+    timeoutMs: number;
+    google: boolean;
+    sites: boolean;
+    ipGeo: boolean;
+    rdap: boolean;
+    pastes: boolean;
+    web: boolean;
+    keys: { hibp: string; breachDirectory: string; intelx: string; emailrep: string; hunter: string };
+    intelxUrl: string;
   };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
@@ -376,6 +420,24 @@ export function loadConfig(): AppConfig {
       minIntervalMs: c['google-search']['min-interval-sec'] * 1000,
       reverseGeocodeUrl: c['google-search']['reverse-geocode'].replace(/\/+$/, ''),
     },
+    email: {
+      enabled: c.config['email-search'],
+      timeoutMs: c['email-search']['timeout-sec'] * 1000,
+      google: c['email-search'].google,
+      sites: c['email-search'].sites,
+      ipGeo: c['email-search']['ip-geo'],
+      rdap: c['email-search'].rdap,
+      pastes: c['email-search'].pastes,
+      web: c['email-search']['web-mentions'],
+      keys: {
+        hibp: c['email-search']['hibp-key'],
+        breachDirectory: c['email-search']['breachdirectory-key'],
+        intelx: c['email-search']['intelx-key'],
+        emailrep: c['email-search']['emailrep-key'],
+        hunter: c['email-search']['hunter-key'],
+      },
+      intelxUrl: c['email-search']['intelx-url'].replace(/\/+$/, ''),
+    },
     warnings,
   };
 
@@ -383,7 +445,10 @@ export function loadConfig(): AppConfig {
     warnings.push('[google-search] reverse-geocode — публичный Nominatim: координаты найденных точек Wi-Fi уходят в OpenStreetMap, а его правила не допускают нагрузку сервиса; укажите свой экземпляр или оставьте пустым');
   }
   if (cfg.google.enabled && !cfg.google.masterToken) {
-    warnings.push('[google-search] master-token не задан: поиск по e-mail, Gaia ID и файлу Drive отвечает вымышленными данными (имитация) — получите токен: npm run google-login. Wi-Fi BSSID и Digital Asset Links работают и без него');
+    warnings.push('[google-search] master-token не задан: поиск по Gaia ID и файлу Drive отвечает вымышленными данными (имитация) — получите токен: npm run google-login. Wi-Fi BSSID и Digital Asset Links работают и без него');
+  }
+  if (cfg.email.enabled && cfg.email.google && !cfg.google.masterToken) {
+    warnings.push('[google-search] master-token не задан: часть «Аккаунт Google» поиска по Email — вымышленные данные (имитация); выключить её — [email-search] google = false');
   }
 
   if (cfg.geo.enabled && cfg.geo.tiles === 'raster' && !loopback) {
@@ -434,6 +499,7 @@ function validate(cfg: AppConfig) {
   if (cfg.google.enabled && cfg.google.masterToken && !cfg.google.masterToken.startsWith('aas_et/')) {
     missing.push('[google-search] master-token (мастер-токен Android начинается с aas_et/ — npm run google-login)');
   }
+  if (cfg.email.enabled && cfg.email.keys.intelx && !isUrl(cfg.email.intelxUrl)) missing.push('[email-search] intelx-url (https://free.intelx.io или https://2.intelx.io)');
   const { mode } = cfg.auth;
   if (mode !== 'bot-db') {
     if (!/^\d{1,19}$/.test(cfg.auth.user.tgId)) missing.push('[config] user-tg-id (только цифры)');
@@ -491,6 +557,16 @@ export function describeConfig(cfg: AppConfig): string[] {
     `сканы:     ${cfg.scanstore.enabled ? `${cfg.scanstore.url} (таймаут ${cfg.scanstore.timeoutMs / 1000} с)` : 'выключены'}`,
     `геопоиск:  ${!cfg.geo.enabled ? 'выключен' : cfg.geo.tiles === 'raster' ? `растровые тайлы ${new URL(cfg.geo.rasterUrl.replace(/[{}]/g, '')).host}` : `PMTiles ${cfg.geo.pmtiles}`}`,
     `страницы:  ${cfg.pages.enabled ? `поиск личных страниц (таймаут ${cfg.pages.timeoutMs / 1000} с, параллельно ${cfg.pages.concurrency})` : 'выключен'}`,
-    `Google:    ${!cfg.google.enabled ? 'выключен' : `${cfg.google.masterToken ? 'поиск по Google' : 'e-mail, Gaia ID, Drive — имитация (нет мастер-токена); Wi-Fi и Asset Links — настоящие'} (таймаут ${cfg.google.timeoutMs / 1000} с, пауза ${cfg.google.minIntervalMs / 1000} с, адрес Wi-Fi: ${cfg.google.reverseGeocodeUrl || 'не определяется'})`}`,
+    `Google:    ${!cfg.google.enabled ? 'выключен' : `${cfg.google.masterToken ? 'поиск по Google' : 'Gaia ID, Drive — имитация (нет мастер-токена); Wi-Fi и Asset Links — настоящие'} (таймаут ${cfg.google.timeoutMs / 1000} с, пауза ${cfg.google.minIntervalMs / 1000} с, адрес Wi-Fi: ${cfg.google.reverseGeocodeUrl || 'не определяется'})`}`,
+    `Email:     ${cfg.email.enabled ? describeEmail(cfg) : 'выключен'}`,
   ];
+}
+
+function describeEmail(cfg: AppConfig): string {
+  const e = cfg.email;
+  const keyed = Object.entries({ HIBP: e.keys.hibp, BreachDirectory: e.keys.breachDirectory, IntelX: e.keys.intelx, EmailRep: e.keys.emailrep, Hunter: e.keys.hunter })
+    .filter(([, v]) => v).map(([k]) => k);
+  const free = [e.google && (cfg.google.masterToken ? 'Google' : 'Google (имитация)'), e.sites && 'сайты', 'DNS', e.rdap && 'RDAP', e.ipGeo && 'ipapi', e.pastes && 'psbdmp', e.web && 'DuckDuckGo']
+    .filter(Boolean);
+  return `${free.join(', ')}; с ключами: ${keyed.length ? keyed.join(', ') : 'нет'} (таймаут ${e.timeoutMs / 1000} с)`;
 }

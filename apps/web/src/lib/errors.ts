@@ -40,6 +40,8 @@ const MESSAGES: Record<string, string> = {
   PAGES_BUSY: 'Сервер сейчас выполняет слишком много поисков страниц — повторите через минуту',
   GOOGLE_DISABLED: 'Поиск по Google выключен в настройках сервера',
   GOOGLE_BUSY: 'Очередь поиска по Google заполнена — повторите через минуту',
+  EMAIL_DISABLED: 'Поиск по Email выключен в настройках сервера',
+  EMAIL_BUSY: 'Сервер сейчас выполняет слишком много поисков по Email — повторите через минуту',
 };
 
 export function errorText(e: unknown): string {

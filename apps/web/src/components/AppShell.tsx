@@ -1,7 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Fragment, useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowUp, Asterisk, FolderSearch, LogOut, Mail, MapPin, Moon, Network, RefreshCw, Search, Send, ShieldAlert, Sun, UserSearch } from 'lucide-react';
+import { ArrowUp, Asterisk, FolderSearch, LogOut, Mail, MapPin, Moon, Network, RefreshCw, ScanSearch, Search, Send, ShieldAlert, Sun, UserSearch } from 'lucide-react';
 import type { Theme } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
 import { toasts } from '../lib/toast.ts';
@@ -13,13 +13,14 @@ import { LoginPage } from './LoginPage.tsx';
 import { Button, Dialog, Field, Segmented, Spinner } from './ui.tsx';
 
 // feature — раздел есть только если включён в config.ini (geo — [config] geo-search, pages — [config] pages-search,
-// google — [config] google-search).
+// email — [config] email-search, google — [config] google-search).
 const NAV = [
   { to: '/search', label: 'Поиск по атрибутам', icon: Search, hint: 'телефон · фио · документы' },
   { to: '/search/telegram', label: 'Поиск в Telegram', icon: Send, hint: 'комментарии · активность' },
   { to: '/search/geo', label: 'Поиск по геоданным', icon: MapPin, hint: 'точка · радиус', feature: 'geo' },
   { to: '/search/pages', label: 'Поиск личных страниц', icon: UserSearch, hint: 'ник · соцсети · сайты', feature: 'pages' },
-  { to: '/search/google', label: 'Поиск по Google', icon: Mail, hint: 'gmail · gaia id · сервисы', feature: 'google' },
+  { to: '/search/email', label: 'Поиск по Email', icon: Mail, hint: 'аккаунты · утечки · домен', feature: 'email' },
+  { to: '/search/google', label: 'Поиск по Google', icon: ScanSearch, hint: 'gaia id · drive · wi-fi', feature: 'google' },
   { to: '/search/fuzzy', label: 'Нечёткий поиск', icon: Asterisk, hint: 'маски email и номеров' },
   // divider — линия-разделитель над пунктом (как граница шапки над первым): поиск отдельно от рабочих объектов.
   { to: '/dossiers', label: 'Досье', icon: FolderSearch, hint: 'личности и группы', divider: true },
@@ -143,7 +144,8 @@ function Sidebar() {
   const geo = trpc.geo.config.useQuery(undefined, { staleTime: Infinity });
   const pages = trpc.pages.config.useQuery(undefined, { staleTime: Infinity });
   const google = trpc.google.config.useQuery(undefined, { staleTime: Infinity });
-  const features = { geo: !!geo.data, pages: !!pages.data, google: !!google.data };
+  const email = trpc.email.config.useQuery(undefined, { staleTime: Infinity });
+  const features = { geo: !!geo.data, pages: !!pages.data, google: !!google.data, email: !!email.data };
   const nav = NAV.filter((n) => !('feature' in n) || features[n.feature]);
   const user = me.data!;
   const [userOpen, setUserOpen] = useState(false);

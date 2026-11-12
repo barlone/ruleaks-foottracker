@@ -62,6 +62,13 @@ export const pagesSearchRoute = createRoute({
   component: lazyRouteComponent(() => import('./features/search/PagesSearchPage.tsx'), 'PagesSearchPage'),
 });
 
+export const emailSearchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/search/email',
+  validateSearch: z.object({ q: text }),
+  component: lazyRouteComponent(() => import('./features/search/EmailSearchPage.tsx'), 'EmailSearchPage'),
+});
+
 export const googleSearchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search/google',
@@ -106,7 +113,7 @@ export const investigationRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  indexRoute, loginRoute, searchRoute, tgSearchRoute, geoSearchRoute, pagesSearchRoute, googleSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
+  indexRoute, loginRoute, searchRoute, tgSearchRoute, geoSearchRoute, pagesSearchRoute, emailSearchRoute, googleSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
 ]);
 
 // Значения из адреса роутер разбирает как JSON. Длинное целое (Gaia ID — 21 цифра, номер карты) стало бы числом

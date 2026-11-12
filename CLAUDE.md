@@ -76,6 +76,8 @@ Each data source is switched independently by its `enabled` flag:
 sets the per-site timeout and concurrency (see «Personal pages search» below). `[config] google-search` (default
 `false`) switches «Поиск по Google»; `[google-search]` holds the service account's master token, the request timeout
 and the pause between searches — an empty token means fake demo answers (see «Google search» below).
+`[config] email-search` (default `true`) switches «Поиск по Email»; `[email-search]` holds per-part switches for the
+keyless checks and the API keys of the keyed ones (see «Email search» below).
 
 `[server] secure-cookie` (default `true`) sets the cookies' Secure flag; it no longer depends on `host`, because
 production listens on 127.0.0.1 behind nginx (browsers accept Secure cookies on http://localhost, so dev works).
@@ -297,12 +299,12 @@ source note).
 `/search/google` (`features/search/GoogleSearchPage.tsx` + `Google*Result.tsx`, `GoogleParts.tsx`, `routers/google.ts`,
 `apps/server/src/google/`): a TypeScript port of [GHunt](https://github.com/mxrch/GHunt) (AGPL-3.0 — see
 `google/NOTICE.ghunt` for the file map and the upstream revision). Search-type buttons above the input are GHunt's
-modules, all ported (`GOOGLE_MODES` in `@ft/shared` `google.ts`, with input parsers `parseGaiaId` / `parseDriveRef` /
+modules (`GOOGLE_MODES` in `@ft/shared` `google.ts`, with input parsers `parseGaiaId` / `parseDriveRef` /
 `parseBssids` / `parseDalQuery`, `googleQueryProblem`, `normalizeGoogleQuery`, per-mode steps `GOOGLE_STEPS` and the
-`GoogleReport` union discriminated by `mode`). `hunter.ts` (`GhuntHunter.run(mode, …)`) dispatches:
+`GoogleReport` union discriminated by `mode`). `ghunt email` is not a button here: it is `huntGoogleEmail` in
+`hunter.ts`, the «Аккаунт Google» part of «Поиск по Email» (old `?mode=email` links redirect there). `hunter.ts`
+(`GhuntHunter.run(mode, …)`) dispatches:
 
-- **email** (`ghunt email`): People lookup (`people.ts`, fatal if it fails) → Play Games (`playgames.ts`: gRPC search,
-  then the games HTTP API) → Maps contributor stats (`maps.ts`, no auth, one retry) → public calendar (`calendar.ts`).
 - **gaia** (`ghunt gaia`): `lookupByGaia` (`/v2/people?person_id=`, answer in `personResponse[0]`) → Maps. No Play Games
   or calendar (they need the address); the UI offers to search on by the profile's e-mail.
 - **drive** (`ghunt drive`, `drive.ts`): `drive/v2internal/files/<id>` with the «Google Диск» app OAuth token
@@ -319,17 +321,22 @@ modules, all ported (`GOOGLE_MODES` in `@ft/shared` `google.ts`, with input pars
   (404 = private app).
 
 Every part after the fatal first request is a `GoogleSection` (`ok` / `error` / `skipped`), so one failing does not sink
-the report. Found e-mails and Gaia IDs (profile, Drive users) carry a «search on» button (`Searchable` in
-`GoogleParts.tsx` → `GoogleRunContext` in `googleSearch.ts`) that runs the next search on the same page.
+the report. Found e-mails and Gaia IDs (profile, Drive users, Hunter colleagues) carry a «search on» button
+(`Searchable` in `GoogleParts.tsx`): on its own section's page it runs there (`GoogleRunContext` / `EmailRunContext` in
+`googleSearch.ts`; `null` = no subscription, no button), elsewhere it navigates — e-mails to «Поиск по Email», Gaia IDs
+to «Поиск по Google» (hidden when that section is off).
 
-- **One service Google account** for email / gaia / drive. The config holds only its Android master token
+- **One service Google account** for gaia / drive and the e-mail part of «Поиск по Email». `google/account.ts` holds
+  the one `GoogleSession` per process (`googleSession()`) and the shared queue `googleSlot(minIntervalMs, signal, fn)`
+  both sections go through, so they never hit Google at the same time. The config holds only its Android master token
   (`[google-search] master-token`, `aas_et/…`; `npm run google-login` exchanges a one-time `oauth2_4/…` token from
   `accounts.google.com/EmbeddedSetup`, or takes a master token / GHunt Companion string / GHunt `creds.m`, validates it
   with a real People lookup of the account's own address and writes it to `config.ini`). `session.ts` derives
   everything else in memory: per-app OAuth tokens (`android.googleapis.com/auth`), web-session cookies (Chrome token →
   `OAuthLogin` uberauth → `MergeSession`) and the `SAPISIDHASH` header + web-client API key/Origin (`apiKeyHeaders` in
   `knowledge.ts`) for the internal web APIs. No OSIDs.
-- **No master token**: `GhuntHunter` gets `session = null` and sends email / gaia / drive to `DemoHunter` (`demo.ts`,
+- **No master token**: `GhuntHunter` gets `session = null` and sends gaia / drive to `DemoHunter` (`demo.ts`; the e-mail
+  part — `demoGoogleEmail`,
   fake query-deterministic reports; not found: addresses with `nobody`/`none`, Gaia IDs not starting with 1, file IDs
   with `none`); geolocate and spiderdal stay real. `google.config.demoModes` lists the faked modes; the banner shows
   only on those.
@@ -349,7 +356,7 @@ the report. Found e-mails and Gaia IDs (profile, Drive users) carry a «search o
   cached `COOKIE_TTL` (30 min). Play Games search returns gRPC NOT_FOUND (status 5) when the account has no player
   profile — mapped to `NOTFOUND` and treated as «no profile», not an error.
 - **`jobs.ts`**: in-memory jobs like the pages search (an hour of «История», polled every second, shown in
-  `ProgressDialog` by step), but strictly sequential with `min-interval-sec` between runs, keyless modes included —
+  `ProgressDialog` by step), but strictly sequential (`googleSlot`) with `min-interval-sec` between runs, keyless modes included —
   one account and one server IP, and Google answers bursts with captchas and account locks. One unfinished job per user
   (a new search cancels it — in solo mode everyone is the same user), `MAX_PENDING` per process → `GOOGLE_BUSY`.
 - **Live-verified against Google**: email and gaia on the service account itself. Drive, geolocate and spiderdal were
@@ -357,11 +364,49 @@ the report. Found e-mails and Gaia IDs (profile, Drive users) carry a «search o
 - Found links (Maps contributor page, calendar .ics, the Drive file, a Maps link to the Wi-Fi point, DAL sites and
   public Play pages) go to a dossier through `AddPagesDialog` (its `note` prop).
 
+### Email search (GHunt + MOSINT)
+
+`/search/email` (`features/search/EmailSearchPage.tsx` + `EmailReportView.tsx`, `emailSearch.ts`, `routers/email.ts`,
+`apps/server/src/email/`, `NOTICE.mosint`): one e-mail address → one report combining `ghunt email` and
+[MOSINT](https://github.com/alpkeskin/mosint) (MIT). The input takes only an address: `parseEmail` in `@ft/shared`
+`email.ts` (RFC-ish syntax, lowercased, IDN domain → punycode, `mailto:` stripped) replaces MOSINT's verifier.
+`emailDomainInfo` classifies the domain — `gmail` / `free` (built-in provider list) / `disposable` (built-in list of the
+known temp-mail services) / `corporate` — and the checks depend on it (`skipReasons` in `email/report.ts`): RDAP, IP
+geolocation and Hunter run only for a corporate domain; DNS runs always (for free providers the UI shows it compact).
+Parts (`EMAIL_PARTS`, each an `EmailSection`: `ok` / `error` / `skipped` with a reason) run in parallel:
+
+- **dns** (`dns.ts`, system resolver, nothing leaves to third parties): MX (provider by host — `MX_PROVIDERS`, Gmail vs
+  Google Workspace), null MX, A/AAAA/NS/TXT, SPF (`all` qualifier, `include:`/`redirect=` → known senders), DMARC
+  policy, `spoofable` (no DMARC enforcement and SPF not `-all`, as EmailRep), verification TXT tokens → services.
+- **rdap** (`rdap.ts`): rdap.org bootstrap via `pages/outbound.ts` (it redirects to the registry); the domain and its
+  parents; `.ru`/`.рф`/`.su` have no RDAP → `null`. Replaces EmailRep's domain age without a key.
+- **ipgeo** (`ipgeo.ts`): ipapi.co for the domain A and the primary MX host, public IPs only, sequential.
+- **google**: `huntGoogleEmail` through `googleSlot` (note «в очереди к Google»); no master token → `demoGoogleEmail`
+  without the queue, `email.config.googleDemo` shows the banner. Runs for every domain — a Google account can sit on
+  any address.
+- **sites**: the pages-search e-mail checks (`allEmailSites` + `checkEmailSite`, `[pages-search]` timeout / concurrency /
+  side-effect setting) plus MOSINT's Instagram in `email-sites.ts` `EXTRA` (Twitter, Spotify are in blackbird's file).
+  `eCode: 0` in an `EmailSite` = any HTTP status.
+- **hibp** / **breachdirectory** / **intelx** / **pastes** / **emailrep** (`breaches.ts`), **hunter** (`hunterio.ts`):
+  keyed services ([email-search] `*-key`; empty = skipped «нет ключа»). psbdmp is keyless but its domain no longer
+  resolves (Nov 2026), so `pastes` defaults to `false`. IntelX polls results ≤10 s and terminates the search.
+- **web** (`web.ts`): MOSINT scrapes Google SERP; Google gives no results without JavaScript, so the server scrapes
+  DuckDuckGo's HTML endpoint (`parseDuckHtml`, `blocked` on its anomaly page); the UI adds manual-search links
+  (Google, Яндекс, Bing, DuckDuckGo) that the user's browser opens.
+
+`email/http.ts`: `xfetch` (global fetch, `redirect: 'manual'`, timeout + cancel, fixed hosts only), body size cap,
+`EmailError` codes (`AUTH`, `LIMIT`, `TIMEOUT`, `HTTP`, `PARSE`, `NET`) → generic Russian texts (`emailErrorText`);
+details go to the log as `email: <part> — …`. `email/jobs.ts`: in-memory jobs like pages (one running per user,
+`MAX_RUNNING` → `EMAIL_BUSY`, an hour of «История» with a hit count); the view carries per-part state + note
+(«Регистрации на сайтах: 12 из 15») and the report only once finished. Keys never reach the browser —
+`email.config` returns only which parts are available. Verified live only with `info@example.com`; the keyed services
+have not been run (no keys).
+
 ### Progress window
 
 `components/ProgressDialog.tsx` is the modal for long processes (gauge, status line, elapsed time, «Отмена»; Esc =
 cancel, no closing by clicking outside). Two ways to drive it: `<ProgressDialog>` with props when the state comes from a
-polled server job (pages search, Google search), or `useProcess()` + `<ProcessDialog>` for browser-side async flows — `run(title, fn)`
+polled server job (pages search, Google search, Email search), or `useProcess()` + `<ProcessDialog>` for browser-side async flows — `run(title, fn)`
 shows the window for the promise, `p.set()` moves the bar, `p.signal` goes into tRPC calls via the vanilla client
 (`utils.client.x.mutate(input, { signal })` — `useMutation` has no signal), cancel rejects with `ProcessCancelled`
 (`isCancelled(e)` — don't toast it). Used by `ExportDialog` (file/PDF), `ImportDialog` (upload chunks are determinate,

@@ -19,6 +19,7 @@
 
 Проверка существования ящика (smtp.ts) — метод проекта deep-email-validator (src/smtp/smtp.ts: разговор с почтовым
 сервером до RCPT TO), перенесён и дополнен определением catch-all, разбором отказов и STARTTLS:
+Оттуда же проверка опечатки в домене (typo, на библиотеке mailcheck) → @ft/shared email.ts (emailDomainTypo):
 
   deep-email-validator — https://github.com/mfbx9da4/deep-email-validator
   Лицензия: MIT (тот же текст, что ниже)

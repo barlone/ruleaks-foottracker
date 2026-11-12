@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { FolderPlus, History, Mail } from 'lucide-react';
-import { EMAIL_PARTS, EMAIL_QUERY_MAX, GHUNT_URL, MOSINT_URL, emailQueryProblem, parseEmail, type EmailPartId } from '@ft/shared';
+import { EMAIL_PARTS, EMAIL_QUERY_MAX, GHUNT_URL, MOSINT_URL, emailQueryProblem, emailTypoFix, parseEmail, type EmailPartId } from '@ft/shared';
 import { ProgressDialog } from '../../components/ProgressDialog.tsx';
 import { Button, Card, Empty, Input, Spinner, Tag, WarnNote } from '../../components/ui.tsx';
 import { errorText } from '../../lib/errors.ts';
@@ -82,6 +82,9 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
 
   const query = value.trim();
   const problem = emailQueryProblem(query);
+  // Похоже на опечатку в домене (gmial.com) — предлагаем исправленный адрес, искать не мешаем.
+  const parsedQuery = problem ? null : parseEmail(query);
+  const typoFix = parsedQuery ? emailTypoFix(parsedQuery) : null;
   const disabled = !me.data?.access.active;
 
   const run = useCallback((q: string) => {
@@ -154,6 +157,14 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
                 что касается самого адреса.
               </span>
               {problem && <Tag tone="warn">{problem}</Tag>}
+              {typoFix && (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <Tag tone="warn">возможно, опечатка в домене</Tag>
+                  <button type="button" onClick={() => setValue(typoFix)} title="Подставить исправленный адрес" className="cursor-pointer font-mono text-mint hover:underline">
+                    {typoFix}
+                  </button>
+                </span>
+              )}
               {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
             </div>
           </form>

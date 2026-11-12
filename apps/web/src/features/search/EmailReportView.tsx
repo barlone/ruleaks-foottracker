@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { AtSign, Building2, Database, FileWarning, Globe, KeyRound, Network, ScrollText, ShieldAlert, UserCheck } from 'lucide-react';
 import {
-  EMAIL_DOMAIN_KINDS, EMAIL_PARTS, EMAILREP_FLAGS, HIBP_DATA_CLASSES, MAILBOX_REASONS, emailPartLabel,
+  EMAIL_DOMAIN_KINDS, EMAIL_PARTS, EMAILREP_FLAGS, HIBP_DATA_CLASSES, MAILBOX_REASONS, emailPartLabel, emailTypoFix,
   type BreachDirectoryResult, type EmailDns, type EmailMailbox, type EmailIpGeo, type EmailPartId, type EmailRdap, type EmailRep, type EmailReport,
   type EmailSection, type EmailSites, type EmailWeb, type HibpBreach, type HunterDomain, type HunterEmail, type IntelxResult, type PasteDump,
 } from '@ft/shared';
@@ -39,6 +39,8 @@ export function EmailReportView({ report, pagesEnabled }: { report: EmailReport;
   const claimed = sites?.checks.filter((c) => c.status === 'claimed') ?? [];
   const nick = nickOf(r.local);
   const skipped = EMAIL_PARTS.filter((p) => r[p.id].status === 'skipped');
+  // Домен похож на известный почтовый сервис, но не он: возможно, адрес записан с опечаткой.
+  const typoFix = emailTypoFix({ email: r.email, local: r.local, domain: r.domain.domain });
 
   return (
     <>
@@ -53,6 +55,13 @@ export function EmailReportView({ report, pagesEnabled }: { report: EmailReport;
             {ok(r.dns)?.mailProvider && r.domain.kind === 'corporate' && <Tag tone="dim" className="ml-1.5">почта: {ok(r.dns)!.mailProvider}</Tag>}
             {ok(r.dns)?.exists === false && <Tag tone="danger" className="ml-1.5">домена не существует</Tag>}
             {ok(r.dns)?.nullMx && <Tag tone="warn" className="ml-1.5">домен не принимает почту</Tag>}
+            {typoFix && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                <Tag tone="warn">возможно, опечатка в домене</Tag>
+                <span className="text-dim">имелся в виду</span>
+                <Searchable value={typoFix} mode="email" />
+              </div>
+            )}
           </Row>
           {r.mailbox.status !== 'skipped' && (
             <Row label="Ящик">

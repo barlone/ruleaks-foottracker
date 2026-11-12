@@ -138,6 +138,68 @@ export function emailDomainInfo(domain: string): EmailDomainInfo {
   return { domain: d, kind: 'corporate', provider: null };
 }
 
+// ---------- Опечатка в домене ----------
+// Проверка typo из deep-email-validator (она на библиотеке mailcheck): домен адреса сравнивается со списком
+// известных почтовых сервисов и доменных зон; похожий, но не совпадающий — вероятная опечатка (gmial.com, mail.ry,
+// yandex.con). Это подсказка, а не отказ: домен, отличающийся от известного одной буквой, бывает и настоящим.
+
+/** Зоны, которых нет, но в которые легко опечататься, → настоящая. Существующие зоны (.co, .cm, .ne) сюда нельзя. */
+const TLD_TYPOS: Record<string, string> = {
+  con: 'com', cmo: 'com', ocm: 'com', vom: 'com', xom: 'com', cpm: 'com', comm: 'com', coml: 'com', 'com,': 'com',
+  nte: 'net', nett: 'net', ogr: 'org', orgg: 'org', rru: 'ru', ruu: 'ru', ry: 'ru', 'ру': 'ru',
+};
+
+/** Расстояние Дамерау — Левенштейна (перестановка соседних букв — одна правка), не больше max + 1. */
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev2: number[] = [];
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let v = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prev2[j - 2]! + 1);
+      cur.push(v);
+    }
+    prev2 = prev;
+    prev = cur;
+  }
+  return prev[b.length]!;
+}
+
+/**
+ * Домен, который, вероятно, имелся в виду, или null. Известный сервис (в том числе одноразовый) не трогаем.
+ * Короткие домены (ya.ru, bk.ru, me.com) в сравнении не участвуют: в одной правке от них — тысячи настоящих;
+ * до 8 знаков допускается одна правка, длиннее — две.
+ */
+export function emailDomainTypo(domain: string): string | null {
+  const d = domain.toLowerCase();
+  if (emailDomainInfo(d).kind !== 'corporate') return null;
+  const dot = d.lastIndexOf('.');
+  const tld = TLD_TYPOS[d.slice(dot + 1)];
+  const fixed = tld ? `${d.slice(0, dot + 1)}${tld}` : d;
+  if (fixed !== d && emailDomainInfo(fixed).kind !== 'corporate') return fixed;
+  let best: string | null = null;
+  let bestDist = 3;
+  for (const known of [...GMAIL, ...Object.keys(FREE_PROVIDERS)]) {
+    if (known.length < 7) continue;
+    const max = known.length >= 9 ? 2 : 1;
+    const dist = editDistance(fixed, known, max);
+    if (dist <= max && dist < bestDist) {
+      best = known;
+      bestDist = dist;
+    }
+  }
+  return best ?? (fixed !== d ? fixed : null);
+}
+
+/** Адрес с исправленным доменом, если в домене похоже на опечатку; иначе null. */
+export function emailTypoFix(p: ParsedEmail): string | null {
+  const domain = emailDomainTypo(p.domain);
+  return domain ? `${p.local}@${domain}` : null;
+}
+
 export const EMAIL_DOMAIN_KINDS: Record<EmailDomainKind, string> = {
   gmail: 'Gmail',
   free: 'бесплатный почтовый сервис',

@@ -381,6 +381,10 @@ The section is labelled «Исследовать Email» in the UI (sidebar grou
 `emailDomainInfo` classifies the domain — `gmail` / `free` (built-in provider list) / `disposable` (built-in list of the
 known temp-mail services) / `corporate` — and the checks depend on it (`skipReasons` in `email/report.ts`): RDAP, IP
 geolocation and Hunter run only for a corporate domain; DNS runs always (for free providers the UI shows it compact).
+`emailDomainTypo` / `emailTypoFix` (the `typo` check of deep-email-validator, i.e. mailcheck) suggest the intended domain
+when the typed one is one or two edits away from a known provider or has a mistyped zone (`gmial.com`, `yandex.con`);
+providers shorter than 7 characters are not compared. It is only a hint — under the input (click fills the fixed
+address) and in the report's «Домен» row — never a refusal: a real domain may sit one letter from a known one.
 Parts (`EMAIL_PARTS`, each an `EmailSection`: `ok` / `error` / `skipped` with a reason) run in parallel:
 
 - **dns** (`dns.ts`, system resolver, nothing leaves to third parties): MX (provider by host — `MX_PROVIDERS`, Gmail vs

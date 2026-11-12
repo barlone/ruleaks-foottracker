@@ -1,0 +1,75 @@
+# Пример server { } для прода: Cloudflare → nginx (этот хост, :8080) → приложение 127.0.0.1:3001.
+# Это образец, а не копия боевого конфига: сверьте пути и имена со своим файлом и перенесите отмеченные «# аудит» строки.
+# Заголовки безопасности — в foottracker-security.conf рядом (скопировать в /etc/nginx/snippets/).
+
+server {
+    listen 8080;
+    server_name _;
+
+    root /srv/foottracker/app/apps/web/dist;
+
+    # --- Адрес клиента от Cloudflare (аудит, пункт 5; к [server] trust-proxy = 127.0.0.1) -----------------------
+    # nginx верит CF-Connecting-IP только от адресов Cloudflare и подставляет его в $remote_addr; приложению уходит
+    # X-Forwarded-For из одного этого адреса. Диапазоны меняются — сверять с https://www.cloudflare.com/ips/.
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 131.0.72.0/22;
+    set_real_ip_from 2400:cb00::/32;
+    set_real_ip_from 2606:4700::/32;
+    set_real_ip_from 2803:f800::/32;
+    set_real_ip_from 2405:b500::/32;
+    set_real_ip_from 2405:8100::/32;
+    set_real_ip_from 2a06:98c0::/29;
+    set_real_ip_from 2c0f:f248::/32;
+    real_ip_header CF-Connecting-IP;
+
+    # --- Заголовки безопасности (аудит, пункты 7 и 8) -----------------------------------------------------------
+    # Уровень server — для всех location без своих add_header (ниже это /trpc/, /geo/, /scans/).
+    include /etc/nginx/snippets/foottracker-security.conf;
+
+    # Общие настройки проксирования к приложению.
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;   # после real_ip — адрес клиента, не Cloudflare
+    proxy_set_header X-Forwarded-Proto https;
+
+    location /trpc/ {
+        proxy_pass http://127.0.0.1:3001;
+        client_max_body_size 16m;                     # части импорта меньше bodyLimit сервера (15 МБ)
+    }
+
+    location /geo/ {
+        proxy_pass http://127.0.0.1:3001;
+        gzip off;                                     # тайлы внутри .pmtiles уже сжаты; Range nginx передаёт сам
+    }
+
+    location /scans/ {
+        proxy_pass http://127.0.0.1:3001;
+    }
+
+    # Сборка Vite: имена файлов с хешем — кэш на год.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        include /etc/nginx/snippets/foottracker-security.conf;   # свой add_header выше — значит, include обязателен
+        try_files $uri =404;
+    }
+
+    # SPA: всё прочее — index.html, без кэша (иначе после деплоя браузер держит старую сборку).
+    location / {
+        add_header Cache-Control "no-cache" always;
+        include /etc/nginx/snippets/foottracker-security.conf;   # то же: без него страница осталась бы без заголовков
+        try_files $uri /index.html;
+    }
+}

@@ -88,6 +88,11 @@ nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password ra
 the leftmost XFF value is client-written, so it only warns). No hop count: Fastify 5.12 treats a number as «trust
 nobody», so digits are a config error. Behind Cloudflare → nginx use `127.0.0.1` plus nginx `real_ip` from Cloudflare.
 
+Production security headers (CSP, X-Frame-Options, nosniff, Referrer-Policy…) are set by nginx, not Fastify — nginx serves
+the page: `deploy/nginx/` (snippet + example `server { }` + README). The CSP is `script-src 'self'`, so the web has no
+inline scripts (the pre-render theme switch is `public/theme-init.js`) — keep it that way; a new external origin
+(images, frames, fetch) needs a matching CSP source there.
+
 `[telegram] login-secret` (shared with the bot, ≥32 chars) enables login by a signed one-time link from the bot:
 `/login?tg=…&ts=…&n=…&sig=…[&name=…][&nick=…]`, `sig = base64url(HMAC-SHA256(secret, "tg\nts\nn\nname\nnick"))`,
 valid `login-link-ttl-sec` (180 s), single use (`adapters/login-link.ts`, `auth.loginWithLink`, web `/login`).

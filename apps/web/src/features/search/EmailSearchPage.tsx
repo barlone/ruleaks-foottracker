@@ -37,7 +37,7 @@ export function EmailSearchPage() {
   if (!cfg.data) {
     return (
       <div className="pt-2.5 pb-6 pl-6 pr-[30px]">
-        <Empty>Поиск по Email выключен в настройках сервера.</Empty>
+        <Empty>Раздел «Исследовать Email» выключен в настройках сервера.</Empty>
       </div>
     );
   }
@@ -101,7 +101,7 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
   return (
     <EmailRunContext.Provider value={disabled ? null : run}>
       <SearchLayout
-        title="Поиск по Email"
+        title="Исследовать Email"
         titleExtra={(
           <div className="font-mono text-[11px] text-mute">
             inspired by{' '}
@@ -157,7 +157,7 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
 
         <ProgressDialog
           open={running}
-          title="Поиск по Email"
+          title="Исследовать Email"
           value={j && j.partsTotal ? j.partsDone / j.partsTotal : null}
           status={now.length ? now.join(' · ') : 'Запуск…'}
           detail={j?.email}
@@ -242,7 +242,7 @@ function EmailResult({ job, loading, error, pagesEnabled }: { job: Job | undefin
 
       <EmailReportView report={report} pagesEnabled={pagesEnabled} />
 
-      <AddPagesDialog open={!!adding} onOpenChange={(v) => !v && setAdding(null)} pages={adding ?? []} username={report.email} note={`Поиск по Email: ${report.email}`} />
+      <AddPagesDialog open={!!adding} onOpenChange={(v) => !v && setAdding(null)} pages={adding ?? []} username={report.email} note={`Исследование Email: ${report.email}`} />
     </>
   );
 }

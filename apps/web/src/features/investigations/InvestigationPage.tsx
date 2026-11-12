@@ -25,7 +25,9 @@ const TABS = [
 
 export function InvestigationPage() {
   const { id } = useParams({ from: '/investigations/$id' });
-  const { tab = 'graph', focus } = useSearch({ from: '/investigations/$id' });
+  const { tab = 'graph', focus, full: fullParam } = useSearch({ from: '/investigations/$id' });
+  // Во весь экран бывает только редактор связей: шапка и вкладки скрыты, боковое меню убирает AppShell.
+  const full = !!fullParam && tab === 'graph';
   const navigate = useNavigate({ from: '/investigations/$id' });
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
@@ -56,7 +58,8 @@ export function InvestigationPage() {
 
   return (
     <div className="text-plus-1 flex h-full flex-col">
-      <header className="border-b border-line bg-panel/60 pb-0 pl-6 pr-[30px] pt-2.5 backdrop-blur">
+      {/* hidden, а не удаление: редактор остаётся на своём месте в дереве и не теряет состояние. */}
+      <header className={clsx('border-b border-line bg-panel/60 pb-0 pl-6 pr-[30px] pt-2.5 backdrop-blur', full && 'hidden')}>
         {/* «Все расследования» и кнопки (экспорт, доступ, удаление) — одной строкой над заголовком. */}
         <div className="mb-2 flex items-center justify-between gap-4">
           {me.data ? (
@@ -157,7 +160,11 @@ export function InvestigationPage() {
       <div className="min-h-0 flex-1">
         {tab === 'graph' && (
           <Suspense fallback={<div className="grid h-full place-items-center"><Spinner /></div>}>
-            <GraphEditor investigationId={id} version={inv.version} nodes={inv.nodes} edges={inv.edges} facts={inv.facts} editable={editable} focus={focus} />
+            <GraphEditor investigationId={id} version={inv.version} nodes={inv.nodes} edges={inv.edges} facts={inv.facts} editable={editable} focus={focus}
+              fullscreen={full}
+              // Вход — новой записью истории (кнопка «Назад» возвращает), выход — заменой.
+              onFullscreen={(v) => void navigate({ search: (prev) => ({ ...prev, full: v || undefined }), replace: !v })}
+            />
           </Suspense>
         )}
         {tab === 'facts' && <FactsPanel inv={inv} editable={editable} />}

@@ -127,7 +127,7 @@ function GoogleSearch({ demoModes }: { demoModes: GoogleModeId[] }) {
             <a href={GHUNT_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">GHunt</a>
           </div>
         )}
-        subtitle="Что Google раскрывает об аккаунте по Gaia ID, файле Drive, точке доступа Wi-Fi и связях сайтов с приложениями. Аккаунт по адресу почты — в «Поиске по Email»."
+        subtitle="Что Google раскрывает об аккаунте по Gaia ID, файле Drive, точке доступа Wi-Fi и связях сайтов с приложениями. Аккаунт по адресу почты — в разделе «Исследовать Email»."
         history={<GoogleHistory activeId={jobId} onOpen={setJobId} />}
       >
         {demoModes.includes(mode) && (

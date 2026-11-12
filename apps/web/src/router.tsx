@@ -108,7 +108,8 @@ export const investigationsRoute = createRoute({
 export const investigationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/investigations/$id',
-  validateSearch: z.object({ tab: z.enum(['graph', 'facts', 'hypotheses']).optional().catch(undefined), focus: text }),
+  // full — редактор связей во весь экран: без бокового меню, шапки расследования и вкладок (AppShell, InvestigationPage).
+  validateSearch: z.object({ tab: z.enum(['graph', 'facts', 'hypotheses']).optional().catch(undefined), focus: text, full: z.boolean().optional().catch(undefined) }),
   component: lazyRouteComponent(() => import('./features/investigations/InvestigationPage.tsx'), 'InvestigationPage'),
 });
 

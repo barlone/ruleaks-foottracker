@@ -371,6 +371,9 @@ to «Поиск по Google» (hidden when that section is off).
 
 ### Email search (GHunt + MOSINT)
 
+The section is labelled «Исследовать Email» in the UI (sidebar group of its own, between the searches and the dossiers);
+«Поиск по Email» in comments and older text is the same section.
+
 `/search/email` (`features/search/EmailSearchPage.tsx` + `EmailReportView.tsx`, `emailSearch.ts`, `routers/email.ts`,
 `apps/server/src/email/`, `NOTICE.mosint`): one e-mail address → one report combining `ghunt email` and
 [MOSINT](https://github.com/alpkeskin/mosint) (MIT). The input takes only an address: `parseEmail` in `@ft/shared`
@@ -486,6 +489,9 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 - Block menu («⋯» in a node's top-right corner, rendered in the editor root, not inside the node): enter, open dossier,
   add / remove image, delete. Image and node deletion are only there, not in the side panel. A node with an inner
   graph is deleted by a second click in the menu; the Delete key refuses it (`onBeforeDelete`).
+- Graph full screen: `?full=true` on `/investigations/$id` (button right of the editor toolbar, «вернуться в расследование»
+  to leave; entering pushes history, leaving replaces). `AppShell` drops the sidebar and banners, `InvestigationPage`
+  hides its header with `hidden` — nothing above the editor is unmounted, so the editor keeps its state and level.
 - Graph node images: a node linked to a dossier shows the dossier cover, fetched separately by `dossiers.covers`
   (readable ones only; not part of the graph payload, which is re-sent on every save) through `CoversContext`; any
   other node may carry its own `props.image` — a 128×128 WebP data URL made by `lib/squareImage.ts`, non-square

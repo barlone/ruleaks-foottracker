@@ -7,7 +7,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Link, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ArrowLeft, FolderOpen, ImageOff, ImagePlus, LayoutGrid, LogIn, Maximize, MoreHorizontal, Network, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Expand, FolderOpen, ImageOff, ImagePlus, LayoutGrid, LogIn, Maximize, MoreHorizontal, Network, Plus, Trash2, X } from 'lucide-react';
 import {
   CREDIBILITY_LABELS, NODE_DOSSIER_KIND, NODE_TYPE_LABELS, newId, type Fact, type GraphEdge, type GraphNode, type NodeType,
 } from '@ft/shared';
@@ -189,6 +189,9 @@ export function GraphEditor(props: {
   facts: Fact[];
   editable: boolean;
   focus?: string;
+  /** Редактор во весь экран (без меню сайта, шапки расследования и вкладок). */
+  fullscreen: boolean;
+  onFullscreen: (on: boolean) => void;
 }) {
   return (
     <ReactFlowProvider>
@@ -197,7 +200,7 @@ export function GraphEditor(props: {
   );
 }
 
-function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, facts, editable, focus }: Parameters<typeof GraphEditor>[0]) {
+function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, facts, editable, focus, fullscreen, onFullscreen }: Parameters<typeof GraphEditor>[0]) {
   const [nodes, setNodes, onNodesChange] = useNodesState<EntityNode>(toFlowNodes(srcNodes, facts, null));
   const [edges, setEdges, onEdgesChange] = useEdgesState<RelEdge>(toFlowEdges(srcEdges, srcNodes, null));
   // Уровень: id узла, внутри которого находимся (null — верхний). В ref — для эффектов и отложенных вызовов.
@@ -580,7 +583,9 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
       )}
 
       {/* Панель инструментов */}
-      <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-panel/90 p-1.5 backdrop-blur">
+      {/* Обёртка не ловит мышь (под ней граф), ловят только панель и кнопка режима; справа — место под статус. */}
+      <div className="pointer-events-none absolute left-3 right-44 top-3 flex flex-wrap items-start gap-2">
+      <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-panel/90 p-1.5 backdrop-blur">
         {/* Внутри объекта: возврат на верхний уровень и название объекта. */}
         {level && (
           <>
@@ -612,6 +617,17 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         {editable && <span className="mx-1 h-5 w-px bg-line" />}
         {editable && <Button size="sm" variant="ghost" onClick={autoLayout} title="Авторасстановка (ELK)"><LayoutGrid size={14} /></Button>}
         <Button size="sm" variant="ghost" onClick={() => rf.fitView({ duration: 300 })} title="Показать всё"><Maximize size={14} /></Button>
+      </div>
+        {/* Во весь экран и обратно: справа от панели инструментов. */}
+        {fullscreen ? (
+          <button onClick={() => onFullscreen(false)} className="pointer-events-auto flex h-[46px] cursor-pointer items-center gap-1.5 rounded-xl border border-line bg-panel/90 px-3 font-mono text-xs text-mint backdrop-blur transition hover:bg-mint/10">
+            <ArrowLeft size={13} /> вернуться в расследование
+          </button>
+        ) : (
+          <button onClick={() => onFullscreen(true)} title="Редактор связей во весь экран" className="pointer-events-auto flex h-[46px] cursor-pointer items-center gap-1.5 rounded-xl border border-line bg-panel/90 px-3 text-xs text-dim backdrop-blur transition hover:bg-mint/10 hover:text-text">
+            <Expand size={14} /> Во весь экран
+          </button>
+        )}
       </div>
 
       <div className="absolute right-3 top-3 font-mono text-[11px]">

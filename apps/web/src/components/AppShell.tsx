@@ -17,12 +17,13 @@ import { Button, Dialog, Field, Segmented, Spinner } from './ui.tsx';
 const NAV = [
   { to: '/search', label: 'Поиск по атрибутам', icon: Search, hint: 'телефон · фио · документы' },
   { to: '/search/telegram', label: 'Поиск в Telegram', icon: Send, hint: 'комментарии · активность' },
-  { to: '/search/geo', label: 'Поиск по геоданным', icon: MapPin, hint: 'точка · радиус', feature: 'geo' },
   { to: '/search/pages', label: 'Поиск личных страниц', icon: UserSearch, hint: 'ник · соцсети · сайты', feature: 'pages' },
-  { to: '/search/email', label: 'Поиск по Email', icon: Mail, hint: 'аккаунты · утечки · домен', feature: 'email' },
+  { to: '/search/geo', label: 'Поиск по геоданным', icon: MapPin, hint: 'точка · радиус', feature: 'geo' },
   { to: '/search/google', label: 'Поиск по Google', icon: ScanSearch, hint: 'gaia id · drive · wi-fi', feature: 'google' },
   { to: '/search/fuzzy', label: 'Нечёткий поиск', icon: Asterisk, hint: 'маски email и номеров' },
-  // divider — линия-разделитель над пунктом (как граница шапки над первым): поиск отдельно от рабочих объектов.
+  // divider — линия-разделитель над пунктом (как граница шапки над первым): поиски, исследование адреса и рабочие
+  // объекты — три группы. Если раздел Email выключен, остаётся одна линия — над «Досье».
+  { to: '/search/email', label: 'Исследовать Email', icon: Mail, hint: 'аккаунты · утечки · домен', feature: 'email', divider: true },
   { to: '/dossiers', label: 'Досье', icon: FolderSearch, hint: 'личности и группы', divider: true },
   { to: '/investigations', label: 'Расследования', icon: Network, hint: 'связи · факты · гипотезы' },
 ] as const;
@@ -30,6 +31,8 @@ const NAV = [
 export function Root() {
   const me = trpc.auth.me.useQuery();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  // Редактор связей во весь экран (?full на странице расследования): боковое меню и полосы над страницей убраны.
+  const full = useRouterState({ select: (s) => /^\/investigations\/[^/]+$/.test(s.location.pathname) && (s.location.search as { full?: unknown }).full === true });
   const mainRef = useRef<HTMLElement>(null);
 
   // Без сессии тема не меняется: страница входа открывается в той, что была у последнего пользователя этого браузера.
@@ -52,7 +55,7 @@ export function Root() {
     if (/^\/investigations\/[^/]+$/.test(path)) {
       return (
         <div className="bg-grid flex h-full flex-col">
-          <TopBar />
+          {!full && <TopBar />}
           <main className="relative z-10 min-h-0 flex-1">
             <Outlet />
           </main>
@@ -65,9 +68,9 @@ export function Root() {
 
   return (
     <div className="bg-grid flex h-full">
-      <Sidebar />
+      {!full && <Sidebar />}
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <SubscriptionBanner />
+        {!full && <SubscriptionBanner />}
         <main ref={mainRef} className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </main>

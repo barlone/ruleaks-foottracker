@@ -353,7 +353,15 @@ export function DossierPage() {
       <EditMediaDialog
         media={editingMedia}
         onClose={() => setEditingMedia(null)}
-        onSave={(item) => updateItem.mutateAsync({ id, item }).then(() => setEditingMedia(null))}
+        onSave={async (item) => {
+          const before = d.items.find((i) => i.id === item.id);
+          const saved = await updateItem.mutateAsync({ id, item });
+          // Заменили картинку, которая была обложкой: обложка привязана к прежнему файлу — переносим её на новый.
+          if (before?.type === 'media' && before.url !== item.url && d.coverMediaUrl === before.url) {
+            await update.mutateAsync({ id, version: saved.version, patch: { coverMediaUrl: item.url } });
+          }
+          setEditingMedia(null);
+        }}
       />
       <EditAttrDialog
         attr={editingAttr}
@@ -838,7 +846,7 @@ function MembersEditor({
   );
 }
 
-/** Правка медиа: подпись, альбом, источник. Картинка остаётся — для другой проще добавить новый элемент. */
+/** Правка медиа: подпись, альбом, источник и само изображение — новым файлом или ссылкой (в том числе Гугл-диска). */
 function EditMediaDialog({ media, onClose, onSave }: { media: Of<'media'> | null; onClose: () => void; onSave: (item: Of<'media'>) => Promise<void> }) {
   return (
     <Dialog open={!!media} onOpenChange={(v) => !v && onClose()} title="Медиафайл">
@@ -855,6 +863,25 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
   const [source, setSource] = useState<SourceDraft>({ ...rest, ref: rest.ref ?? '' });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Замена изображения: пусто — остаётся прежнее; data URL (выбран файл) или введённая ссылка.
+  const [replacing, setReplacing] = useState(false);
+  const [value, setValue] = useState('');
+  const [mediaKind, setMediaKind] = useState<'image' | 'video'>(media.embedUrl ? 'video' : 'image');
+  const next = value.trim();
+  const driveId = next && !next.startsWith('data:') ? googleDriveId(next) : null;
+  const preview = !next ? media.url : driveId ? driveImageUrl(driveId) : next;
+
+  function onFile(f: File | undefined) {
+    if (!f) return;
+    if (f.size > MEDIA_FILE_MAX_BYTES) {
+      setError(`Файл ${fmtBytes(f.size)} — больше ${fmtBytes(MEDIA_FILE_MAX_BYTES)}. Большие файлы держите на своём Гугл-диске и вставьте ссылку`);
+      return;
+    }
+    setError(null);
+    const r = new FileReader();
+    r.onload = () => setValue(String(r.result));
+    r.readAsDataURL(f);
+  }
 
   async function submit() {
     setSaving(true);
@@ -862,7 +889,11 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
     try {
       // Время фиксации источника остаётся прежним: правится описание, а не сами сведения.
       const src = finishSource(source);
-      await onSave({ ...media, caption: caption.trim() || undefined, album: album.trim() || undefined, source: capturedAt ? { ...src, capturedAt } : src });
+      // Новое изображение: ссылка Диска — миниатюра и, для видео, адрес плеера; у остального плеера нет.
+      const image = next
+        ? { url: preview, embedUrl: driveId && mediaKind === 'video' ? drivePreviewUrl(driveId) : undefined }
+        : {};
+      await onSave({ ...media, ...image, caption: caption.trim() || undefined, album: album.trim() || undefined, source: capturedAt ? { ...src, capturedAt } : src });
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -878,7 +909,43 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
         void submit();
       }}
     >
-      <img src={media.url} alt="" className="max-h-48 rounded-lg border border-line" />
+      <div className="flex items-end gap-3">
+        <img src={preview} alt="" className="max-h-48 min-w-0 rounded-lg border border-line" />
+        {!replacing && (
+          <button type="button" onClick={() => setReplacing(true)} className="shrink-0 cursor-pointer font-mono text-xs text-mute transition hover:text-mint">
+            заменить изображение
+          </button>
+        )}
+      </div>
+      {replacing && (
+        <div className="space-y-3 rounded-xl border border-line-soft p-3">
+          <Field label="Новый файл" hint={`До ${fmtBytes(MEDIA_FILE_MAX_BYTES)}. Что больше — на свой Гугл-диск, сюда ссылку.`}>
+            <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
+          </Field>
+          <Field
+            label="…или URL изображения"
+            hint={(
+              <>
+                {driveId ? 'Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»' : 'Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)'}
+                {' '}
+                <DriveHelpButton />
+              </>
+            )}
+          >
+            <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder="https://… или https://drive.google.com/file/d/…" />
+          </Field>
+          {driveId && (
+            <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: 'Изображение' }, { value: 'video', label: 'Видео' }]} />
+          )}
+          <button
+            type="button"
+            onClick={() => { setValue(''); setReplacing(false); setError(null); }}
+            className="cursor-pointer font-mono text-xs text-mute transition hover:text-mint"
+          >
+            оставить прежнее
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Подпись"><Input autoFocus value={caption} onChange={(e) => setCaption(e.target.value)} /></Field>
         <Field label="Альбом"><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder="Соцсети, Наблюдение…" /></Field>

@@ -120,3 +120,23 @@ export async function lookupByEmail(session: GoogleSession, email: string, ctx: 
   if (!person) return null;
   return parsePerson(obj(person), ctx);
 }
+
+/**
+ * peoplepa.py people, шаблон max_details (modules/gaia.py): персона по Gaia ID.
+ * Ответ — personResponse[0] со status (NOT_FOUND — такого аккаунта нет) и person. null — не найден.
+ */
+export async function lookupByGaia(session: GoogleSession, gaiaId: string, ctx: Ctx): Promise<PersonLookup | null> {
+  const url = `https://people-pa.clients6.google.com/v2/people?${query({ person_id: gaiaId, ...MAX_DETAILS })}`;
+  const res = await session.webApi('photos', url, ctx);
+  const data = obj(await bodyJson(res, ctx));
+  if (res.status !== 200) {
+    const err = obj(data.error);
+    // Неверный номер API отклоняет как INVALID_ARGUMENT / NOT_FOUND — для поиска это «не найден».
+    if (res.status === 400 || res.status === 404) return null;
+    const detail = `People API: HTTP ${res.status}${err.status ? ` ${String(err.status)}` : ''}${err.message ? ` — ${String(err.message)}` : ''}`;
+    throw new GoogleError(res.status === 403 ? 'AUTH' : res.status === 429 ? 'BLOCKED' : 'HTTP', detail);
+  }
+  const answer = arr(data.personResponse)[0];
+  if (!answer || answer.status === 'NOT_FOUND' || !answer.person) return null;
+  return parsePerson(obj(answer.person), ctx);
+}

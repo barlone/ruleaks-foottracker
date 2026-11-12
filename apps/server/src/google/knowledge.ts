@@ -14,14 +14,25 @@ export const androidUserAgent = (pkg: string) =>
 export const API_KEYS = {
   photos: { key: 'AIzaSyAa2odBewW-sPJu3jMORr0aNedh3YlkiQc', origin: 'https://photos.google.com' },
   calendar: { key: 'AIzaSyBNlYH01_9Hc5S1J9vuFmu2nUqBZJNAXxs', origin: 'https://calendar.google.com' },
+  /** Консоль Google Cloud: бренды приложений (apis/clientauthconfig.py). */
+  pantheon: { key: 'AIzaSyCI-zsRP85UVOi0DjtiCwWBwQ1djDy741g', origin: 'https://console.cloud.google.com' },
+  /** Пример Maps JavaScript API: геолокация по Wi-Fi (apis/geolocation.py). */
+  geolocation: { key: 'AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg', origin: 'https://geo-devrel-javascript-samples.web.app' },
 } as const;
 export type ApiKeyName = keyof typeof API_KEYS;
+
+/** Заголовки запроса с ключом API веб-клиента: ключ принимается только со «своего» Origin (objects/apis.py). */
+export function apiKeyHeaders(name: ApiKeyName): Record<string, string> {
+  const { key, origin } = API_KEYS[name];
+  return { ...WEB_HEADERS, 'X-Goog-Api-Key': key, Origin: origin, Referer: origin };
+}
 
 /** SHA-1 сертификата, которым подписан Android-пакет (knowledge/sig.py). */
 export const PACKAGE_SIGS: Record<string, string> = {
   'com.google.android.play.games': '38918a453d07199354f8b19af05ec6562ced5788',
   'com.google.android.gms': '38918a453d07199354f8b19af05ec6562ced5788',
   'com.android.chrome': '38918a453d07199354f8b19af05ec6562ced5788',
+  'com.google.android.apps.docs': '38918a453d07199354f8b19af05ec6562ced5788',
 };
 
 /** От чьего имени (пакет + права) запрашивается токен OAuth по мастер-токену. */
@@ -45,6 +56,72 @@ export const PLAYGAMES_APP: OAuthApp = {
   pkg: 'com.google.android.play.games',
   scopes: ['https://www.googleapis.com/auth/games.firstparty', 'https://www.googleapis.com/auth/googleplay'],
 };
+
+/** apis/drive.py: приложение «Google Диск». */
+export const DRIVE_APP: OAuthApp = {
+  name: 'drive',
+  pkg: 'com.google.android.apps.docs',
+  scopes: ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/drive.file'],
+};
+
+/** knowledge/drive.py request_fields — поля файла, которые запрашивает GHunt. */
+export const DRIVE_FIELDS = [
+  'copyRequiresWriterPermission', 'sourceAppId', 'authorizedAppIds', 'linkShareMetadata', 'teamDriveId', 'primaryDomainName',
+  'approvalMetadata', 'md5Checksum', 'resourceKey', 'quotaBytesUsed', 'hasChildFolders', 'fullFileExtension', 'isAppAuthorized',
+  'iconLink', 'trashingUser', 'title', 'recency', 'detectors', 'exportLinks', 'modifiedDate', 'copyable', 'description',
+  'mimeType', 'passivelySubscribed', 'videoMediaMetadata', 'headRevisionId', 'customerId', 'fileExtension', 'originalFilename',
+  'parents', 'imageMediaMetadata', 'recencyReason', 'folderColorRgb', 'createdDate', 'labels', 'abuseNoticeReason',
+  'webViewLink', 'driveId', 'ownedByMe', 'flaggedForAbuse', 'lastModifyingUser', 'thumbnailLink', 'capabilities',
+  'sharedWithMeDate', 'primarySyncParentId', 'sharingUser', 'version', 'permissionsSummary', 'actionItems', 'labelInfo',
+  'explicitlyTrashed', 'shared', 'subscribed', 'ancestorHasAugmentedPermissions', 'writersCanShare', 'permissions',
+  'alternateLink', 'hasLegacyBlobComments', 'id', 'userPermission', 'hasThumbnail', 'lastViewedByMeDate', 'fileSize', 'kind',
+  'thumbnailVersion', 'spaces', 'organizationDisplayName', 'abuseIsAppealable', 'trashedDate', 'folderFeatures',
+  'webContentLink', 'contentRestrictions', 'shortcutDetails', 'folderColor', 'hasAugmentedPermissions',
+];
+
+/** knowledge/drive.py default_*_capabilities: права любого, кто открыл файл или папку по ссылке (в camelCase API). */
+export const DRIVE_DEFAULT_FILE_CAPS = ['canBlockOwner', 'canCopy', 'canDownload', 'canPrint', 'canRead', 'canRemoveMyDriveParent'];
+export const DRIVE_DEFAULT_FOLDER_CAPS = ['canBlockOwner', 'canDownload', 'canListChildren', 'canPrint', 'canRead', 'canRemoveMyDriveParent'];
+
+export const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+/** knowledge/drive.py mime_types — подписи типов. */
+export const DRIVE_MIME_LABELS: Record<string, string> = {
+  'application/vnd.google-apps.audio': 'Аудио',
+  'application/vnd.google-apps.document': 'Google Документ',
+  'application/vnd.google-apps.drive-sdk': 'Ярлык стороннего приложения',
+  'application/vnd.google-apps.drawing': 'Google Рисунок',
+  'application/vnd.google-apps.file': 'Файл Google Диска',
+  'application/vnd.google-apps.folder': 'Папка Google Диска',
+  'application/vnd.google-apps.form': 'Google Форма',
+  'application/vnd.google-apps.fusiontable': 'Google Fusion Tables',
+  'application/vnd.google-apps.jam': 'Google Jamboard',
+  'application/vnd.google-apps.map': 'Google Мои карты',
+  'application/vnd.google-apps.photo': 'Фото',
+  'application/vnd.google-apps.presentation': 'Google Презентация',
+  'application/vnd.google-apps.script': 'Google Apps Script',
+  'application/vnd.google-apps.shortcut': 'Ярлык',
+  'application/vnd.google-apps.site': 'Google Сайт',
+  'application/vnd.google-apps.spreadsheet': 'Google Таблица',
+  'application/vnd.google-apps.unknown': 'Неизвестный тип',
+  'application/vnd.google-apps.video': 'Видео',
+  'application/vnd.google-apps.kix': 'Google Apps',
+  'application/pdf': 'PDF',
+  'application/msword': 'Документ Word',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Документ Word (OpenXML)',
+  'application/vnd.ms-powerpoint.presentation.macroEnabled.12': 'Презентация PowerPoint с макросами',
+  'application/vnd.ms-excel': 'Таблица Excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Таблица Excel (OpenXML)',
+  'application/vnd.android.package-archive': 'Android-пакет (APK)',
+  'application/zip': 'ZIP-архив',
+  'image/jpeg': 'Изображение JPEG',
+  'audio/mpeg': 'Аудио MPEG',
+  'video/mpeg': 'Видео MPEG',
+  'text/plain': 'Текст',
+};
+
+/** apis/geolocation.py: вторая, заведомо известная точка доступа — API геолокации требует хотя бы две. */
+export const GEO_DUMMY_BSSID = '00:25:9c:cf:1c:ad';
 
 /** config.py templates.gmaps_pb.stats: {} — Gaia ID. */
 export const GMAPS_STATS_PB =

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { GOOGLE_EMAIL_STEPS, type GoogleEmailReport, type GoogleEmailStep, type GoogleModeId } from '@ft/shared';
-import { googleErrorText, type GoogleHunter } from './email.ts';
+import { GOOGLE_STEPS, type GoogleModeId, type GoogleReport, type GoogleStepId } from '@ft/shared';
+import { googleErrorText, type GoogleHunter } from './hunter.ts';
 
 // Задания «Поиска по Google» — в памяти сервера, как у поиска личных страниц: результат нужен тому, кто искал,
 // перезапуск сервера всё забывает. Все запросы идут от одного служебного аккаунта Google, поэтому поиски
@@ -16,11 +16,11 @@ interface Job {
   query: string;
   state: GoogleJobState;
   /** queue — ждёт своей очереди. */
-  step: GoogleEmailStep | 'queue';
+  step: GoogleStepId | 'queue';
   startedAt: string;
   finishedAt: string | null;
   error: string | null;
-  report: GoogleEmailReport | null;
+  report: GoogleReport | null;
   ctrl: AbortController;
   touched: number;
 }
@@ -30,14 +30,14 @@ export interface GoogleJobView {
   mode: GoogleModeId;
   query: string;
   state: GoogleJobState;
-  step: GoogleEmailStep | 'queue';
+  step: GoogleStepId | 'queue';
   /** Сколько шагов пройдено из stepsTotal — для индикатора. */
   stepsDone: number;
   stepsTotal: number;
   startedAt: string;
   finishedAt: string | null;
   error: string | null;
-  report: GoogleEmailReport | null;
+  report: GoogleReport | null;
 }
 
 export interface GoogleJobSummary {
@@ -106,7 +106,7 @@ async function run(job: Job, hunter: GoogleHunter, opts: GoogleJobsOptions) {
   await sleep(lastRunAt + opts.minIntervalMs - Date.now(), signal);
   if (signal.aborted) return;
   try {
-    job.report = await hunter.email(job.query, { timeoutMs: opts.timeoutMs, signal }, (step) => {
+    job.report = await hunter.run(job.mode, job.query, { timeoutMs: opts.timeoutMs, signal }, (step) => {
       job.step = step;
       job.touched = Date.now();
     });
@@ -167,11 +167,12 @@ export function recentJobs(userId: string): GoogleJobSummary[] {
 }
 
 function view(j: Job): GoogleJobView {
-  const index = GOOGLE_EMAIL_STEPS.findIndex((s) => s.id === j.step);
+  const steps: readonly { id: string }[] = GOOGLE_STEPS[j.mode];
+  const index = steps.findIndex((s) => s.id === j.step);
   return {
     id: j.id, mode: j.mode, query: j.query, state: j.state, step: j.step,
-    stepsDone: j.state === 'done' ? GOOGLE_EMAIL_STEPS.length : Math.max(0, index),
-    stepsTotal: GOOGLE_EMAIL_STEPS.length,
+    stepsDone: j.state === 'done' ? steps.length : Math.max(0, index),
+    stepsTotal: steps.length,
     startedAt: j.startedAt, finishedAt: j.finishedAt, error: j.error, report: j.report,
   };
 }

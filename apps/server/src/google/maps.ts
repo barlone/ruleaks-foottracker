@@ -8,7 +8,21 @@ import { bodyJson, gfetch, GoogleError, type Ctx } from './net.ts';
 
 export const mapsProfileUrl = (gaiaId: string) => `https://www.google.com/maps/contrib/${gaiaId}/reviews`;
 
+/**
+ * Статистика участника. Запрос без входа: Google изредка отвечает на него не JSON-ом или не 200 — разовый сбой,
+ * повтор через секунду обычно проходит. Поэтому одна повторная попытка; капча (BLOCKED) не повторяется.
+ */
 export async function mapsStats(gaiaId: string, ctx: Ctx): Promise<GoogleMaps> {
+  try {
+    return await mapsStatsOnce(gaiaId, ctx);
+  } catch (e) {
+    if (ctx.signal.aborted || !(e instanceof GoogleError) || e.code === 'BLOCKED') throw e;
+    await new Promise((r) => setTimeout(r, 1000));
+    return mapsStatsOnce(gaiaId, ctx);
+  }
+}
+
+async function mapsStatsOnce(gaiaId: string, ctx: Ctx): Promise<GoogleMaps> {
   const profileUrl = mapsProfileUrl(gaiaId);
   const pb = GMAPS_STATS_PB.replace('{}', gaiaId);
   let res: Response;

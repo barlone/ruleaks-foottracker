@@ -9,15 +9,20 @@
 
   ghunt/helpers/auth.py, apis/accounts.py   → session.ts   (мастер-токен Android → токены OAuth и cookie сессии)
   ghunt/objects/apis.py                     → session.ts   (SAPISIDHASH, ключи API, заголовки)
-  ghunt/knowledge/{keys,sig,people}.py,
-  ghunt/config.py                           → knowledge.ts (ключи API, подписи пакетов, шаблон pb для Карт)
-  ghunt/apis/peoplepa.py, parsers/people.py → people.ts
+  ghunt/knowledge/{keys,sig,people,drive}.py,
+  ghunt/config.py                           → knowledge.ts (ключи API, подписи пакетов, шаблон pb для Карт, поля Drive)
+  ghunt/apis/peoplepa.py, parsers/people.py → people.ts   (по e-mail и по Gaia ID)
   ghunt/helpers/utils.py (flathash)         → flathash.ts
   ghunt/apis/playgateway.py, protos/*       → playgames.ts, proto.ts (gRPC и Protocol Buffers — вручную)
   ghunt/apis/playgames.py, helpers/…        → playgames.ts
   ghunt/helpers/gmaps.py                    → maps.ts
   ghunt/apis/calendar.py, helpers/…         → calendar.ts
-  ghunt/modules/email.py                    → email.ts
+  ghunt/apis/drive.py, parsers/drive.py,
+  helpers/drive.py, apis/clientauthconfig.py → drive.ts
+  ghunt/apis/geolocation.py, parsers/geolocate.py → geolocate.ts
+  ghunt/apis/digitalassetslinks.py, parsers/…,
+  helpers/playstore.py                      → dal.ts
+  ghunt/modules/{email,gaia,drive,geolocate,spiderdal}.py → hunter.ts
   ghunt/modules/login.py                    → ../tools/google-login.ts
 
 AGPL-3.0 — «заразная» лицензия с сетевой оговоркой (§13): производная работа, с которой пользователи

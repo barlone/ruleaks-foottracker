@@ -30,6 +30,11 @@ const HOSTS = new Set([
   'www.googleapis.com',
   'www.google.com',
   'playgateway-pa.googleapis.com',
+  // drive: бренд приложения-источника файла (apis/clientauthconfig.py)
+  'clientauthconfig.googleapis.com',
+  // spiderdal: связи сайтов и приложений, проверка пакета в Google Play (apis/digitalassetslinks.py, helpers/playstore.py)
+  'digitalassetlinks.googleapis.com',
+  'play.google.com',
 ]);
 
 function allowed(url: URL) {
@@ -47,7 +52,7 @@ function netError(e: unknown, ctx: Ctx, what: string): never {
 }
 
 export interface GInit {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'HEAD';
   headers?: Record<string, string>;
   body?: string;
 }
@@ -86,6 +91,18 @@ export async function bodyJson(res: Response, ctx: Ctx): Promise<unknown> {
   } catch {
     throw new GoogleError('PARSE', `${new URL(res.url || 'https://google.com').hostname}: ответ не JSON (HTTP ${res.status}): ${text.slice(0, 120)}`);
   }
+}
+
+/** Ошибка API Google в теле ответа ({"error": {code, status, message}}) → GoogleError; null — ошибки нет. */
+export function apiError(data: unknown, httpStatus: number, what: string): GoogleError | null {
+  const err = (data as { error?: { code?: number; status?: string; message?: string } } | null)?.error;
+  if (!err && httpStatus < 400) return null;
+  const code = err?.code ?? httpStatus;
+  const detail = `${what}: HTTP ${httpStatus}${err?.status ? ` ${err.status}` : ''}${err?.message ? ` — ${err.message}` : ''}`;
+  if (code === 404 || err?.status === 'NOT_FOUND') return new GoogleError('NOTFOUND', detail);
+  if (code === 401 || code === 403) return new GoogleError('AUTH', detail);
+  if (code === 429) return new GoogleError('BLOCKED', detail);
+  return new GoogleError('HTTP', detail);
 }
 
 /** Строка запроса: массив — повтор ключа (как httpx), логическое — true/false. */

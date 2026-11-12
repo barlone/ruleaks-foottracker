@@ -37,6 +37,9 @@ const DbSection = z.object({
 export const AUTH_MODES = ['none', 'password-sha256', 'bot-db'] as const;
 export type AuthMode = (typeof AUTH_MODES)[number];
 
+/** Публичный Nominatim (OpenStreetMap) — адрес точки Wi-Fi по умолчанию; для продакшена лучше свой экземпляр. */
+export const NOMINATIM_PUBLIC = 'https://nominatim.openstreetmap.org';
+
 /** Подложка карты поиска по геоданным. */
 export const GEO_TILES = ['raster', 'pmtiles'] as const;
 
@@ -127,6 +130,8 @@ const SECTIONS = {
     'timeout-sec': int(20, 1, 120),
     /** Пауза между поисками: Google блокирует аккаунт и адрес сервера за частые запросы. */
     'min-interval-sec': int(3, 0, 600),
+    /** Сервис обратного геокодирования (API Nominatim) для адреса точки Wi-Fi; пусто — адрес не определяется. */
+    'reverse-geocode': str(NOMINATIM_PUBLIC),
   }),
 };
 
@@ -207,7 +212,11 @@ export interface AppConfig {
   /** Поиск личных страниц по имени пользователя (манифест сайтов Sherlock). */
   pages: { enabled: boolean; timeoutMs: number; concurrency: number; sideEffectProbes: boolean };
   /** Поиск по Google (перенос GHunt). masterToken пуст — имитация с вымышленными данными. В браузер токен не уходит. */
-  google: { enabled: boolean; masterToken: string; timeoutMs: number; minIntervalMs: number };
+  google: {
+    enabled: boolean; masterToken: string; timeoutMs: number; minIntervalMs: number;
+    /** Базовый адрес Nominatim для адреса точки Wi-Fi ('' — не определять). Туда уходят найденные координаты. */
+    reverseGeocodeUrl: string;
+  };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
 }
@@ -340,12 +349,16 @@ export function loadConfig(): AppConfig {
       masterToken: c['google-search']['master-token'],
       timeoutMs: c['google-search']['timeout-sec'] * 1000,
       minIntervalMs: c['google-search']['min-interval-sec'] * 1000,
+      reverseGeocodeUrl: c['google-search']['reverse-geocode'].replace(/\/+$/, ''),
     },
     warnings,
   };
 
+  if (cfg.google.enabled && cfg.google.reverseGeocodeUrl === NOMINATIM_PUBLIC && !loopback) {
+    warnings.push('[google-search] reverse-geocode — публичный Nominatim: координаты найденных точек Wi-Fi уходят в OpenStreetMap, а его правила не допускают нагрузку сервиса; укажите свой экземпляр или оставьте пустым');
+  }
   if (cfg.google.enabled && !cfg.google.masterToken) {
-    warnings.push('[google-search] master-token не задан: «Поиск по Google» отвечает вымышленными данными (имитация) — получите токен: npm run google-login');
+    warnings.push('[google-search] master-token не задан: поиск по e-mail, Gaia ID и файлу Drive отвечает вымышленными данными (имитация) — получите токен: npm run google-login. Wi-Fi BSSID и Digital Asset Links работают и без него');
   }
 
   if (cfg.geo.enabled && cfg.geo.tiles === 'raster' && !loopback) {
@@ -392,6 +405,7 @@ function validate(cfg: AppConfig) {
     if (!isUrl(cfg.scanstore.url)) missing.push('[scanstore-api] url');
     if (!cfg.scanstore.token) missing.push('[scanstore-api] token');
   }
+  if (cfg.google.enabled && cfg.google.reverseGeocodeUrl && !isUrl(cfg.google.reverseGeocodeUrl)) missing.push('[google-search] reverse-geocode (https-адрес Nominatim или пусто)');
   if (cfg.google.enabled && cfg.google.masterToken && !cfg.google.masterToken.startsWith('aas_et/')) {
     missing.push('[google-search] master-token (мастер-токен Android начинается с aas_et/ — npm run google-login)');
   }
@@ -449,6 +463,6 @@ export function describeConfig(cfg: AppConfig): string[] {
     `сканы:     ${cfg.scanstore.enabled ? `${cfg.scanstore.url} (таймаут ${cfg.scanstore.timeoutMs / 1000} с)` : 'выключены'}`,
     `геопоиск:  ${!cfg.geo.enabled ? 'выключен' : cfg.geo.tiles === 'raster' ? `растровые тайлы ${new URL(cfg.geo.rasterUrl.replace(/[{}]/g, '')).host}` : `PMTiles ${cfg.geo.pmtiles}`}`,
     `страницы:  ${cfg.pages.enabled ? `поиск личных страниц (таймаут ${cfg.pages.timeoutMs / 1000} с, параллельно ${cfg.pages.concurrency})` : 'выключен'}`,
-    `Google:    ${!cfg.google.enabled ? 'выключен' : cfg.google.masterToken ? `поиск по Google (таймаут ${cfg.google.timeoutMs / 1000} с, пауза ${cfg.google.minIntervalMs / 1000} с)` : 'имитация — мастер-токен не задан'}`,
+    `Google:    ${!cfg.google.enabled ? 'выключен' : `${cfg.google.masterToken ? 'поиск по Google' : 'e-mail, Gaia ID, Drive — имитация (нет мастер-токена); Wi-Fi и Asset Links — настоящие'} (таймаут ${cfg.google.timeoutMs / 1000} с, пауза ${cfg.google.minIntervalMs / 1000} с, адрес Wi-Fi: ${cfg.google.reverseGeocodeUrl || 'не определяется'})`}`,
   ];
 }

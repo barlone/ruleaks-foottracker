@@ -290,42 +290,68 @@ source note).
 
 ### Google search (GHunt port)
 
-`/search/google` (`features/search/GoogleSearchPage.tsx`, `routers/google.ts`, `apps/server/src/google/`): a TypeScript
-port of [GHunt](https://github.com/mxrch/GHunt) (AGPL-3.0 — see `google/NOTICE.ghunt` for the file map and the upstream
-revision). Search-type buttons above the input are GHunt's modules (`GOOGLE_MODES` in `@ft/shared`, `google.ts`); only
-`email` is ported (`ready: true`), the rest are disabled buttons and the server rejects them. Porting another module =
-flip `ready`, extend the `Start` schema in the router and `GoogleHunter`.
+`/search/google` (`features/search/GoogleSearchPage.tsx` + `Google*Result.tsx`, `GoogleParts.tsx`, `routers/google.ts`,
+`apps/server/src/google/`): a TypeScript port of [GHunt](https://github.com/mxrch/GHunt) (AGPL-3.0 — see
+`google/NOTICE.ghunt` for the file map and the upstream revision). Search-type buttons above the input are GHunt's
+modules, all ported (`GOOGLE_MODES` in `@ft/shared` `google.ts`, with input parsers `parseGaiaId` / `parseDriveRef` /
+`parseBssids` / `parseDalQuery`, `googleQueryProblem`, `normalizeGoogleQuery`, per-mode steps `GOOGLE_STEPS` and the
+`GoogleReport` union discriminated by `mode`). `hunter.ts` (`GhuntHunter.run(mode, …)`) dispatches:
 
-- **One service Google account.** The config holds only its Android master token (`[google-search] master-token`,
-  `aas_et/…`; `npm run google-login` exchanges a one-time `oauth2_4/…` token from `accounts.google.com/EmbeddedSetup`,
-  or takes a master token / GHunt Companion string / GHunt `creds.m`, validates it and writes it to `config.ini`).
-  `session.ts` derives everything else in memory: per-app OAuth tokens (`android.googleapis.com/auth`), web-session
-  cookies (Chrome token → `OAuthLogin` uberauth → `MergeSession`) and the `SAPISIDHASH`
-  header + web-client API key/Origin for the internal web APIs. No OSIDs — the email module does not need them.
-- **`email.ts`** (= `ghunt email`): People lookup (`people.ts`, fatal if it fails) → Play Games (`playgames.ts`: gRPC
-  search by e-mail, then the games HTTP API) → Maps contributor stats (`maps.ts`, no auth) → public calendar
-  (`calendar.ts`). The last three are `GoogleSection`s (`ok` / `error` / `skipped`) so one failing does not sink the
-  report. The report shape is `GoogleEmailReport` in `@ft/shared`.
+- **email** (`ghunt email`): People lookup (`people.ts`, fatal if it fails) → Play Games (`playgames.ts`: gRPC search,
+  then the games HTTP API) → Maps contributor stats (`maps.ts`, no auth, one retry) → public calendar (`calendar.ts`).
+- **gaia** (`ghunt gaia`): `lookupByGaia` (`/v2/people?person_id=`, answer in `personResponse[0]`) → Maps. No Play Games
+  or calendar (they need the address); the UI offers to search on by the profile's e-mail.
+- **drive** (`ghunt drive`, `drive.ts`): `drive/v2internal/files/<id>` with the «Google Диск» app OAuth token
+  (`DRIVE_APP`); a `resourcekey` from the link goes in `X-Goog-Drive-Resource-Keys`. 404 / 403 «no access» = not found
+  (not shared by link). Users from permissions + permissionsSummary, last modifying user, source app brand
+  (`clientauthconfig.googleapis.com`, pantheon key, no auth), folder child count, comment authors.
+- **geolocate** (`ghunt geolocate`, `geolocate.ts`): Geolocation API with the Maps JS sample key (Origin-bound), a dummy
+  second AP when only one BSSID is given; address via Nominatim at `[google-search] reverse-geocode` (admin-configured,
+  plain `fetch`, so a self-hosted one on the LAN works; empty = no address; the public OSM one warns off-loopback —
+  the coordinates leave to it). The UI shows the point on the geo-search map and links to a leak search in that radius
+  (only when `[config] geo-search` is on).
+- **spiderdal** (`ghunt spiderdal`, `dal.ts`): BFS over Digital Asset Links statements (keyless), site + `www.` variant;
+  unlike GHunt it is capped (`MAX_ASSETS` 150, `MAX_ROUNDS` 8 → `truncated`), then a Google Play HEAD per package
+  (404 = private app).
+
+Every part after the fatal first request is a `GoogleSection` (`ok` / `error` / `skipped`), so one failing does not sink
+the report. Found e-mails and Gaia IDs (profile, Drive users) carry a «search on» button (`Searchable` in
+`GoogleParts.tsx` → `GoogleRunContext` in `googleSearch.ts`) that runs the next search on the same page.
+
+- **One service Google account** for email / gaia / drive. The config holds only its Android master token
+  (`[google-search] master-token`, `aas_et/…`; `npm run google-login` exchanges a one-time `oauth2_4/…` token from
+  `accounts.google.com/EmbeddedSetup`, or takes a master token / GHunt Companion string / GHunt `creds.m`, validates it
+  with a real People lookup of the account's own address and writes it to `config.ini`). `session.ts` derives
+  everything else in memory: per-app OAuth tokens (`android.googleapis.com/auth`), web-session cookies (Chrome token →
+  `OAuthLogin` uberauth → `MergeSession`) and the `SAPISIDHASH` header + web-client API key/Origin (`apiKeyHeaders` in
+  `knowledge.ts`) for the internal web APIs. No OSIDs.
+- **No master token**: `GhuntHunter` gets `session = null` and sends email / gaia / drive to `DemoHunter` (`demo.ts`,
+  fake query-deterministic reports; not found: addresses with `nobody`/`none`, Gaia IDs not starting with 1, file IDs
+  with `none`); geolocate and spiderdal stay real. `google.config.demoModes` lists the faked modes; the banner shows
+  only on those.
 - **Hand-rolled pieces**: gRPC over `node:http2` (`net.ts` `grpcUnary` — Node's fetch is HTTP/1.1) and a minimal
   protobuf writer/reader (`proto.ts`; field numbers reach 3·10⁸, so tags are computed arithmetically, not with 32-bit
   shifts); a PNG decoder + average hash (`flathash.ts`) replacing PIL/imagehash for «default profile picture» — the
   photo is requested as a 64 px PNG (`=s64-rp`) and compared with two reference hashes (GHunt's old silhouette and the
   current `/a/default-user`, which GHunt's hash does not match).
 - **`net.ts`**: `gfetch` never follows redirects (a redirect to `/sorry` = captcha → `BLOCKED`), enforces an allowlist
-  of Google hosts and a per-request timeout. `GoogleError` codes (`AUTH`, `BLOCKED`, `TIMEOUT`, `HTTP`, `PARSE`) map
-  to generic Russian texts for the user (`googleErrorText`); Google's actual answer goes to the server log as
-  `google: …`. The profile-photo URL comes from Google's response, so it is fetched through `pages/outbound.ts`.
+  of Google hosts and a per-request timeout; `apiError` maps a Google `{"error": …}` body to a `GoogleError`. Codes
+  (`AUTH`, `BLOCKED`, `TIMEOUT`, `HTTP`, `PARSE`, `NOTFOUND`) map to generic Russian texts for the user
+  (`googleErrorText`); Google's actual answer goes to the server log as `google: …`. The profile-photo URL comes from
+  Google's response, so it is fetched through `pages/outbound.ts`.
 - **No `CheckCookie`**: GHunt validates the session with `accounts.google.com/CheckCookie`; Google now answers HTTP
   200 on a good session (used to be 302) just like on a bad one, so it can no longer tell them apart. The session is
   instead validated by its real use — `webApi` retries once on 401, dropping and regenerating cookies. Cookies are
   cached `COOKIE_TTL` (30 min). Play Games search returns gRPC NOT_FOUND (status 5) when the account has no player
-  profile — mapped to a `NOTFOUND` `GoogleError` and treated as «no profile», not an error.
+  profile — mapped to `NOTFOUND` and treated as «no profile», not an error.
 - **`jobs.ts`**: in-memory jobs like the pages search (an hour of «История», polled every second, shown in
-  `ProgressDialog` by step), but strictly sequential with `min-interval-sec` between runs — one account, and Google
-  answers bursts with captchas and account locks. One unfinished job per user, `MAX_PENDING` per process → `GOOGLE_BUSY`.
-- **No master token → `DemoHunter`** (`demo.ts`): fake, address-deterministic reports and a warning banner (addresses
-  with `nobody`/`none` are «not found»). The demo covers the UI without a service account.
-- Found links (Maps contributor page, calendar .ics) go to a dossier through `AddPagesDialog` (its `note` prop).
+  `ProgressDialog` by step), but strictly sequential with `min-interval-sec` between runs, keyless modes included —
+  one account and one server IP, and Google answers bursts with captchas and account locks. One unfinished job per user
+  (a new search cancels it — in solo mode everyone is the same user), `MAX_PENDING` per process → `GOOGLE_BUSY`.
+- **Live-verified against Google**: email and gaia on the service account itself. Drive, geolocate and spiderdal were
+  ported 1:1 from GHunt but have not been run against live targets yet.
+- Found links (Maps contributor page, calendar .ics, the Drive file, a Maps link to the Wi-Fi point, DAL sites and
+  public Play pages) go to a dossier through `AddPagesDialog` (its `note` prop).
 
 ### Progress window
 
@@ -431,6 +457,9 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 - Dialogs center without CSS transforms and editor popups are positioned relative to the editor wrapper: `fixed`
   positioning breaks inside ancestors with `transform`/`backdrop-filter`.
 - URL-triggered searches use `useRunOnMount` (ref guard) — React StrictMode would otherwise start them twice.
+- Search params are parsed as JSON (`parseSearch` in `router.tsx`), except a bare integer of 16+ digits, which stays a
+  string: a 21-digit Gaia ID as a JSON number loses precision (…406647 → …400000) before the route's `text` schema
+  turns it back into a string, and the search silently hits another account. The same parser drives `stringifySearch`.
 - React Fast Refresh: a `.tsx` module exports only components (types are fine); hooks, helpers and constants go to a
   sibling `.ts` (`features/search/job.ts`, `selection.ts`, `foundScans.ts`, `components/process.ts`, `lib/listView.ts`…).
   Pages read route params with `useSearch({ from: '/search' })` / `useParams({ from: … })`, never by importing route

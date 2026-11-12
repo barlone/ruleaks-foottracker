@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter, lazyRouteComponent, redirect } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent, parseSearchWith, redirect, stringifySearchWith } from '@tanstack/react-router';
 import { z } from 'zod';
 import { Root } from './components/AppShell.tsx';
 import { AttrSearchPage } from './features/search/AttrSearchPage.tsx';
@@ -109,7 +109,18 @@ const routeTree = rootRoute.addChildren([
   indexRoute, loginRoute, searchRoute, tgSearchRoute, geoSearchRoute, pagesSearchRoute, googleSearchRoute, fuzzySearchRoute, dossiersRoute, dossierRoute, investigationsRoute, investigationRoute,
 ]);
 
-export const router = createRouter({ routeTree, defaultPreload: 'intent' });
+// Значения из адреса роутер разбирает как JSON. Длинное целое (Gaia ID — 21 цифра, номер карты) стало бы числом
+// с потерей точности: 109687955485303406647 → 109687955485303400000, и поиск ушёл бы по чужому номеру — схема
+// маршрута (text) приводит к строке уже испорченное число. Целое из 16+ цифр (больше 2^53) оставляем строкой;
+// тот же разбор при записи адреса — такая строка пишется без кавычек. Телефоны (E.164 — до 15 цифр) не задеты.
+const parseValue = (v: string): unknown => (/^-?\d{16,}$/.test(v) ? v : JSON.parse(v));
+
+export const router = createRouter({
+  routeTree,
+  defaultPreload: 'intent',
+  parseSearch: parseSearchWith(parseValue),
+  stringifySearch: stringifySearchWith(JSON.stringify, parseValue),
+});
 
 declare module '@tanstack/react-router' {
   interface Register {

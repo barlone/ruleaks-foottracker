@@ -1,26 +1,27 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { GOOGLE_QUERY_MAX, googleQueryProblem } from '@ft/shared';
+import { GOOGLE_MODE_IDS, GOOGLE_QUERY_MAX, googleQueryProblem, normalizeGoogleQuery } from '@ft/shared';
 import { appConfig } from '../config.ts';
-import { DemoHunter } from '../google/demo.ts';
-import { GhuntHunter, type GoogleHunter } from '../google/email.ts';
+import { GhuntHunter, type GoogleHunter } from '../google/hunter.ts';
 import { cancelJob, getJob, GoogleBusy, recentJobs, startJob } from '../google/jobs.ts';
 import { GoogleSession } from '../google/session.ts';
 import { activeProcedure, authedProcedure, router } from '../trpc.ts';
 
-// «Поиск по Google» — перенос GHunt (apps/server/src/google). Запросы к Google делает сервер от имени одного
-// служебного аккаунта ([google-search] master-token); задание живёт в памяти (google/jobs.ts), браузер его опрашивает.
-// Раздел выключается флагом [config] google-search: тогда config → null, остальное — GOOGLE_DISABLED.
-// Без мастер-токена раздел работает в режиме имитации (google/demo.ts) — как шлюз при [api] enabled = false.
+// «Поиск по Google» — перенос GHunt (apps/server/src/google). Запросы к Google делает сервер; виды со служебным
+// аккаунтом ([google-search] master-token) — от его имени, без токена они отвечают имитацией (google/demo.ts),
+// а Wi-Fi BSSID и Digital Asset Links ходят в открытые API и работают всегда. Задание живёт в памяти
+// (google/jobs.ts), браузер его опрашивает. Раздел выключается флагом [config] google-search: config → null,
+// остальное — GOOGLE_DISABLED.
 
 const google = appConfig.google;
 const log = (msg: string) => console.log(msg);
 
-const hunter: GoogleHunter | null = !google.enabled ? null : google.masterToken ? new GhuntHunter(new GoogleSession(google.masterToken, log), log) : new DemoHunter();
+const hunter: GoogleHunter | null = google.enabled
+  ? new GhuntHunter(google.masterToken ? new GoogleSession(google.masterToken, log) : null, { reverseGeocodeUrl: google.reverseGeocodeUrl, log })
+  : null;
 
 const JobId = z.string().min(1).max(64);
-// Пока перенесён один вид поиска GHunt — по e-mail; остальные кнопки в вебе выключены (GOOGLE_MODES.ready).
-const Start = z.object({ mode: z.literal('email'), query: z.string().trim().min(1).max(GOOGLE_QUERY_MAX) })
+const Start = z.object({ mode: z.enum(GOOGLE_MODE_IDS), query: z.string().trim().min(1).max(GOOGLE_QUERY_MAX) })
   .refine((v) => !googleQueryProblem(v.mode, v.query), 'BAD_QUERY');
 
 const enabledProcedure = activeProcedure.use(({ next }) => {
@@ -29,13 +30,13 @@ const enabledProcedure = activeProcedure.use(({ next }) => {
 });
 
 export const googleRouter = router({
-  /** null — раздел выключен. demo — ответы вымышленные (нет мастер-токена). */
-  config: authedProcedure.query(() => (hunter ? { demo: hunter.demo, timeoutSec: google.timeoutMs / 1000 } : null)),
+  /** null — раздел выключен. demoModes — виды, отвечающие вымышленными данными (нет мастер-токена). */
+  config: authedProcedure.query(() => (hunter ? { demoModes: [...hunter.demoModes], timeoutSec: google.timeoutMs / 1000, reverseGeocode: !!google.reverseGeocodeUrl } : null)),
 
   start: enabledProcedure.input(Start).mutation(({ ctx, input }) => {
     try {
-      // Адреса Google не различают регистр — в истории и отчёте адрес в одном виде.
-      return startJob(ctx.user.id, input.mode, input.query.toLowerCase(), hunter!, { timeoutMs: google.timeoutMs, minIntervalMs: google.minIntervalMs, log });
+      // Один и тот же запрос — в одном виде (адрес в нижнем регистре, MAC через двоеточия…): в истории и отчёте.
+      return startJob(ctx.user.id, input.mode, normalizeGoogleQuery(input.mode, input.query), hunter!, { timeoutMs: google.timeoutMs, minIntervalMs: google.minIntervalMs, log });
     } catch (e) {
       if (e instanceof GoogleBusy) throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'GOOGLE_BUSY', cause: e });
       throw e;

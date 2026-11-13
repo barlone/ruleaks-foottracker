@@ -9,6 +9,7 @@ import {
 import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t, tj, tn, tx } from '../../lib/i18n.ts';
 import { AddToDossierDialog, type PendingValue } from './AddToDossierDialog.tsx';
 import { AttrExportDialog } from './AttrExportDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout } from './common.tsx';
@@ -44,7 +45,7 @@ export function AttrSearchPage() {
   const effectiveKind = kind === 'auto' || autoPick ? (autoPick && detected.includes(autoPick) ? autoPick : detected[0] ?? null) : kind;
   const selectValue = kind === 'auto' || autoPick ? (effectiveKind ? `auto:${effectiveKind}` : 'auto') : kind;
   const kindInfo = SEARCH_KINDS.find((k) => k.id === effectiveKind);
-  const label = (id: string) => SEARCH_KINDS.find((k) => k.id === id)?.label ?? id;
+  const label = (id: string) => t(SEARCH_KINDS.find((k) => k.id === id)?.label ?? id);
 
   const start = trpc.search.start.useMutation({
     onSuccess: (j) => {
@@ -84,9 +85,9 @@ export function AttrSearchPage() {
   return (
     <SearchLayout
       section="attr"
-      title="Поиск по атрибутам"
+      title={t('Поиск по атрибутам')}
       titleExtra={params.from && <BackToDossier id={params.from} />}
-      subtitle="Телефон, email, ФИО, документы, авто, Telegram ID… Найденное можно сразу перенести в досье."
+      subtitle={t('Телефон, email, ФИО, документы, авто, Telegram ID… Найденное можно сразу перенести в досье.')}
       activeId={jobId}
       onOpen={setJobId}
     >
@@ -106,23 +107,23 @@ export function AttrSearchPage() {
                   autoFocus
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
-                  placeholder={kindInfo?.placeholder ?? 'Телефон, email, ФИО, ИНН, госномер, Telegram ID…'}
+                  placeholder={kindInfo?.placeholder ? t(kindInfo.placeholder) : t('Телефон, email, ФИО, ИНН, госномер, Telegram ID…')}
                   className="h-12 pl-10 font-mono text-base"
                   disabled={disabled}
                 />
               </div>
               <Select value={selectValue} onChange={(e) => setKind(e.target.value)} className="h-12 md:w-60" disabled={disabled}>
-                {detected.length === 0 && <option value="auto">Авто</option>}
+                {detected.length === 0 && <option value="auto">{t('Авто')}</option>}
                 {detected.map((id) => (
-                  <option key={`auto:${id}`} value={`auto:${id}`}>Авто: {label(id)}</option>
+                  <option key={`auto:${id}`} value={`auto:${id}`}>{t('Авто: {kind}', { kind: label(id) })}</option>
                 ))}
                 <option disabled>──────────────</option>
                 {SEARCH_KINDS.map((k) => (
-                  <option key={k.id} value={k.id}>{k.label}</option>
+                  <option key={k.id} value={k.id}>{t(k.label)}</option>
                 ))}
               </Select>
               <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !effectiveKind || !value.trim() || noStep2Fields || start.isPending}>
-                {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
+                {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : t('Искать')}
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -137,11 +138,14 @@ export function AttrSearchPage() {
                   disabled={!kindInfo?.deep}
                   className="accent-[var(--color-mint)]"
                 />
-                <Layers size={14} className="text-mint" /> Глубокий поиск со связями
+                <Layers size={14} className="text-mint" /> {t('Глубокий поиск со связями')}
               </label>
               <label
                 className="flex cursor-pointer items-center gap-2"
-                title={`После обычного поиска — простые поиски по найденным атрибутам (${STEP2_BY_OPTIONS.map((o) => o.label).join(', ')}; до ${STEP2_MAX_SEARCHES} поисков); из их записей добавляются отмеченные атрибуты с пометкой ²`}
+                title={t('После обычного поиска — простые поиски по найденным атрибутам ({kinds}; до {max} поисков); из их записей добавляются отмеченные атрибуты с пометкой ²', {
+                  kinds: STEP2_BY_OPTIONS.map((o) => fieldLabel(o.field)).join(', '),
+                  max: STEP2_MAX_SEARCHES,
+                })}
               >
                 <input
                   type="checkbox"
@@ -152,30 +156,30 @@ export function AttrSearchPage() {
                   }}
                   className="accent-[var(--color-mint)]"
                 />
-                <ListChecks size={14} className="text-mint" /> Дополнительный поиск вторым шагом
+                <ListChecks size={14} className="text-mint" /> {t('Дополнительный поиск вторым шагом')}
               </label>
               {(kind === 'auto' || autoPick) && value.trim() && !detected.length && (
-                <Tag tone="warn">{isUkrainianPhone(value) ? 'поиск только по номерам РФ' : 'тип не распознан — выберите вручную'}</Tag>
+                <Tag tone="warn">{isUkrainianPhone(value) ? t('поиск только по номерам РФ') : t('тип не распознан — выберите вручную')}</Tag>
               )}
               {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
             </div>
             {step2 && (
               <div className="space-y-2">
                 <ChipSet
-                  title="Искать вторым шагом по:"
+                  title={t('Искать вторым шагом по:')}
                   icon={<SearchCheck size={13} className="text-mint" />}
                   options={STEP2_BY_OPTIONS}
                   value={step2By}
                   onChange={setStep2By}
-                  empty="второй шаг поиска невозможен — отметьте, по каким атрибутам искать"
+                  empty={t('второй шаг поиска невозможен — отметьте, по каким атрибутам искать')}
                 />
                 <ChipSet
-                  title="Брать из второго шага:"
+                  title={t('Брать из второго шага:')}
                   icon={<ListChecks size={13} className="text-mint" />}
                   options={STEP2_FIELD_OPTIONS}
                   value={step2Fields}
                   onChange={setStep2Fields}
-                  empty="второй шаг поиска невозможен — отметьте хотя бы один атрибут"
+                  empty={t('второй шаг поиска невозможен — отметьте хотя бы один атрибут')}
                 />
               </div>
             )}
@@ -185,9 +189,9 @@ export function AttrSearchPage() {
       {jobId && <JobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onPivot={pivot} />}
       {!jobId && (
         <Empty>
-          Введите значение — тип определится автоматически.
+          {t('Введите значение — тип определится автоматически.')}
           <br />
-          Из любого найденного значения можно сделать следующий шаг поиска.
+          {t('Из любого найденного значения можно сделать следующий шаг поиска.')}
         </Empty>
       )}
     </SearchLayout>
@@ -225,8 +229,8 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
 
   if (job?.state === 'choose') {
     return (
-      <Card title="Ник принадлежит нескольким пользователям">
-        <p className="mb-3 text-sm text-dim">Выберите Telegram ID для запроса «{job.query}»:</p>
+      <Card title={t('Ник принадлежит нескольким пользователям')}>
+        <p className="mb-3 text-sm text-dim">{t('Выберите Telegram ID для запроса «{query}»:', { query: job.query })}</p>
         <div className="flex flex-wrap gap-2">
           {job.candidates?.map((id) => (
             <Button key={id} onClick={() => onPivot('tgid', id)}>{id}</Button>
@@ -244,8 +248,8 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
   const step2 = (job.result as { step2?: Step2Info } | null)?.step2 ?? null;
   const step2Added = step2?.queries.reduce((n, q) => n + (q.added ?? 0), 0) ?? 0;
   const summary = job.deep
-    ? `${rows.length} связанных значений`
-    : `${leaks.length} утечек${step2 ? `, вторым шагом добавлено значений: ${step2Added}` : ''}`;
+    ? tn(rows.length, '{n} связанное значение|{n} связанных значения|{n} связанных значений')
+    : tn(leaks.length, '{n} утечка|{n} утечки|{n} утечек') + (step2 ? t(', вторым шагом добавлено значений: {n}', { n: step2Added }) : '');
 
   // Атрибуты, которые есть в результатах, и сколько у каждого значений.
   const counts = new Map<string, number>();
@@ -282,12 +286,12 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
     <>
       {job.params.via && (
         <div className="font-mono text-xs text-dim">
-          Telegram ID <span className="text-mint">{job.params.tgid}</span> · найден по {job.params.via}
+          {tj('Telegram ID {id} · найден по {via}', { id: <span className="text-mint">{job.params.tgid}</span>, via: tx(job.params.via) })}
         </div>
       )}
       {step2 && (
         <div className="font-mono text-xs text-dim" title={step2Errors(step2)}>
-          Второй шаг<sup className="text-mint">2</sup>: {step2Summary(step2)}
+          {t('Второй шаг')}<sup className="text-mint">2</sup>: {tx(step2Summary(step2))}
         </div>
       )}
       <ResultBar
@@ -296,10 +300,10 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
         onAdd={() => setDialog(true)}
         lead={
           <>
-            <Button size="sm" onClick={() => exportAs('pdf')} title={selected.size ? 'Отмеченное — в PDF' : 'Весь результат — в PDF'}>
+            <Button size="sm" onClick={() => exportAs('pdf')} title={selected.size ? t('Отмеченное — в PDF') : t('Весь результат — в PDF')}>
               <FileText size={15} /> PDF
             </Button>
-            <Button size="sm" onClick={() => exportAs('xlsx')} title={selected.size ? 'Отмеченное — в Excel' : 'Весь результат — в Excel'}>
+            <Button size="sm" onClick={() => exportAs('xlsx')} title={selected.size ? t('Отмеченное — в Excel') : t('Весь результат — в Excel')}>
               <FileSpreadsheet size={15} /> Excel
             </Button>
           </>
@@ -318,7 +322,7 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
         <DeepResult rows={rows.filter((r) => shown(r.prm))} selected={selected} onToggle={toggle} onPivot={onPivot} />
       ) : (
         <div className="space-y-4">
-          {leaks.length === 0 && <Empty>Ничего не найдено</Empty>}
+          {leaks.length === 0 && <Empty>{t('Ничего не найдено')}</Empty>}
           {visibleLeaks.map((card) => {
             const i = leaks.indexOf(card);
             const folded = collapsed.has(i);
@@ -329,11 +333,11 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
                 title={<>{card.leak} {card.trusted && <ShieldCheck size={13} className="text-mint" />}</>}
                 actions={
                   <>
-                    <Tag tone="dim">{card.tuples?.length ?? 0} зап.</Tag>
+                    <Tag tone="dim">{t('{n} зап.', { n: card.tuples?.length ?? 0 })}</Tag>
                     <button
                       type="button"
                       onClick={() => toggleCollapsed(i)}
-                      title={folded ? 'Развернуть' : 'Свернуть'}
+                      title={folded ? t('Развернуть') : t('Свернуть')}
                       className="cursor-pointer rounded-md p-1 text-mute transition hover:bg-mint/10 hover:text-mint"
                     >
                       {folded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
@@ -473,7 +477,7 @@ function FoundGeoMap({ leaks }: { leaks: LeakCard[] }) {
 
   if (!geo.data || !records.length) return null;
   return (
-    <Card title="Геолокации на карте" actions={<Tag tone="dim">{points.length}</Tag>}>
+    <Card title={t('Геолокации на карте')} actions={<Tag tone="dim">{points.length}</Tag>}>
       {/* isolate — z-index элементов управления карты не выходят за её пределы. */}
       <div className="isolate overflow-hidden rounded-xl border border-line">
         <Suspense fallback={<div className="grid h-[560px] place-items-center"><Spinner className="size-6" /></div>}>
@@ -481,14 +485,14 @@ function FoundGeoMap({ leaks }: { leaks: LeakCard[] }) {
         </Suspense>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 font-mono text-[11px] text-dim">Базы:</span>
-        <button type="button" onClick={() => setOff(new Set())} className={chip(off.size === 0)} title="Показать точки всех баз">
-          Все <span className={off.size === 0 ? 'text-mint/70' : 'text-mute'}>{totalBases}</span>
+        <span className="mr-1 font-mono text-[11px] text-dim">{t('Базы:')}</span>
+        <button type="button" onClick={() => setOff(new Set())} className={chip(off.size === 0)} title={t('Показать точки всех баз')}>
+          {t('Все')} <span className={off.size === 0 ? 'text-mint/70' : 'text-mute'}>{totalBases}</span>
         </button>
         {bases.map(({ leak, count }) => {
           const on = !off.has(leak);
           return (
-            <button key={leak} type="button" onClick={() => toggleLeak(leak)} className={chip(on)} title={on ? 'Скрыть точки этой базы' : 'Показать точки этой базы'}>
+            <button key={leak} type="button" onClick={() => toggleLeak(leak)} className={chip(on)} title={on ? t('Скрыть точки этой базы') : t('Показать точки этой базы')}>
               {leak} <span className={on ? 'text-mint/70' : 'text-mute'}>{count}</span>
             </button>
           );
@@ -496,9 +500,9 @@ function FoundGeoMap({ leaks }: { leaks: LeakCard[] }) {
       </div>
       {dates.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 font-mono text-[11px] text-dim">Геосканирование:</span>
+          <span className="mr-1 font-mono text-[11px] text-dim">{t('Геосканирование:')}</span>
           <button type="button" onClick={() => setDate(null)} className={chip(date === null)}>
-            Все <span className={date === null ? 'text-mint/70' : 'text-mute'}>{total}</span>
+            {t('Все')} <span className={date === null ? 'text-mint/70' : 'text-mute'}>{total}</span>
           </button>
           {dates.map(({ d, count }) => (
             <button key={d} type="button" onClick={() => setDate(d)} className={chip(date === d)}>
@@ -523,7 +527,8 @@ function scanDate(infos: string[]): string | null {
 /** ДД.ММ.ГГГГ → ГГГГММДД для сортировки. */
 const dateKey = (d: string) => d.split('.').reverse().join('');
 
-const fieldLabel = (f: string) => (f === SCANS_FIELD ? 'Сканы документов' : LEAK_FIELDS[f as LeakField] ?? f);
+/** Подпись атрибута на текущем языке (вызывать при отрисовке). */
+const fieldLabel = (f: string) => (f === SCANS_FIELD ? t('Сканы документов') : t(LEAK_FIELDS[f as LeakField] ?? f));
 
 /** Кнопка-переключатель (фильтр результата, атрибуты второго шага, базы и даты на карте). */
 const chip = (on: boolean) =>
@@ -535,12 +540,12 @@ const chip = (on: boolean) =>
 /** Ошибки поисков второго шага — подсказкой к его итогу. */
 function step2Errors(info: Step2Info): string | undefined {
   const failed = info.queries.filter((q) => q.state === 'failed');
-  return failed.length ? failed.map((q) => `${q.value}: ${q.error ?? 'ошибка'}`).join('\n') : undefined;
+  return failed.length ? failed.map((q) => `${q.value}: ${q.error ? tx(q.error) : t('ошибка')}`).join('\n') : undefined;
 }
 
-/** По каким найденным атрибутам искать вторым шагом и какие брать из его записей. */
-const STEP2_BY_OPTIONS = STEP2_SOURCES.map((s) => ({ id: s.kind as string, label: fieldLabel(s.field) }));
-const STEP2_FIELD_OPTIONS = STEP2_FIELDS.map((f) => ({ id: f, label: fieldLabel(f) }));
+/** По каким найденным атрибутам искать вторым шагом и какие брать из его записей (подпись — fieldLabel(field) при отрисовке). */
+const STEP2_BY_OPTIONS = STEP2_SOURCES.map((s) => ({ id: s.kind as string, field: s.field as string }));
+const STEP2_FIELD_OPTIONS = STEP2_FIELDS.map((f) => ({ id: f, field: f }));
 
 /** Набор переключателей второго шага: изначально всё включено; «Все» включает или снимает разом. */
 function ChipSet({
@@ -548,7 +553,7 @@ function ChipSet({
 }: {
   title: string;
   icon: ReactNode;
-  options: { id: string; label: string }[];
+  options: { id: string; field: string }[];
   value: Set<string>;
   onChange: (v: Set<string>) => void;
   /** Предупреждение, когда ничего не выбрано. */
@@ -567,11 +572,11 @@ function ChipSet({
         {icon} {title}
       </span>
       <button type="button" onClick={() => onChange(all ? new Set() : new Set(options.map((o) => o.id)))} className={chip(all)}>
-        Все
+        {t('Все')}
       </button>
       {options.map((o) => (
         <button key={o.id} type="button" onClick={() => toggle(o.id)} className={chip(value.has(o.id))}>
-          {o.label}
+          {fieldLabel(o.field)}
         </button>
       ))}
       {!value.size && <span className="font-mono text-[11px] text-warn">{empty}</span>}
@@ -592,7 +597,7 @@ function FieldFilter({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-panel px-4 py-2.5">
       <span className="mr-1 flex items-center gap-1.5 font-mono text-xs text-dim">
-        <Filter size={13} className="text-mint" /> Атрибуты:
+        <Filter size={13} className="text-mint" /> {t('Атрибуты:')}
       </span>
       {found.map((f) => {
         const on = active.has(f);
@@ -605,7 +610,7 @@ function FieldFilter({
       })}
       {active.size > 0 && (
         <button type="button" onClick={onReset} className="ml-1 cursor-pointer font-mono text-[11px] text-mute hover:text-mint">
-          показать все
+          {t('показать все')}
         </button>
       )}
     </div>
@@ -624,41 +629,43 @@ export function ValueRow({
   onPivot: (kind: string, value: string) => void;
   via?: string;
 }) {
+  // Русская подпись уходит в досье вместе со значением (хранимые данные), на экране — перевод.
   const label = LEAK_FIELDS[field as LeakField] ?? field;
+  const shownLabel = t(label);
   const pivotKind = FIELD_TO_KIND[field as LeakField];
   return (
     <div className="group flex flex-wrap items-center gap-2 rounded-md px-1.5 py-1 hover:bg-mint/5">
       <button
         onClick={() => onToggle(field, label, value)}
         className={clsx('grid size-4 shrink-0 cursor-pointer place-items-center rounded border', checked ? 'border-mint bg-mint text-mint-ink' : 'border-line')}
-        title="Отметить для досье"
+        title={t('Отметить для досье')}
       >
         {checked && <Check size={11} strokeWidth={3} />}
       </button>
       <span className="w-32 shrink-0 font-mono text-[11px] uppercase tracking-wide text-mute">
-        {label}
+        {shownLabel}
         {by && (
           <>
-            <sup className="ml-0.5 text-mint" title="Найдено дополнительным поиском вторым шагом">2</sup>
-            <span className="block text-[10px] normal-case tracking-normal text-mute/80">({step2ByText(by)})</span>
+            <sup className="ml-0.5 text-mint" title={t('Найдено дополнительным поиском вторым шагом')}>2</sup>
+            <span className="block text-[10px] normal-case tracking-normal text-mute/80">({tx(step2ByText(by))})</span>
           </>
         )}
       </span>
       <span className="min-w-[7rem] flex-1 break-words font-mono text-sm">{field === 'geolocs' ? attrDisplayValue(field, value) : value}</span>
-      {via && <span className="hidden truncate font-mono text-[10px] text-mute md:inline">через {via}</span>}
+      {via && <span className="hidden truncate font-mono text-[10px] text-mute md:inline">{t('через {via}', { via })}</span>}
       {/* Иконки держатся вместе: в узкой колонке они переносятся под значение, а не ломают его по символам. */}
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {pivotKind && (
           <button
             onClick={() => onPivot(pivotKind, value)}
             className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"
-            title="Искать по этому значению"
+            title={t('Искать по этому значению')}
           >
             <Zap size={14} />
           </button>
         )}
         <ValueActions field={field} value={value} />
-        <CopyButton value={attrCopyValue(field, value)} title={`Скопировать: ${label}`} />
+        <CopyButton value={attrCopyValue(field, value)} title={t('Скопировать: {label}', { label: shownLabel })} />
       </div>
     </div>
   );
@@ -667,17 +674,17 @@ export function ValueRow({
 /** Подпись «найдено через …» под строкой deep-поиска: имя и значение родительского атрибута с копированием. */
 function FoundVia({ row, parent }: { row: DeepRow; parent?: DeepRow }) {
   const via = parent?.val ?? '';
-  const label = LEAK_FIELDS[(parent?.prm ?? row.link4) as LeakField] ?? row.link4;
+  const label = t(LEAK_FIELDS[(parent?.prm ?? row.link4) as LeakField] ?? row.link4);
   return (
     <div className="ml-8 flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[10px] text-mute">
       <CornerDownRight size={10} className="shrink-0" />
-      <span className="shrink-0">найдено через {row.link4}</span>
+      <span className="shrink-0">{t('найдено через {field}', { field: row.link4 })}</span>
       {via && (
         <>
           <span className="break-all text-text/70">{via}</span>
           <CopyButton
             value={attrCopyValue(parent?.prm ?? '', via)}
-            title={`Скопировать: ${label}`}
+            title={t('Скопировать: {label}', { label })}
             className="[&>svg]:size-3"
           />
         </>
@@ -701,11 +708,11 @@ function DeepResult({
   }, [rows]);
   // link4_id — это val_id родительской строки в том же ответе: по нему достаём значение, через которое найдена эта.
   const byId = useMemo(() => new Map(rows.map((r) => [r.val_id, r] as const)), [rows]);
-  if (!rows.length) return <Empty>Ничего не найдено</Empty>;
+  if (!rows.length) return <Empty>{t('Ничего не найдено')}</Empty>;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {groups.map(([prm, list]) => (
-        <Card key={prm} title={LEAK_FIELDS[prm as LeakField] ?? prm} actions={<Tag tone="dim">{list.length}</Tag>}>
+        <Card key={prm} title={t(LEAK_FIELDS[prm as LeakField] ?? prm)} actions={<Tag tone="dim">{list.length}</Tag>}>
           {list.map((r) => (
             <div key={r.val_id}>
               <ValueRow field={prm} value={r.val} checked={selected.has(`${prm}:${r.val}`)} onToggle={onToggle} onPivot={onPivot} />

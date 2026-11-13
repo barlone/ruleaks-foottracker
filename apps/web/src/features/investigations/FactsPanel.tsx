@@ -11,6 +11,7 @@ import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
+import { t } from '../../lib/i18n.ts';
 import { NODE_STYLE } from './nodeStyle.ts';
 
 type Inv = RouterOutputs['investigations']['get'];
@@ -41,17 +42,17 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
     <div className="h-full overflow-auto">
       <div className="space-y-[1rem] py-[1.2rem] pl-6 pr-[30px]">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs text-mute">Объект:</span>
-          <button onClick={() => setFilter(null)} className={`cursor-pointer rounded-md px-2 py-1 font-mono text-xs ${!filter ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint'}`}>все</button>
+          <span className="font-mono text-xs text-mute">{t('Объект:')}</span>
+          <button onClick={() => setFilter(null)} className={`cursor-pointer rounded-md px-2 py-1 font-mono text-xs ${!filter ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint'}`}>{t('все')}</button>
           {inv.nodes.map((n) => (
             <button key={n.id} onClick={() => setFilter(n.id)} className={`cursor-pointer rounded-md px-2 py-1 font-mono text-xs ${filter === n.id ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint'}`}>
               {titles.get(n.id)}
             </button>
           ))}
-          {editable && <Button variant="primary" size="sm" className="ml-auto" onClick={() => setEditing('new')}><Plus size={14} /> Факт</Button>}
+          {editable && <Button variant="primary" size="sm" className="ml-auto" onClick={() => setEditing('new')}><Plus size={14} /> {t('Факт')}</Button>}
         </div>
 
-        {facts.length === 0 && <Empty>Фактов нет</Empty>}
+        {facts.length === 0 && <Empty>{t('Фактов нет')}</Empty>}
 
         <ol className="relative space-y-[0.8rem] border-l border-line pl-6">
           {facts.map((f) => (
@@ -59,12 +60,12 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
               <span className="absolute -left-[29px] top-[0.8rem] size-2.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />
               <article className="group rounded-xl border border-line-soft bg-panel p-[0.8rem] transition hover:border-line">
                 <div className="mb-2 flex items-center gap-2 font-mono text-[11px] text-mute">
-                  <CalendarDays size={12} /> {f.occurredAt ? fmtDate(f.occurredAt) : 'дата неизвестна'}
+                  <CalendarDays size={12} /> {f.occurredAt ? fmtDate(f.occurredAt) : t('дата неизвестна')}
                   <span className="ml-auto flex gap-1.5">{f.sources.map((s, i) => <SourceBadge key={i} source={s} />)}</span>
                   {editable && (
                     <span className="flex gap-1.5 opacity-0 transition group-hover:opacity-100">
                       <button onClick={() => setEditing(f)} className="cursor-pointer hover:text-mint"><Pencil size={13} /></button>
-                      <button onClick={() => remove.mutate({ id: inv.id, factId: f.id })} title="Удалить" className={`${DELETE_GAP} cursor-pointer hover:text-danger`}><Trash2 size={13} /></button>
+                      <button onClick={() => remove.mutate({ id: inv.id, factId: f.id })} title={t('Удалить')} className={`${DELETE_GAP} cursor-pointer hover:text-danger`}><Trash2 size={13} /></button>
                     </span>
                   )}
                 </div>
@@ -89,7 +90,7 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
         </ol>
       </div>
 
-      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)} title={editing === 'new' ? 'Новый факт' : 'Факт'} wide>
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)} title={editing === 'new' ? t('Новый факт') : t('Факт')} wide>
         {editing && (
           <FactForm
             key={editing === 'new' ? 'new' : editing.id}
@@ -133,9 +134,9 @@ function FactForm({
         });
       }}
     >
-      <MarkdownEditor value={text} onChange={setText} autoFocus placeholder="Что установлено. Одно утверждение — один факт." />
-      <Field label="Дата события"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" /></Field>
-      <Field label="Объекты графа">
+      <MarkdownEditor value={text} onChange={setText} autoFocus placeholder={t('Что установлено. Одно утверждение — один факт.')} />
+      <Field label={t('Дата события')}><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" /></Field>
+      <Field label={t('Объекты графа')}>
         <div className="flex flex-wrap gap-1.5">
           {nodes.map((n) => {
             const on = nodeIds.includes(n.id);
@@ -153,7 +154,7 @@ function FactForm({
         </div>
       </Field>
       <SourceFields value={source} onChange={setSource} />
-      <div className="flex justify-end"><Button type="submit" variant="primary" disabled={!text.trim()}>Сохранить</Button></div>
+      <div className="flex justify-end"><Button type="submit" variant="primary" disabled={!text.trim()}>{t('Сохранить')}</Button></div>
     </form>
   );
 }

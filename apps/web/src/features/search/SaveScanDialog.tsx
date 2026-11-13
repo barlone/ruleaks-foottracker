@@ -3,9 +3,10 @@ import { newId } from '@ft/shared';
 import { Button, Dialog, Field, Input, Segmented, Select } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t, tc } from '../../lib/i18n.ts';
 
-/** Альбом раздела «Медиа» досье, куда по умолчанию попадают сканы. */
-const SCANS_ALBUM = 'Сканы документов';
+/** Альбом раздела «Медиа» досье, куда по умолчанию попадают сканы (хранимое имя альбома — не переводится). */
+const SCANS_ALBUM = 'Сканы документов'; // i18n-ignore
 
 /**
  * Сохранение скана документа в раздел «Медиа» досье (существующего или нового досье персоны).
@@ -58,7 +59,7 @@ export function SaveScanDialog({
       const url = await image();
       let target = editable.find((d) => d.id === selected);
       if (mode === 'new') {
-        const d = await create.mutateAsync({ kind: 'person', title: title.trim() || personGuess || 'Без названия', summaryMd: '' });
+        const d = await create.mutateAsync({ kind: 'person', title: title.trim() || personGuess || t('Без названия'), summaryMd: '' });
         target = { id: d.id, title: d.title, kind: d.kind, role: 'owner' };
       }
       if (!target) return;
@@ -85,34 +86,34 @@ export function SaveScanDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Сохранить скан в досье" stacked>
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Сохранить скан в досье')} stacked>
       <div className="space-y-4">
-        <Segmented value={mode} onChange={setMode} options={[{ value: 'existing', label: 'В существующее' }, { value: 'new', label: 'Новое досье' }]} />
+        <Segmented value={mode} onChange={setMode} options={[{ value: 'existing', label: t('В существующее') }, { value: 'new', label: t('Новое досье') }]} />
         {mode === 'existing' ? (
-          <Field label="Досье">
+          <Field label={tc('поле', 'Досье')}>
             <Select value={selected} onChange={(e) => setDossierId(e.target.value)} className="w-full">
-              <option value="">{options.isLoading ? 'загрузка…' : '— выберите —'}</option>
+              <option value="">{options.isLoading ? t('загрузка…') : t('— выберите —')}</option>
               {editable.map((d) => (
-                <option key={d.id} value={d.id}>{d.title}{d.role === 'editor' ? ' (общее)' : ''}</option>
+                <option key={d.id} value={d.id}>{d.title}{d.role === 'editor' ? t(' (общее)') : ''}</option>
               ))}
             </Select>
           </Field>
         ) : (
-          <Field label="Название (персона)">
-            <Input value={title} placeholder={personGuess || 'Фамилия Имя Отчество'} onChange={(e) => setTitle(e.target.value)} />
+          <Field label={t('Название (персона)')}>
+            <Input value={title} placeholder={personGuess || t('Фамилия Имя Отчество')} onChange={(e) => setTitle(e.target.value)} />
           </Field>
         )}
-        <Field label="Подпись">
+        <Field label={t('Подпись')}>
           <Input value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={1000} />
         </Field>
-        <Field label="Альбом" hint="Раздел «Медиа» группирует файлы по альбомам">
+        <Field label={t('Альбом')} hint={t('Раздел «Медиа» группирует файлы по альбомам')}>
           <Input value={album} onChange={(e) => setAlbum(e.target.value)} maxLength={128} />
         </Field>
         {error && <p className="font-mono text-xs text-danger">{error}</p>}
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
           <Button variant="primary" onClick={submit} disabled={busy || (mode === 'existing' && !selected)}>
-            {busy ? 'Сохранение…' : 'Сохранить'}
+            {busy ? t('Сохранение…') : t('Сохранить')}
           </Button>
         </div>
       </div>

@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { FUZZY_MODES, GEO_MODES, SEARCH_KINDS, TG_MODES, type SearchSection } from '@ft/shared';
 import { trpc } from '../../lib/trpc.ts';
+import { t } from '../../lib/i18n.ts';
 
 // Общее для разделов поиска без разметки: подпись вида поиска, опрос задачи, запуск поиска из адреса.
 
+/** Подпись вида поиска на текущем языке (вызывать при отрисовке). */
 export function kindLabel(section: SearchSection, kind: string): string {
   const list: readonly { id: string; label: string }[] =
     section === 'attr' ? SEARCH_KINDS : section === 'tg' ? TG_MODES : section === 'geo' ? GEO_MODES : FUZZY_MODES;
-  return list.find((k) => k.id === kind)?.label ?? kind;
+  const label = list.find((k) => k.id === kind)?.label;
+  return label ? t(label) : kind;
 }
 
 /** Опрос задачи, пока шлюз её считает. */

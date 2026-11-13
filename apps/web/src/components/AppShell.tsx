@@ -2,13 +2,14 @@ import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Fragment, useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowUp, Asterisk, FolderSearch, LogOut, Mail, MapPin, Moon, Network, RefreshCw, ScanSearch, Search, Send, ShieldAlert, Sun, UserSearch } from 'lucide-react';
-import type { Theme } from '@ft/shared';
+import type { Lang, Theme } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
 import { toasts } from '../lib/toast.ts';
-import { useStore } from '../lib/store.ts';
+import { create, useStore } from '../lib/store.ts';
 import { fmtDate } from '../lib/format.ts';
 import { useUserSettings } from '../lib/settings.ts';
 import { applyTheme } from '../lib/theme.ts';
+import { isLangReady, LANGS, loadLang, setLang, storedLang, t, tx } from '../lib/i18n.ts';
 import { LoginPage } from './LoginPage.tsx';
 import { Button, Dialog, Field, Segmented, Spinner } from './ui.tsx';
 
@@ -28,7 +29,40 @@ const NAV = [
   { to: '/investigations', label: 'Расследования', icon: Network, hint: 'связи · факты · гипотезы' },
 ] as const;
 
+/**
+ * Язык интерфейса — из настроек пользователя, без сессии — последний в этом браузере (lib/i18n.ts).
+ * Смена языка перемонтирует всё дерево (key): перерисовываются и мемоизированные части, и подписи, посчитанные
+ * один раз при монтировании. Словарь грузится отдельным чанком; пока он не пришёл — заставка, а не русский текст,
+ * который тут же сменится.
+ */
 export function Root() {
+  const me = trpc.auth.me.useQuery();
+  const wanted: Lang = me.data?.settings.lang ?? storedLang();
+  // Словарь не загрузился (сеть) — остаётся русский; новая попытка — после перезагрузки страницы.
+  const [failed, setFailed] = useState<Lang | null>(null);
+  const lang: Lang = failed === wanted ? 'ru' : wanted;
+  const ready = isLangReady(lang);
+  const [, setLoaded] = useState(0);
+  useEffect(() => {
+    if (!ready) loadLang(lang).then(() => setLoaded((n) => n + 1), () => setFailed(lang));
+  }, [lang, ready]);
+  // До отрисовки дочерних: они уже читают новый язык.
+  if (ready) setLang(lang);
+  useEffect(() => {
+    document.title = t('RuLeaks.Следопыт');
+  }, [lang, ready]);
+
+  if (!ready) {
+    return (
+      <div className="grid h-full place-items-center">
+        <Spinner className="size-6" />
+      </div>
+    );
+  }
+  return <Shell key={lang} />;
+}
+
+function Shell() {
   const me = trpc.auth.me.useQuery();
   const path = useRouterState({ select: (s) => s.location.pathname });
   // Редактор связей во весь экран (?full на странице расследования): боковое меню и полосы над страницей убраны.
@@ -89,7 +123,7 @@ function Brand({ compact }: { compact?: boolean }) {
       {!compact && (
         <div className="leading-tight">
           <div className="font-extrabold tracking-tight">
-            RuLeaks<span className="text-mint">.Следопыт</span>
+            RuLeaks<span className="text-mint">.{t('Следопыт')}</span>
           </div>
           <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-mint/80">humint workbench</div>
         </div>
@@ -104,8 +138,8 @@ function UserButton({ onClick, className }: { onClick: () => void; className?: s
     <button
       type="button"
       onClick={onClick}
-      title="Пользователь"
-      aria-label="Пользователь"
+      title={t('Пользователь')}
+      aria-label={t('Пользователь')}
       className={clsx('grid shrink-0 cursor-pointer place-items-center text-dim transition hover:bg-mint/5 hover:text-mint', className)}
     >
       <GearInfoIcon size={33} />
@@ -130,11 +164,14 @@ function TopBar() {
     <header className="relative z-10 flex h-14 items-center justify-between border-b border-line px-5">
       <Brand />
       <Link to="/search">
-        <Button variant="primary" size="sm">{mode.data === 'bot-db' ? 'Войти через Telegram' : 'Войти'}</Button>
+        <Button variant="primary" size="sm">{mode.data === 'bot-db' ? t('Войти через Telegram') : t('Войти')}</Button>
       </Link>
     </header>
   );
 }
+
+/** Открыто ли окно пользователя — вне компонента: окно не закрывается, когда смена языка в нём перемонтирует дерево. */
+const userDialog = create(false);
 
 function Sidebar() {
   const me = trpc.auth.me.useQuery();
@@ -151,7 +188,8 @@ function Sidebar() {
   const features = { geo: !!geo.data, pages: !!pages.data, google: !!google.data, email: !!email.data };
   const nav = NAV.filter((n) => !('feature' in n) || features[n.feature]);
   const user = me.data!;
-  const [userOpen, setUserOpen] = useState(false);
+  const userOpen = useStore(userDialog);
+  const setUserOpen = userDialog.set;
 
   return (
     <aside className="relative z-10 flex w-64 shrink-0 flex-col border-r border-line bg-panel/80 backdrop-blur max-lg:w-16">
@@ -165,7 +203,9 @@ function Sidebar() {
       </div>
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {nav.map((item) => {
-          const { to, label, icon: Icon, hint } = item;
+          const { to, icon: Icon } = item;
+          const label = t(item.label);
+          const hint = t(item.hint);
           return (
             <Fragment key={to}>
               {'divider' in item && item.divider && <div className="-mx-3 !my-2 border-t border-line" />}
@@ -187,7 +227,7 @@ function Sidebar() {
       </nav>
       {/* В узком сайдбаре шапка занята логотипом — кнопка окна пользователя внизу. */}
       <UserButton onClick={() => setUserOpen(true)} className="h-14 shrink-0 border-t border-line lg:hidden" />
-      <Dialog open={userOpen} onOpenChange={setUserOpen} title="Пользователь">
+      <Dialog open={userOpen} onOpenChange={setUserOpen} title={t('Пользователь')}>
         <div className="mb-4 flex items-center gap-3">
           <div className="grid size-10 place-items-center rounded-full border border-line bg-mint/10 font-mono text-base text-mint">
             {user.displayName.slice(0, 1)}
@@ -199,15 +239,15 @@ function Sidebar() {
         </div>
         <div className={clsx('mb-4 rounded-md border px-2.5 py-1.5 font-mono text-[11px]', user.access.active ? 'border-line text-mint' : 'border-warn/30 text-warn')}>
           {solo
-            ? '● персональный режим'
+            ? t('● персональный режим')
             : user.access.active
-            ? user.access.forced ? '● полный доступ' : user.access.unlimited ? '● безлимитный доступ' : `● подписка до ${fmtDate(user.access.until)}`
-            : '○ подписка неактивна'}
+            ? user.access.forced ? t('● полный доступ') : user.access.unlimited ? t('● безлимитный доступ') : t('● подписка до {date}', { date: fmtDate(user.access.until) })
+            : t('○ подписка неактивна')}
         </div>
         <UserSettingsFields />
         {mode.data !== 'none' && (
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { setUserOpen(false); logout.mutate(); }}>
-            <LogOut size={14} /> Выйти
+            <LogOut size={14} /> {t('Выйти')}
           </Button>
         )}
       </Dialog>
@@ -219,16 +259,20 @@ function Sidebar() {
 function UserSettingsFields() {
   const { settings, update } = useUserSettings();
   return (
-    <div className="mb-4">
-      <Field label="Тема оформления">
+    <div className="mb-4 space-y-3">
+      <Field label={t('Тема оформления')}>
         <Segmented<Theme>
           value={settings.theme}
           onChange={(theme) => update({ theme })}
           options={[
-            { value: 'dark', label: <span className="inline-flex items-center gap-1.5"><Moon size={13} /> Тёмная</span> },
-            { value: 'light', label: <span className="inline-flex items-center gap-1.5"><Sun size={13} /> Светлая</span> },
+            { value: 'dark', label: <span className="inline-flex items-center gap-1.5"><Moon size={13} /> {t('Тёмная')}</span> },
+            { value: 'light', label: <span className="inline-flex items-center gap-1.5"><Sun size={13} /> {t('Светлая')}</span> },
           ]}
         />
+      </Field>
+      {/* Названия языков — на них самих, и в русской подписи есть «Language»: их ищут, не понимая текущего. */}
+      <Field label={t('Язык интерфейса · Language')}>
+        <Segmented<Lang> value={settings.lang} onChange={(lang) => update({ lang })} options={LANGS} />
       </Field>
     </div>
   );
@@ -245,14 +289,14 @@ function SubscriptionBanner() {
     <div className="flex items-center gap-3 border-b border-warn/30 bg-warn/10 px-5 py-2.5 text-sm text-warn">
       <ShieldAlert size={16} />
       <span className="flex-1">
-        {me.data.access.reason ?? 'Подписка неактивна'}. Режим только для чтения: поиск и правки недоступны.
+        {me.data.access.reason ? tx(me.data.access.reason) : t('Подписка неактивна')}. {t('Режим только для чтения: поиск и правки недоступны.')}
       </span>
       {bot.data && (
         <a href={`https://t.me/${bot.data}?start=subscribe`} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">
-          Продлить в боте
+          {t('Продлить в боте')}
         </a>
       )}
-      <Button variant="ghost" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending} title="Проверить снова">
+      <Button variant="ghost" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending} title={t('Проверить снова')}>
         <RefreshCw size={14} className={refresh.isPending ? 'animate-spin' : ''} />
       </Button>
     </div>
@@ -308,8 +352,8 @@ function ScrollTopButton({ target }: { target: RefObject<HTMLElement | null> }) 
         variant="primary"
         size="sm"
         onClick={() => target.current?.scrollTo({ top: 0, behavior: 'smooth' })}
-        title="Прокрутить в начало"
-        aria-label="Прокрутить в начало"
+        title={t('Прокрутить в начало')}
+        aria-label={t('Прокрутить в начало')}
         // p-0! — базовый px-3 кнопки size="sm" иначе сжимает значок до 8 px.
         className="size-8 p-0!"
       >

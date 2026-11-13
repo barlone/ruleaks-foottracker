@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { CREDIBILITY_LABELS, RELIABILITY_LABELS, type Source } from '@ft/shared';
 import { fmtDate } from '../lib/format.ts';
+import { t } from '../lib/i18n.ts';
 
 const KIND_LABELS: Record<Source['kind'], string> = {
   search: 'поиск',
@@ -16,10 +17,10 @@ export function SourceBadge({ source, className }: { source: Source | undefined;
   const good = 'AB'.includes(source.reliability) && '12'.includes(source.credibility);
   const bad = 'DE'.includes(source.reliability) || '45'.includes(source.credibility);
   const title = [
-    `Источник: ${KIND_LABELS[source.kind]}${source.ref ? ` — ${source.ref}` : ''}`,
-    `${source.reliability}: ${RELIABILITY_LABELS[source.reliability]}`,
-    `${source.credibility}: ${CREDIBILITY_LABELS[source.credibility]}`,
-    `Получено: ${fmtDate(source.capturedAt)}`,
+    t('Источник: {kind}', { kind: t(KIND_LABELS[source.kind]) }) + (source.ref ? ` — ${source.ref}` : ''),
+    `${source.reliability}: ${t(RELIABILITY_LABELS[source.reliability])}`,
+    `${source.credibility}: ${t(CREDIBILITY_LABELS[source.credibility])}`,
+    t('Получено: {date}', { date: fmtDate(source.capturedAt) }),
     source.note,
   ].filter(Boolean).join('\n');
   return (
@@ -32,7 +33,7 @@ export function SourceBadge({ source, className }: { source: Source | undefined;
       )}
     >
       {source.reliability}{source.credibility}
-      <span className="text-mute">{KIND_LABELS[source.kind]}</span>
+      <span className="text-mute">{t(KIND_LABELS[source.kind])}</span>
     </span>
   );
 }

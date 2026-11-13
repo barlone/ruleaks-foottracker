@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { ClipboardPaste, ImagePlus, Plus, Star, User, Users } from 'lucide-react';
-import { MEDIA_FILE_MAX_BYTES, fmtBytes, mediaBytes, newId, type DossierItem } from '@ft/shared';
+import { MEDIA_FILE_MAX_BYTES, mediaBytes, newId, type DossierItem } from '@ft/shared';
+import { fmtBytes } from '../../lib/format.ts';
 import { Button, ConfirmDeleteBtn, Dialog, Empty, FilePicker, Input } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t, tj, tn } from '../../lib/i18n.ts';
 import { toast } from '../../lib/toast.ts';
 import { GLYPHS, glyphOf } from './glyphs.ts';
 import { PHOTO_ALBUM } from './labels.ts';
@@ -35,7 +37,7 @@ export function CoverBox({
         type="button"
         disabled={!clickable}
         onClick={() => setOpen(true)}
-        title={editable ? (realPhotos.length ? 'Фото: добавить, удалить, выбрать основное' : 'Добавить фото') : 'Фото'}
+        title={editable ? (realPhotos.length ? t('Фото: добавить, удалить, выбрать основное') : t('Добавить фото')) : t('Фото')}
         className={clsx(
           'group relative size-32 shrink-0 overflow-hidden rounded-2xl border border-line bg-bg-soft shadow-glow-sm transition',
           clickable && 'cursor-pointer hover:border-mint/60',
@@ -56,7 +58,7 @@ export function CoverBox({
         )}
         {realPhotos.length > 0 && (
           <span className="absolute bottom-1.5 right-1.5 rounded-md bg-bg/75 px-1.5 font-mono text-[10px] text-dim">
-            {realPhotos.length} фото
+            {tn(realPhotos.length, '{n} фото')}
           </span>
         )}
       </button>
@@ -143,7 +145,7 @@ function PhotosDialog({
       if (glyphItem && glyphOf(glyphItem.url) === glyph.id) return;
       const d = await addItems.mutateAsync({
         id: dossierId,
-        items: [{ type: 'media', mediaId: newId(), url: glyph.url, caption: glyph.label, album: PHOTO_ALBUM }],
+        items: [{ type: 'media', mediaId: newId(), url: glyph.url, caption: t(glyph.label), album: PHOTO_ALBUM }],
       });
       await update.mutateAsync({ id: dossierId, version: d.version, patch: { coverMediaUrl: glyph.url } });
     });
@@ -156,12 +158,18 @@ function PhotosDialog({
     try {
       photos = await Promise.all(images.map(async (f) => ({ url: await toDataUrl(f), caption: caption ? caption(f) : f.name })));
     } catch {
-      toast('Не удалось прочитать изображение', 'error');
+      toast(t('Не удалось прочитать изображение'), 'error');
       return;
     }
     // Уже после уменьшения до 1600 px: что всё равно больше лимита — не отправляем, остальное добавляем.
     const big = photos.filter((p) => mediaBytes(p.url) > MEDIA_FILE_MAX_BYTES);
-    if (big.length) toast(`${big.length === 1 ? 'Файл' : `${big.length} файла(ов)`} больше ${fmtBytes(MEDIA_FILE_MAX_BYTES)} — не добавлено. Большие фото держите на своём Гугл-диске и добавьте в досье ссылку`, 'error');
+    if (big.length) {
+      toast(
+        tn(big.length, '{n} файл больше {max} — не добавлен|{n} файла больше {max} — не добавлены|{n} файлов больше {max} — не добавлены', { max: fmtBytes(MEDIA_FILE_MAX_BYTES) })
+          + '. ' + t('Большие фото держите на своём Гугл-диске и добавьте в досье ссылку'),
+        'error',
+      );
+    }
     await addPhotos(photos.filter((p) => !big.includes(p)));
   }
   // Скриншот или скопированная картинка не имеют осмысленного имени файла («image.png») — подписи нет.
@@ -189,9 +197,9 @@ function PhotosDialog({
         if (type) files.push(new File([await item.getType(type)], 'clipboard', { type }));
       }
       if (files.length) await fromClipboard(files);
-      else toast('В буфере обмена нет изображения', 'error');
+      else toast(t('В буфере обмена нет изображения'), 'error');
     } catch {
-      toast('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне', 'error');
+      toast(t('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне'), 'error');
     }
   }
 
@@ -212,11 +220,11 @@ function PhotosDialog({
     });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Фото" width="max-w-[55rem]">
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Фото')} width="max-w-[55rem]">
       <div className="space-y-4">
         {realPhotos.length === 0 ? (
           <div className="flex flex-wrap items-stretch gap-3">
-            <div className="min-w-40 flex-1 [&>*]:grid [&>*]:h-full [&>*]:place-items-center"><Empty>Фото нет</Empty></div>
+            <div className="min-w-40 flex-1 [&>*]:grid [&>*]:h-full [&>*]:place-items-center"><Empty>{t('Фото нет')}</Empty></div>
             {editable && kind === 'person' && GLYPHS.map((g) => {
               const active = glyphOf(coverUrl) === g.id;
               return (
@@ -226,14 +234,14 @@ function PhotosDialog({
                   disabled={busy}
                   aria-pressed={active}
                   onClick={() => chooseGlyph(g)}
-                  title={active ? `Убрать значок «${g.label}»` : `Показывать значок «${g.label}» вместо фото`}
+                  title={active ? t('Убрать значок «{name}»', { name: t(g.label) }) : t('Показывать значок «{name}» вместо фото', { name: t(g.label) })}
                   className={clsx(
                     'relative size-24 shrink-0 cursor-pointer overflow-hidden rounded-xl border transition disabled:cursor-wait',
                     active ? 'border-mint shadow-glow-sm' : 'border-line-soft hover:border-mint/60',
                   )}
                 >
                   <img src={g.url} alt="" className="size-full object-cover" />
-                  <span className="absolute inset-x-0 bottom-0 bg-bg/70 py-0.5 text-center font-mono text-[10px] text-dim">{g.label}</span>
+                  <span className="absolute inset-x-0 bottom-0 bg-bg/70 py-0.5 text-center font-mono text-[10px] text-dim">{t(g.label)}</span>
                 </button>
               );
             })}
@@ -248,15 +256,15 @@ function PhotosDialog({
                   className={clsx('group relative aspect-square overflow-hidden rounded-xl border bg-bg-soft', main ? 'border-mint shadow-glow-sm' : 'border-line-soft')}
                 >
                   <img src={p.url} alt={p.caption ?? ''} className="size-full object-cover" />
-                  {main && <span className="absolute left-1.5 top-1.5 rounded-md bg-mint px-1.5 font-mono text-[10px] font-bold text-mint-ink">основное</span>}
+                  {main && <span className="absolute left-1.5 top-1.5 rounded-md bg-mint px-1.5 font-mono text-[10px] font-bold text-mint-ink">{t('основное')}</span>}
                   {editable && (
                     <span className="absolute right-1.5 top-1.5 flex items-center gap-2 rounded-md bg-bg/80 px-1.5 py-1 opacity-0 transition group-hover:opacity-100 has-[[data-armed]]:opacity-100">
                       {!main && (
-                        <button type="button" disabled={busy} onClick={() => setMain(p.url)} title="Сделать основным" className="cursor-pointer text-mute hover:text-mint">
+                        <button type="button" disabled={busy} onClick={() => setMain(p.url)} title={t('Сделать основным')} className="cursor-pointer text-mute hover:text-mint">
                           <Star size={14} />
                         </button>
                       )}
-                      <ConfirmDeleteBtn onConfirm={() => remove(p)} title="Удалить фото" />
+                      <ConfirmDeleteBtn onConfirm={() => remove(p)} title={t('Удалить фото')} />
                     </span>
                   )}
                   {p.caption && <figcaption className="absolute inset-x-0 bottom-0 truncate bg-bg/70 px-2 py-1 text-[11px] text-dim">{p.caption}</figcaption>}
@@ -269,7 +277,7 @@ function PhotosDialog({
         {editable && (
           <div className="space-y-3 rounded-xl border border-line-soft p-3">
             <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-dim">
-              <ImagePlus size={13} className="text-mint" /> Добавить фото
+              <ImagePlus size={13} className="text-mint" /> {t('Добавить фото')}
             </div>
             {/* Файлы и буфер обмена — в одну строку. */}
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
@@ -281,9 +289,9 @@ function PhotosDialog({
               />
               <div className="flex items-center gap-3">
                 <Button type="button" size="sm" disabled={busy} onClick={() => void pasteButton()}>
-                  <ClipboardPaste size={13} /> Вставить из буфера
+                  <ClipboardPaste size={13} /> {t('Вставить из буфера')}
                 </Button>
-                <span className="text-sm text-dim">или <kbd className="rounded border border-line px-1 font-mono text-xs text-text">Ctrl+V</kbd> в этом окне</span>
+                <span className="text-sm text-dim">{tj('или {key} в этом окне', { key: <kbd className="rounded border border-line px-1 font-mono text-xs text-text">Ctrl+V</kbd> })}</span>
               </div>
             </div>
             <form
@@ -293,12 +301,11 @@ function PhotosDialog({
                 if (url.trim()) void addPhotos([{ url: url.trim() }]);
               }}
             >
-              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="…или ссылка на изображение" className="h-8 text-sm" />
-              <Button type="submit" size="sm" disabled={!url.trim() || busy}><Plus size={13} /> Добавить</Button>
+              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t('…или ссылка на изображение')} className="h-8 text-sm" />
+              <Button type="submit" size="sm" disabled={!url.trim() || busy}><Plus size={13} /> {t('Добавить')}</Button>
             </form>
             <p className="font-mono text-[10px] text-mute">
-              Можно выбрать несколько файлов сразу или вставить скриншот / скопированную картинку из буфера обмена;
-              большие изображения уменьшаются до 1600 px. Первое фото становится основным и заменяет значок.
+              {t('Можно выбрать несколько файлов сразу или вставить скриншот / скопированную картинку из буфера обмена; большие изображения уменьшаются до 1600 px. Первое фото становится основным и заменяет значок.')}
             </p>
           </div>
         )}

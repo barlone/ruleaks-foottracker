@@ -2,6 +2,7 @@ import { UserSettings, type UserSettingsPatch } from './domain.ts';
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   theme: 'dark',
+  lang: 'ru',
 };
 
 /** Записанные ключи → полные настройки. Ключ, не прошедший схему (устарел, сменился тип), считается не заданным. */

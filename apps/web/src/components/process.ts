@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { t } from '../lib/i18n.ts';
 
 // Процесс в браузере для окна длительного процесса (ProcessDialog в ProgressDialog.tsx): run() показывает окно
 // на время промиса, p.set() двигает шкалу, cancel() прерывает через AbortSignal.
@@ -22,7 +23,7 @@ interface ProcessState {
 /** Промис run() отклоняется этой ошибкой после «Отмена». */
 export class ProcessCancelled extends Error {
   constructor() {
-    super('Отменено');
+    super(t('Отменено'));
   }
 }
 

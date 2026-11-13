@@ -4,6 +4,7 @@ import { Check, Pencil, Plus, X } from 'lucide-react';
 import { DEFAULT_TAG_COLOR, TAG_COLORS, normalizeTagText, type Tag } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
 import { errorText } from '../lib/errors.ts';
+import { t } from '../lib/i18n.ts';
 import { toast } from '../lib/toast.ts';
 import { Button, ConfirmDeleteBtn, Dialog, Empty, Input, Spinner } from './ui.tsx';
 
@@ -56,7 +57,7 @@ export function TagChip({
       {(onEdit || onRemove) && (
         <span className="hidden items-center gap-2 border-l border-text/30 bg-bg/85 px-1.5 group-hover:inline-flex has-[[data-armed]]:inline-flex">
           {onEdit && (
-            <button type="button" onClick={onEdit} title="Изменить тег" className="cursor-pointer text-mute hover:text-mint">
+            <button type="button" onClick={onEdit} title={t('Изменить тег')} className="cursor-pointer text-mute hover:text-mint">
               <Pencil size={12} />
             </button>
           )}
@@ -64,7 +65,7 @@ export function TagChip({
         </span>
       )}
       {onDismiss && (
-        <button type="button" onClick={onDismiss} title="Убрать" className="flex cursor-pointer items-center border-l border-text/30 bg-bg/85 px-1 text-mute hover:text-danger">
+        <button type="button" onClick={onDismiss} title={t('Убрать')} className="flex cursor-pointer items-center border-l border-text/30 bg-bg/85 px-1 text-mute hover:text-danger">
           <X size={12} />
         </button>
       )}
@@ -75,7 +76,7 @@ export function TagChip({
 /** Только показ (карточки списков). */
 export function TagList({ tags, size = 'sm', className }: { tags: Tag[]; size?: 'sm' | 'md'; className?: string }) {
   if (!tags.length) return null;
-  return <div className={clsx('flex flex-wrap gap-1', className)}>{tags.map((t) => <TagChip key={t.id} tag={t} size={size} />)}</div>;
+  return <div className={clsx('flex flex-wrap gap-1', className)}>{tags.map((tag) => <TagChip key={tag.id} tag={tag} size={size} />)}</div>;
 }
 
 /**
@@ -97,13 +98,13 @@ export function TagsBar({
   if (!editable && !tags.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {tags.map((t) => (
+      {tags.map((tag) => (
         <TagChip
-          key={t.id}
-          tag={t}
-          onEdit={editable && t.ownerId === me.data?.id ? () => setDict({ editId: t.id }) : undefined}
-          onRemove={editable ? () => onChange(ids.filter((x) => x !== t.id)) : undefined}
-          removeTitle="Снять тег"
+          key={tag.id}
+          tag={tag}
+          onEdit={editable && tag.ownerId === me.data?.id ? () => setDict({ editId: tag.id }) : undefined}
+          onRemove={editable ? () => onChange(ids.filter((x) => x !== tag.id)) : undefined}
+          removeTitle={t('Снять тег')}
         />
       ))}
       {editable && (
@@ -112,7 +113,7 @@ export function TagsBar({
           onClick={() => setDict({})}
           className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-dashed border-line px-2 font-mono text-[11px] text-mute transition hover:border-mint/60 hover:text-mint"
         >
-          <Plus size={12} /> тег
+          <Plus size={12} /> {t('тег')}
         </button>
       )}
       <TagDictionaryDialog
@@ -142,7 +143,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
       ))}
       {/* Свой цвет. */}
       <label
-        title="Свой цвет"
+        title={t('Свой цвет')}
         className={clsx(
           'relative grid size-6 cursor-pointer place-items-center rounded-md border border-dashed border-text/40 text-[10px] text-dim',
           !TAG_COLORS.includes(value as (typeof TAG_COLORS)[number]) && 'ring-2 ring-mint ring-offset-2 ring-offset-panel',
@@ -176,11 +177,11 @@ export function TagFilter({ value, onChange }: { value: string[]; onChange: (ids
         onClick={() => setOpen(true)}
         className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-dashed border-line px-2 font-mono text-[11px] text-mute transition hover:border-mint/60 hover:text-mint"
       >
-        <Plus size={12} /> тег
+        <Plus size={12} /> {t('тег')}
       </button>
       {chosen.length > 0 && (
         <button type="button" onClick={() => onChange([])} className="cursor-pointer font-mono text-[11px] text-mute hover:text-mint">
-          сбросить
+          {t('сбросить')}
         </button>
       )}
       <TagDictionaryDialog
@@ -188,15 +189,15 @@ export function TagFilter({ value, onChange }: { value: string[]; onChange: (ids
         onOpenChange={setOpen}
         selectedIds={value}
         onToggle={(id) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])}
-        title="Фильтр по тегам"
-        hint="Клик — добавить тег в фильтр или убрать. Показываются объекты, у которых есть все выбранные теги."
+        title={t('Фильтр по тегам')}
+        hint={t('Клик — добавить тег в фильтр или убрать. Показываются объекты, у которых есть все выбранные теги.')}
       />
     </div>
   );
 }
 
 function TagDictionaryDialog({
-  open, onOpenChange, selectedIds, onToggle, busy, editId, title = 'Словарь тегов', hint = 'Клик — поставить или снять тег.',
+  open, onOpenChange, selectedIds, onToggle, busy, editId, title, hint,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -265,7 +266,7 @@ function TagDictionaryDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={title}>
+    <Dialog open={open} onOpenChange={onOpenChange} title={title ?? t('Словарь тегов')}>
       <div className="space-y-4">
         <form
           className="space-y-3 rounded-xl border border-line-soft p-3"
@@ -280,50 +281,50 @@ function TagDictionaryDialog({
               value={text}
               maxLength={64}
               onChange={(e) => setText(e.target.value)}
-              placeholder={editing ? 'Текст тега' : 'Найти или создать тег…'}
+              placeholder={editing ? t('Текст тега') : t('Найти или создать тег…')}
               className="font-mono uppercase"
             />
             {editing ? (
               <>
-                <Button type="button" variant="ghost" onClick={stopEdit}>Отмена</Button>
-                <Button type="submit" variant="primary" disabled={!norm || exists || pending}>Сохранить</Button>
+                <Button type="button" variant="ghost" onClick={stopEdit}>{t('Отмена')}</Button>
+                <Button type="submit" variant="primary" disabled={!norm || exists || pending}>{t('Сохранить')}</Button>
               </>
             ) : (
-              <Button type="submit" variant="primary" disabled={!norm || exists || pending} title={exists ? 'Такой тег уже есть' : undefined}>
-                <Plus size={15} /> Создать
+              <Button type="submit" variant="primary" disabled={!norm || exists || pending} title={exists ? t('Такой тег уже есть') : undefined}>
+                <Plus size={15} /> {t('Создать')}
               </Button>
             )}
           </div>
           <ColorPicker value={color} onChange={setColor} />
-          {norm && <TagPreview label={editing ? 'Будет так:' : exists ? 'Уже есть в словаре:' : 'Новый тег:'}><TagChip tag={{ text: norm, color }} /></TagPreview>}
+          {norm && <TagPreview label={editing ? t('Будет так:') : exists ? t('Уже есть в словаре:') : t('Новый тег:')}><TagChip tag={{ text: norm, color }} /></TagPreview>}
         </form>
 
         {list.isLoading ? (
           <div className="grid h-20 place-items-center"><Spinner /></div>
         ) : tags.length === 0 ? (
-          <Empty>Словарь пуст — создайте первый тег</Empty>
+          <Empty>{t('Словарь пуст — создайте первый тег')}</Empty>
         ) : shown.length === 0 ? (
-          <div className="py-3 text-center font-mono text-xs text-mute">Ничего не найдено — нажмите «Создать»</div>
+          <div className="py-3 text-center font-mono text-xs text-mute">{t('Ничего не найдено — нажмите «Создать»')}</div>
         ) : (
           <div className="flex max-h-72 flex-wrap content-start gap-2 overflow-auto p-1">
-            {shown.map((t) => (
+            {shown.map((tag) => (
               <TagChip
-                key={t.id}
-                tag={editing?.id === t.id ? { text: norm || t.text, color } : t}
-                selected={selectedIds.includes(t.id)}
-                onClick={editing || busy ? undefined : () => onToggle(t.id)}
-                onEdit={() => startEdit(t)}
+                key={tag.id}
+                tag={editing?.id === tag.id ? { text: norm || tag.text, color } : tag}
+                selected={selectedIds.includes(tag.id)}
+                onClick={editing || busy ? undefined : () => onToggle(tag.id)}
+                onEdit={() => startEdit(tag)}
                 onRemove={() => {
-                  if (editing?.id === t.id) stopEdit();
-                  remove.mutate({ id: t.id });
+                  if (editing?.id === tag.id) stopEdit();
+                  remove.mutate({ id: tag.id });
                 }}
-                removeTitle="Удалить из словаря (снимется со всех досье и расследований)"
+                removeTitle={t('Удалить из словаря (снимется со всех досье и расследований)')}
               />
             ))}
           </div>
         )}
         <p className="font-mono text-[10px] text-mute">
-          {hint} Словарь виден только вам.
+          {hint ?? t('Клик — поставить или снять тег.')} {t('Словарь виден только вам.')}
         </p>
       </div>
     </Dialog>

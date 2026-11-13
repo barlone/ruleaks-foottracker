@@ -1,0 +1,115 @@
+// Английский перевод: общие компоненты: вход, экспорт/импорт, окно процесса, примитивы ui. Ключ — русский текст из кода (lib/i18n.ts).
+const en: Record<string, string> = {
+  // ExportDialog.tsx
+  'Связанные персоны и участники группы — отдельными разделами': 'Related persons and group members as separate sections',
+  'Досье персон из графа — отдельными разделами': 'Dossiers of persons from the graph as separate sections',
+  'Отчёт досье в PDF': 'Dossier PDF report',
+  'Отчёт расследования в PDF': 'Investigation PDF report',
+  'Экспорт досье': 'Dossier export',
+  'Экспорт расследования': 'Investigation export',
+  'Сервер собирает и шифрует файл…': 'The server is building and encrypting the file…',
+  'Сервер формирует отчёт…': 'The server is building the report…',
+  'Большие досье с фотографиями верстаются до минуты': 'Large dossiers with photos can take up to a minute to lay out',
+  'Файл «{name}» сохранён': 'File “{name}” saved',
+  'Экспорт досье в файл': 'Export dossier to file',
+  'Экспорт расследования в файл': 'Export investigation to file',
+  'Автор': 'Author',
+  'Примечание': 'Note',
+  'Попадёт в шапку отчёта': 'Goes into the report header',
+  'Для кого и зачем этот файл': 'Who this file is for and why',
+  'Пароль': 'Password',
+  'Пароль ещё раз': 'Repeat password',
+  'Пароли не совпадают': 'Passwords do not match',
+  'Пароль необязателен. С паролем PDF шифруется (AES-256) и открывается только с ним; без пароля его прочтёт любой, у кого есть файл.':
+    'The password is optional. With a password the PDF is encrypted (AES-256) and opens only with it; without one, anyone who has the file can read it.',
+  'Пароль необязателен. Файл шифруется всегда, но без пароля его откроет любая установка Следопыта; с паролем — только тот, кто его знает.':
+    'The password is optional. The file is always encrypted, but without a password any Foottracker installation can open it; with one, only those who know it.',
+  'Доступно редактирование': 'Editing allowed',
+  'Фотографии и изображения': 'Photos and images',
+  'Источники и их оценка': 'Sources and their rating',
+  'Отмена': 'Cancel',
+  'Сформировать PDF': 'Generate PDF',
+  'Экспортировать': 'Export',
+
+  // ImportDialog.tsx
+  'Не удалось прочитать файл': 'Could not read the file',
+  'досье': 'dossier',
+  'расследование': 'investigation',
+  'досье «{title}»': 'dossier “{title}”',
+  'расследование «{title}»': 'investigation “{title}”',
+  'Читаю файл…': 'Reading the file…',
+  'Загрузка на сервер: часть {i} из {parts}': 'Uploading to the server: part {i} of {parts}',
+  'Загрузка на сервер…': 'Uploading to the server…',
+  'Импорт из файла': 'Import from file',
+  'Сервер расшифровывает и проверяет файл…': 'The server is decrypting and checking the file…',
+  'Импорт': 'Import',
+  'Сервер записывает объекты в базу…': 'The server is writing the objects to the database…',
+  'Импортировано: {title}': 'Imported: {title}',
+  'Файл экспорта': 'Export file',
+  'Только если его задали при экспорте.': 'Only if one was set at export.',
+  'Открыть': 'Open',
+  'с паролем': 'password-protected',
+  'редактирование доступно': 'editing allowed',
+  'автор: без редактирования': 'author: no editing',
+  'экспорт {date}': 'exported {date}',
+  'В файле': 'In the file',
+  'Расследование: узлов {nodes}, фактов {facts}, гипотез {hypotheses}': 'Investigation: {nodes} nodes, {facts} facts, {hypotheses} hypotheses',
+  'Досье ({n}): {titles}': 'Dossiers ({n}): {titles}',
+  'связей {relations} · фото {media} · снимков поиска {searches}': 'relations {relations} · photos {media} · search snapshots {searches}',
+  'Полная перезапись': 'Full overwrite',
+  'Эти объекты у вас уже есть — из прошлого импорта или это оригиналы, из которых сделан файл. Их содержимое будет полностью заменено данными из файла, правки после экспорта пропадут (видимость и доступы сохранятся):':
+    'You already have these objects — from an earlier import, or they are the originals the file was made from. Their content will be completely replaced with the data from the file, and changes made after the export will be lost (visibility and access are kept):',
+  'Назад': 'Back',
+  'Перезаписать': 'Overwrite',
+  'Импортировать': 'Import',
+
+  // LoginLinkPage.tsx
+  'В ссылке не хватает параметров — запросите в боте новую.': 'The link is missing parameters — request a new one from the bot.',
+  '.Следопыт': '.Foottracker',
+  'На страницу входа': 'To the sign-in page',
+  'Вход по ссылке из бота…': 'Logging in with the link from the bot…',
+
+  // LoginPage.tsx
+  'humint · досье · расследования': 'humint · dossiers · investigations',
+  'Персональный режим: один пользователь': 'Personal mode: single user',
+  'Вход по паролю': 'Password sign-in',
+  'Войти': 'Log in',
+  'Доступ по действующей подписке бота RuLeaks': 'Access with an active RuLeaks bot subscription',
+  'Вход через Telegram-бот': 'Log in with the Telegram bot',
+  'Нажмите кнопку или отсканируйте QR-код': 'Press the button or scan the QR code',
+  'Перейти в бот для авторизации': 'Open the bot to log in',
+  'Нажмите в боте кнопку генерации ссылки авторизации и перейдите по ней': 'In the bot, press the button that generates a login link and follow it',
+  'Вход под вашей учетной записью будет выполнен автоматически': 'You will be logged in to your account automatically',
+  'dev · имитация подтверждения ботом': 'dev · simulated bot confirmation',
+  'Следопыт (подписка)': 'Foottracker (subscription)',
+  'Коллега (безлимит)': 'Colleague (unlimited)',
+  'Без подписки': 'No subscription',
+  'dev · вход по Telegram ID пользователя бота': 'dev · log in by a bot user’s Telegram ID',
+  'Подписка и токен API берутся из базы бота. Доступно только при запуске на localhost.':
+    'The subscription and API token are taken from the bot database. Available only when running on localhost.',
+  'Войти как {id}': 'Log in as {id}',
+
+  // process.ts
+  'Отменено': 'Cancelled',
+
+  // ProgressDialog.tsx
+  'Выполнение': 'Progress',
+  'Выполняется…': 'In progress…',
+  'Останавливаю…': 'Stopping…',
+
+  // ui.tsx
+  'Закрыть': 'Close',
+  'Скопировать': 'Copy',
+  'Скопировано': 'Copied',
+  'Не удалось скопировать': 'Could not copy',
+  'Удалить': 'Delete',
+  'Нажмите ещё раз, чтобы удалить': 'Click again to delete',
+  'Подтвердить удаление': 'Confirm deletion',
+  'Выбрать файлы': 'Choose files',
+  'Выбрать файл': 'Choose file',
+  'Файлы не выбраны': 'No files chosen',
+  'Файл не выбран': 'No file chosen',
+  'выбрано файлов: {n}': 'files chosen: {n}',
+};
+
+export default en;

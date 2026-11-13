@@ -2,6 +2,7 @@ import * as RDialog from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from './ui.tsx';
+import { t } from '../lib/i18n.ts';
 import type { Process } from './process.ts';
 
 // Окно длительного процесса: шкала выполнения (gauge), что происходит, сколько прошло времени, «Отмена».
@@ -69,7 +70,7 @@ export function ProgressDialog({ open, title, value, status, detail, startedAt, 
               </RDialog.Title>
               <span className="font-mono text-2xl font-bold tabular-nums text-mint">{pct === null ? '' : `${pct}%`}</span>
             </div>
-            <RDialog.Description className="sr-only">{typeof title === 'string' ? title : 'Выполнение'}</RDialog.Description>
+            <RDialog.Description className="sr-only">{typeof title === 'string' ? title : t('Выполнение')}</RDialog.Description>
 
             {/* Шкала: заполненная часть светится; при неизвестной длительности по ней бежит блик. */}
             <div className="h-2.5 overflow-hidden rounded-full border border-line bg-mint/5" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
@@ -80,7 +81,7 @@ export function ProgressDialog({ open, title, value, status, detail, startedAt, 
             </div>
 
             <div className="mt-3 flex items-baseline justify-between gap-4 font-mono text-xs">
-              <span className="min-w-0 truncate text-dim">{status ?? (pct === null ? 'Выполняется…' : '')}</span>
+              <span className="min-w-0 truncate text-dim">{status ?? (pct === null ? t('Выполняется…') : '')}</span>
               {startedAt ? <span className="shrink-0 tabular-nums text-mute">{elapsedText(startedAt, now)}</span> : null}
             </div>
             {detail && <div className="mt-1 font-mono text-[11px] text-mute">{detail}</div>}
@@ -88,7 +89,7 @@ export function ProgressDialog({ open, title, value, status, detail, startedAt, 
             {onCancel && (
               <div className="mt-5 flex justify-end">
                 <Button variant="ghost" size="sm" onClick={onCancel} disabled={cancelling}>
-                  {cancelling ? 'Останавливаю…' : 'Отмена'}
+                  {cancelling ? t('Останавливаю…') : t('Отмена')}
                 </Button>
               </div>
             )}

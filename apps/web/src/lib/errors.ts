@@ -1,4 +1,8 @@
 import { TRPCClientError } from '@trpc/client';
+import { t, tx } from './i18n.ts';
+
+// Коды ошибок сервера → текст для пользователя (ключи перевода, lib/i18n.ts). Прочие сообщения сервера — по-русски
+// словами (ошибки шлюза, проверки ввода): их переводит tx() по словарю en/server.ts.
 
 const MESSAGES: Record<string, string> = {
   NO_SESSION: 'Сессия истекла — войдите снова',
@@ -48,10 +52,11 @@ export function errorText(e: unknown): string {
   if (e instanceof TRPCClientError) {
     // «КОД: подробность» (BAD_FILE: нет meta.info).
     const [code, detail] = e.message.split(/: (.*)/s);
-    if (detail && MESSAGES[code!]) return `${MESSAGES[code!]} (${detail})`;
-    return MESSAGES[e.message] ?? e.message;
+    if (detail && MESSAGES[code!]) return `${t(MESSAGES[code!]!)} (${tx(detail)})`;
+    const known = MESSAGES[e.message];
+    return known ? t(known) : tx(e.message);
   }
-  if (e instanceof Error) return e.message;
+  if (e instanceof Error) return tx(e.message);
   return String(e);
 }
 

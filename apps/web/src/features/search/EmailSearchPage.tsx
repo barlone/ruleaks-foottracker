@@ -7,6 +7,7 @@ import { ProgressDialog } from '../../components/ProgressDialog.tsx';
 import { Button, Card, Empty, Input, Spinner, Tag, WarnNote } from '../../components/ui.tsx';
 import { errorText } from '../../lib/errors.ts';
 import { ago } from '../../lib/format.ts';
+import { t, tx } from '../../lib/i18n.ts';
 import { toast } from '../../lib/toast.ts';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { AddPagesDialog, type PendingPage } from './AddPagesDialog.tsx';
@@ -38,7 +39,7 @@ export function EmailSearchPage() {
   if (!cfg.data) {
     return (
       <div className="pt-2.5 pb-6 pl-6 pr-[30px]">
-        <Empty>Раздел «Исследовать Email» выключен в настройках сервера.</Empty>
+        <Empty>{t('Раздел «Исследовать Email» выключен в настройках сервера.')}</Empty>
       </div>
     );
   }
@@ -99,13 +100,13 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
   useRunOnMount(() => run(params.q!), !!params.q, !!me.data?.access.active);
 
   const running = !!jobId && !job.error && j?.state === 'running';
-  const now = j?.parts.filter((p) => p.state === 'running').map((p) => (p.note ? `${PART_LABEL[p.id]}: ${p.note}` : PART_LABEL[p.id])) ?? [];
+  const now = j?.parts.filter((p) => p.state === 'running').map((p) => (p.note ? `${t(PART_LABEL[p.id])}: ${tx(p.note)}` : t(PART_LABEL[p.id]))) ?? [];
   const available = EMAIL_PARTS.filter((p) => config.parts[p.id]);
 
   return (
     <EmailRunContext.Provider value={disabled ? null : run}>
       <SearchLayout
-        title="Исследовать Email"
+        title={t('Исследовать Email')}
         titleExtra={(
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             {params.from && <BackToDossier id={params.from} />}
@@ -117,11 +118,11 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
             </div>
           </div>
         )}
-        subtitle="Что известно об адресе электронной почты: аккаунт Google, регистрации на сайтах, утечки и дампы, репутация, домен и его почтовые серверы."
+        subtitle={t('Что известно об адресе электронной почты: аккаунт Google, регистрации на сайтах, утечки и дампы, репутация, домен и его почтовые серверы.')}
         history={<EmailHistory activeId={jobId} onOpen={setJobId} />}
       >
         {config.googleDemo && (
-          <WarnNote>Режим имитации: служебный аккаунт Google на сервере не настроен — часть «Аккаунт Google» отвечает вымышленными данными. Остальные проверки настоящие.</WarnNote>
+          <WarnNote>{t('Режим имитации: служебный аккаунт Google на сервере не настроен — часть «Аккаунт Google» отвечает вымышленными данными. Остальные проверки настоящие.')}</WarnNote>
         )}
         <Card className="animate-fade-up">
           <form
@@ -147,20 +148,18 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
                 />
               </div>
               <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !query || !!problem || start.isPending}>
-                {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
+                {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : t('Искать')}
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
               <span>
-                Только адрес электронной почты. Проверки зависят от домена: у своего домена — ещё его записи DNS
-                и почтовые политики, регистрация, серверы и сотрудники (Hunter); у Gmail и бесплатных сервисов — то,
-                что касается самого адреса.
+                {t('Только адрес электронной почты. Проверки зависят от домена: у своего домена — ещё его записи DNS и почтовые политики, регистрация, серверы и сотрудники (Hunter); у Gmail и бесплатных сервисов — то, что касается самого адреса.')}
               </span>
-              {problem && <Tag tone="warn">{problem}</Tag>}
+              {problem && <Tag tone="warn">{tx(problem)}</Tag>}
               {typoFix && (
                 <span className="inline-flex flex-wrap items-center gap-2">
-                  <Tag tone="warn">возможно, опечатка в домене</Tag>
-                  <button type="button" onClick={() => setValue(typoFix)} title="Подставить исправленный адрес" className="cursor-pointer font-mono text-mint hover:underline">
+                  <Tag tone="warn">{t('возможно, опечатка в домене')}</Tag>
+                  <button type="button" onClick={() => setValue(typoFix)} title={t('Подставить исправленный адрес')} className="cursor-pointer font-mono text-mint hover:underline">
                     {typoFix}
                   </button>
                 </span>
@@ -172,9 +171,9 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
 
         <ProgressDialog
           open={running}
-          title="Исследовать Email"
+          title={t('Исследовать Email')}
           value={j && j.partsTotal ? j.partsDone / j.partsTotal : null}
-          status={now.length ? now.join(' · ') : 'Запуск…'}
+          status={now.length ? now.join(' · ') : t('Запуск…')}
           detail={j?.email}
           startedAt={j ? new Date(j.startedAt).getTime() : null}
           onCancel={() => jobId && cancel.mutate({ id: jobId })}
@@ -185,9 +184,9 @@ function EmailSearch({ config }: { config: NonNullable<RouterOutputs['email']['c
           <EmailResult job={j} loading={job.isLoading} error={job.error ? errorText(job.error) : null} pagesEnabled={!!pages.data} />
         ) : (
           <Empty>
-            Введите адрес — сервер проверит его по источникам:
+            {t('Введите адрес — сервер проверит его по источникам:')}
             <br />
-            <span className="font-mono text-xs text-mute">{available.map((p) => p.label).join(' · ')}</span>
+            <span className="font-mono text-xs text-mute">{available.map((p) => t(p.label)).join(' · ')}</span>
           </Empty>
         )}
       </SearchLayout>
@@ -199,8 +198,8 @@ function EmailHistory({ activeId, onOpen }: { activeId: string | null; onOpen: (
   const recent = trpc.email.recent.useQuery(undefined, { refetchInterval: (q) => (!q.state.error && q.state.data?.some((j) => j.state === 'running') ? 3000 : false) });
   const items = recent.data ?? [];
   return (
-    <Card title={<><History size={13} /> История</>}>
-      {!items.length && <div className="font-mono text-xs text-mute">Пока пусто</div>}
+    <Card title={<><History size={13} /> {t('История')}</>}>
+      {!items.length && <div className="font-mono text-xs text-mute">{t('Пока пусто')}</div>}
       <div className="max-h-[60vh] space-y-1 overflow-auto">
         {items.map((s) => (
           <button
@@ -210,16 +209,16 @@ function EmailHistory({ activeId, onOpen }: { activeId: string | null; onOpen: (
           >
             <div className="truncate font-mono text-sm">{s.email}</div>
             <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-mute">
-              {s.hits !== null && <span className={s.hits ? 'text-mint' : ''}>{s.hits ? `находок: ${s.hits}` : 'ничего не найдено'}</span>}
-              {s.state === 'failed' && <span className="text-danger">ошибка</span>}
-              {s.state === 'cancelled' && <span className="text-warn">остановлен</span>}
+              {s.hits !== null && <span className={s.hits ? 'text-mint' : ''}>{s.hits ? t('находок: {n}', { n: s.hits }) : t('ничего не найдено')}</span>}
+              {s.state === 'failed' && <span className="text-danger">{t('ошибка')}</span>}
+              {s.state === 'cancelled' && <span className="text-warn">{t('остановлен')}</span>}
               <span className="shrink-0">· {ago(s.startedAt)}</span>
               {s.state === 'running' && <Spinner className="size-2.5" />}
             </div>
           </button>
         ))}
       </div>
-      {items.length > 0 && <div className="mt-3 border-t border-line-soft pt-3 font-mono text-[10px] text-mute">Результаты хранятся в памяти сервера около часа.</div>}
+      {items.length > 0 && <div className="mt-3 border-t border-line-soft pt-3 font-mono text-[10px] text-mute">{t('Результаты хранятся в памяти сервера около часа.')}</div>}
     </Card>
   );
 }
@@ -233,14 +232,14 @@ function EmailResult({ job, loading, error, pagesEnabled }: { job: Job | undefin
     return (
       <Card>
         <div className="flex items-center gap-3 font-mono text-sm text-mint">
-          <Spinner /> Идёт поиск: {job.email}
+          <Spinner /> {t('Идёт поиск: {email}', { email: job.email })}
         </div>
       </Card>
     );
   }
-  if (job.state === 'failed') return <Card><div className="text-danger">{job.error ?? 'Поиск не удался'}</div></Card>;
+  if (job.state === 'failed') return <Card><div className="text-danger">{job.error ? tx(job.error) : t('Поиск не удался')}</div></Card>;
   const report = job.report;
-  if (job.state === 'cancelled' || !report) return <Empty>Поиск остановлен.</Empty>;
+  if (job.state === 'cancelled' || !report) return <Empty>{t('Поиск остановлен.')}</Empty>;
 
   const links = reportLinks(report);
   return (
@@ -250,13 +249,14 @@ function EmailResult({ job, loading, error, pagesEnabled }: { job: Job | undefin
           <span className="text-mint">{report.email}</span>
           {job.finishedAt && <span className="ml-2">· {ago(job.finishedAt)}</span>}
         </div>
-        <Button variant="primary" size="sm" onClick={() => setAdding(links)} disabled={!links.length} title={links.length ? 'Найденные ссылки — в «Соцсети и ссылки» досье' : 'Ссылок для досье нет'}>
-          <FolderPlus size={15} /> Ссылки в досье
+        <Button variant="primary" size="sm" onClick={() => setAdding(links)} disabled={!links.length} title={links.length ? t('Найденные ссылки — в «Соцсети и ссылки» досье') : t('Ссылок для досье нет')}>
+          <FolderPlus size={15} /> {t('Ссылки в досье')}
         </Button>
       </div>
 
       <EmailReportView report={report} pagesEnabled={pagesEnabled} />
 
+      {/* i18n-ignore: пометка источника сохраняется в досье — остаётся русской */}
       <AddPagesDialog open={!!adding} onOpenChange={(v) => !v && setAdding(null)} pages={adding ?? []} username={report.email} note={`Исследование Email: ${report.email}`} />
     </>
   );

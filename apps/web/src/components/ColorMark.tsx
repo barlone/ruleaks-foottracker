@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 import { TAG_COLORS } from '@ft/shared';
+import { t } from '../lib/i18n.ts';
 
 /**
  * Круг-маркер: пустой контур, пока цвет не выбран, иначе залит цветом. По нажатию — палитра (цвета тегов + свой
@@ -42,7 +43,7 @@ export function ColorMark({ value, editable, onChange, className }: {
         type="button"
         disabled={!editable}
         onClick={() => setOpen((v) => !v)}
-        title={editable ? (value ? 'Изменить цвет метки' : 'Пометить цветом') : undefined}
+        title={editable ? (value ? t('Изменить цвет метки') : t('Пометить цветом')) : undefined}
         // Пустой круг виден только при наведении на строку (как «править» и «удалить») и пока открыта палитра.
         className={clsx(
           'size-3.5 shrink-0 rounded-full border transition',
@@ -65,7 +66,7 @@ export function ColorMark({ value, editable, onChange, className }: {
             />
           ))}
           <label
-            title="Свой цвет"
+            title={t('Свой цвет')}
             className={clsx(
               'relative size-6 cursor-pointer rounded-md border border-dashed border-text/40',
               value && !TAG_COLORS.includes(value as (typeof TAG_COLORS)[number]) && 'ring-2 ring-mint ring-offset-2 ring-offset-panel',
@@ -77,7 +78,7 @@ export function ColorMark({ value, editable, onChange, className }: {
           <button
             type="button"
             onClick={() => pick(undefined)}
-            title="Сбросить цвет"
+            title={t('Сбросить цвет')}
             // Всегда в правом нижнем углу палитры, что бы ни стояло перед ней.
             className="col-start-4 grid size-6 cursor-pointer place-items-center rounded-md border border-text/25 text-dim transition hover:text-danger"
           >

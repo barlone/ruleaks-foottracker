@@ -4,6 +4,7 @@ import { Button, Dialog, Field, Input, Select, Segmented, WarnNote } from '../..
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
+import { t, tc, tn } from '../../lib/i18n.ts';
 import { POST_KIND_LABELS, findDuplicate, markDuplicates, type DossierItem, type SearchSection } from '@ft/shared';
 import { useTargetItems } from './dossierTarget.ts';
 
@@ -76,9 +77,13 @@ export function AddToDossierDialog({
         ],
       });
       await utils.dossiers.invalidate();
+      const added = [
+        tn(values.length, '{n} значение|{n} значения|{n} значений'),
+        posts.length ? tn(posts.length, '{n} пост|{n} поста|{n} постов') : '',
+      ].filter(Boolean).join(', ');
       toast(skipped
-        ? `Добавлено в досье: ${pending.length - skipped} из ${pending.length}, дубликаты пропущены`
-        : `Добавлено в досье: ${values.length} знач.${posts.length ? `, ${posts.length} пост.` : ''}${hasSnapshot ? '' : ' + снимок поиска'}`);
+        ? t('Добавлено в досье: {added} из {total}, дубликаты пропущены', { added: pending.length - skipped, total: pending.length })
+        : hasSnapshot ? t('Добавлено в досье: {added}', { added }) : t('Добавлено в досье: {added} + снимок поиска', { added }));
       onOpenChange(false);
       void navigate({ to: '/dossiers/$id', params: { id } });
     } catch (e) {
@@ -89,51 +94,51 @@ export function AddToDossierDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Добавить в досье">
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Добавить в досье')}>
       <div className="space-y-5">
         <div className="max-h-40 space-y-1 overflow-auto rounded-lg border border-line-soft bg-bg-soft p-3 font-mono text-xs">
-          {values.length === 0 && posts.length === 0 && <div className="text-mute">Только снимок поиска</div>}
+          {values.length === 0 && posts.length === 0 && <div className="text-mute">{t('Только снимок поиска')}</div>}
           {posts.map((p, i) => (
             <div key={`p${i}`} className="line-clamp-2 border-l-2 border-mint/40 pl-2 text-dim">
-              {postDuplicates[i] && <span className="text-warn">дубликат · </span>}
-              <span className="text-mint">{POST_KIND_LABELS[p.kind]}{p.emoji ? ` ${p.emoji}` : ''}</span> · {p.text}
+              {postDuplicates[i] && <span className="text-warn">{t('дубликат')} · </span>}
+              <span className="text-mint">{t(POST_KIND_LABELS[p.kind])}{p.emoji ? ` ${p.emoji}` : ''}</span> · {p.text}
             </div>
           ))}
           {values.map((v, i) => (
             <div key={i} className="flex gap-2">
-              <span className="w-32 shrink-0 text-mute">{v.label}</span>
+              <span className="w-32 shrink-0 text-mute">{t(v.label)}</span>
               <span className={valueDuplicates[i] ? 'text-mute line-through' : 'text-text'}>{v.value}</span>
-              {valueDuplicates[i] && <span className="ml-auto shrink-0 text-warn">дубликат</span>}
+              {valueDuplicates[i] && <span className="ml-auto shrink-0 text-warn">{t('дубликат')}</span>}
             </div>
           ))}
         </div>
         {(duplicateCount > 0 || nothingNew) && (
           <WarnNote>
             {nothingNew
-              ? 'Всё это уже есть в досье — добавлять нечего.'
+              ? t('Всё это уже есть в досье — добавлять нечего.')
               : duplicateCount === pending.length
-              ? 'Всё это уже есть в досье — добавится только снимок поиска.'
-              : `Дубликаты: ${duplicateCount} из ${pending.length} — повторно добавлены не будут.`}
+              ? t('Всё это уже есть в досье — добавится только снимок поиска.')
+              : t('Дубликаты: {n} из {total} — повторно добавлены не будут.', { n: duplicateCount, total: pending.length })}
           </WarnNote>
         )}
-        <Segmented value={mode} onChange={setMode} options={[{ value: 'existing', label: 'В существующее' }, { value: 'new', label: 'Новое досье' }]} />
+        <Segmented value={mode} onChange={setMode} options={[{ value: 'existing', label: t('В существующее') }, { value: 'new', label: t('Новое досье') }]} />
         {mode === 'existing' ? (
-          <Field label="Досье">
+          <Field label={tc('поле', 'Досье')}>
             <Select value={dossierId} onChange={(e) => setDossierId(e.target.value)} className="w-full">
-              <option value="">— выберите —</option>
+              <option value="">{t('— выберите —')}</option>
               {editable.map((d) => (
-                <option key={d.id} value={d.id}>{d.title}{d.role === 'editor' ? ' (общее)' : ''}</option>
+                <option key={d.id} value={d.id}>{d.title}{d.role === 'editor' ? t(' (общее)') : ''}</option>
               ))}
             </Select>
           </Field>
         ) : (
-          <Field label="Название (персона)">
-            <Input value={title} placeholder={nameGuess || 'Фамилия Имя Отчество'} onChange={(e) => setTitle(e.target.value)} />
+          <Field label={t('Название (персона)')}>
+            <Input value={title} placeholder={nameGuess || t('Фамилия Имя Отчество')} onChange={(e) => setTitle(e.target.value)} />
           </Field>
         )}
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
-          <Button variant="primary" onClick={submit} disabled={busy || target.loading || nothingNew || (mode === 'existing' && !dossierId)}>Добавить</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
+          <Button variant="primary" onClick={submit} disabled={busy || target.loading || nothingNew || (mode === 'existing' && !dossierId)}>{t('Добавить')}</Button>
         </div>
       </div>
     </Dialog>

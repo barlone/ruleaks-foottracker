@@ -76,9 +76,9 @@ const RE = {
   ip: /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/,
   // ФИО (фамилия 2+ буквы, имя и отчество могут быть инициалами) с датой рождения или без.
   name: new RegExp(
-    String.raw`^(?:([А-Яа-яЁё]{2,})(?:\s+([А-Яа-яЁё]+)){1,2}|([А-Яа-яЁё]{2,}))\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)$|` +
-      String.raw`^([А-Яа-яЁё]{2,})\s+([А-Яа-яЁё]+)(?:\s+([А-Яа-яЁё]+))?$|` +
-      String.raw`^([А-Яа-яЁё]{2,})\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)$`,
+    String.raw`^(?:([А-Яа-яЁё]{2,})(?:\s+([А-Яа-яЁё]+)){1,2}|([А-Яа-яЁё]{2,}))\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)$|` + // i18n-ignore: регулярка
+      String.raw`^([А-Яа-яЁё]{2,})\s+([А-Яа-яЁё]+)(?:\s+([А-Яа-яЁё]+))?$|` + // i18n-ignore: регулярка
+      String.raw`^([А-Яа-яЁё]{2,})\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)$`, // i18n-ignore: регулярка
   ),
   addr: /^(?=(?:\S+\s+){2,5}\S+$)(?:[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)?\s+){2,3}(?:д(?:ом)?\.?\s*)?\d+[А-Яа-яЁё]?(?:\s+(?:кв(?:артира)?\.?\s*)?\d+)?$/i,
   orgnn: /^\d{10}$/,
@@ -188,7 +188,7 @@ export function detectKind(raw: string): SearchKindId | null {
 // и _build_payload (app/bot/handlers/search.py) бота.
 // ---------------------------------------------------------------------------
 
-const LAT_TO_CYR: Record<string, string> = { A: 'А', B: 'В', E: 'Е', K: 'К', M: 'М', H: 'Н', O: 'О', P: 'Р', C: 'С', T: 'Т', Y: 'У', X: 'Х' };
+const LAT_TO_CYR: Record<string, string> = { A: 'А', B: 'В', E: 'Е', K: 'К', M: 'М', H: 'Н', O: 'О', P: 'Р', C: 'С', T: 'Т', Y: 'У', X: 'Х' }; // i18n-ignore: таблица букв
 const CYR_TO_LAT: Record<string, string> = {
   А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', У: 'Y', Х: 'X',
   Ж: 'X', З: '3', И: 'I', Л: 'L', П: 'P', Ф: 'F', Ь: '', Ъ: '', Ы: 'Y', Э: 'E',
@@ -201,7 +201,7 @@ const mapChars = (s: string, m: Record<string, string>) => [...s].map((c) => m[c
  * только первые шесть слов, и служебные заняли бы место значимых.
  */
 const ADDR_STOP_WORDS = new Set([
-  'г', 'гор', 'город', 'ул', 'улица', 'д', 'дом', 'к', 'корп', 'корпус', 'кв', 'квартира', 'с', 'село', 'им', 'имени',
+  'г', 'гор', 'город', 'ул', 'улица', 'д', 'дом', 'к', 'корп', 'корпус', 'кв', 'квартира', 'с', 'село', 'им', 'имени', // i18n-ignore: слова для разбора адреса
 ]);
 
 /**
@@ -248,7 +248,7 @@ export function normalizeQuery(kind: string, raw: string): string {
       return mapChars(v.toUpperCase().replace(/[\s-]/g, ''), LAT_TO_CYR);
     case 'milpn': {
       let m = v.toUpperCase().replace(/\s+/g, '').replace(/[–—]/g, '-');
-      if (m.startsWith('X')) m = `Х${m.slice(1)}`;
+      if (m.startsWith('X')) m = `Х${m.slice(1)}`; // i18n-ignore: кириллическая буква номера
       if (!m.includes('-') && /^\p{L}\d+$/u.test(m)) m = `${m[0]}-${m.slice(1)}`;
       return m;
     }
@@ -702,7 +702,7 @@ export function findFuzzyMode(id: string): FuzzyMode | undefined {
 
 /** Латиница → кириллица в госномере, как в боте (_LATIN_TO_CYRILLIC). */
 export function normalizePlateMask(mask: string): string {
-  const map: Record<string, string> = { A: 'А', B: 'В', E: 'Е', K: 'К', M: 'М', H: 'Н', O: 'О', P: 'Р', C: 'С', T: 'Т', Y: 'У', X: 'Х' };
+  const map: Record<string, string> = { A: 'А', B: 'В', E: 'Е', K: 'К', M: 'М', H: 'Н', O: 'О', P: 'Р', C: 'С', T: 'Т', Y: 'У', X: 'Х' }; // i18n-ignore: таблица букв
   return mask.toUpperCase().replace(/\s+/g, '').replace(/[ABEKMHOPCTYX]/g, (c) => map[c] ?? c);
 }
 

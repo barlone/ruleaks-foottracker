@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { t } from '../../lib/i18n.ts';
 import { parseGeoloc } from '@ft/shared';
 import { ExternalLink, Globe, MailCheck, MapPin, MapPinned, MessageCircle, Phone, Send, type LucideIcon } from 'lucide-react';
 
@@ -42,33 +43,33 @@ function actionsFor(field: string, value: string): ValueAction[] {
       const d = phoneDigits(v);
       if (!d) return [];
       return [
-        { title: 'Открыть чат в Telegram', href: `https://t.me/+${d}`, icon: Send, hover: 'hover:text-[#27A5E7]' },
-        { title: 'Открыть чат в WhatsApp', href: `https://wa.me/${d}`, icon: MessageCircle, hover: 'hover:text-[#25D366]' },
-        { title: 'Открыть чат в Viber', href: `viber://chat?number=%2B${d}`, icon: Phone, hover: 'hover:text-[#8F7CF7]' },
+        { title: t('Открыть чат в Telegram'), href: `https://t.me/+${d}`, icon: Send, hover: 'hover:text-[#27A5E7]' },
+        { title: t('Открыть чат в WhatsApp'), href: `https://wa.me/${d}`, icon: MessageCircle, hover: 'hover:text-[#25D366]' },
+        { title: t('Открыть чат в Viber'), href: `viber://chat?number=%2B${d}`, icon: Phone, hover: 'hover:text-[#8F7CF7]' },
       ];
     }
     case 'emails':
     case 'email':
-      return [{ title: 'Проверить email (mailmeteor)', href: `https://mailmeteor.com/email-checker?${new URLSearchParams({ email: v })}`, icon: MailCheck, hover: 'hover:text-mint' }];
+      return [{ title: t('Проверить email (mailmeteor)'), href: `https://mailmeteor.com/email-checker?${new URLSearchParams({ email: v })}`, icon: MailCheck, hover: 'hover:text-mint' }];
     case 'geolocs': {
       // Радиус после @ («55.75, 37.61 @500») в ссылку не идёт — Google Maps его не понимает.
       const coords = parseGeoloc(v).coords.replace(/\s+/g, '');
-      return [{ title: 'Открыть геолокацию в Google Maps', href: `https://www.google.com/maps/place/${encodeURIComponent(coords)}`, icon: MapPinned, hover: 'hover:text-mint' }];
+      return [{ title: t('Открыть геолокацию в Google Maps'), href: `https://www.google.com/maps/place/${encodeURIComponent(coords)}`, icon: MapPinned, hover: 'hover:text-mint' }];
     }
     case 'addrs':
-      return [{ title: 'Найти адрес в Google Maps', href: `https://www.google.com/maps/search/?${new URLSearchParams({ api: '1', query: v })}`, icon: MapPin, hover: 'hover:text-mint' }];
+      return [{ title: t('Найти адрес в Google Maps'), href: `https://www.google.com/maps/search/?${new URLSearchParams({ api: '1', query: v })}`, icon: MapPin, hover: 'hover:text-mint' }];
     case 'weblinks':
     case 'link': {
       const url = webUrl(v);
-      return url ? [{ title: 'Перейти по ссылке', href: url, icon: ExternalLink, hover: 'hover:text-mint' }] : [];
+      return url ? [{ title: t('Перейти по ссылке'), href: url, icon: ExternalLink, hover: 'hover:text-mint' }] : [];
     }
     case 'ips':
     case 'ip':
-      return [{ title: 'Сведения об IP-адресе (ipgeolocation.io)', href: `https://ipgeolocation.io/what-is-my-ip/${encodeURIComponent(v)}`, icon: Globe, hover: 'hover:text-mint' }];
+      return [{ title: t('Сведения об IP-адресе (ipgeolocation.io)'), href: `https://ipgeolocation.io/what-is-my-ip/${encodeURIComponent(v)}`, icon: Globe, hover: 'hover:text-mint' }];
     case 'tgids':
     case 'tgid':
       // tg:// открывает профиль, только если клиент Telegram «знает» пользователя (общий чат, контакт).
-      return /^\d+$/.test(v) ? [{ title: 'Открыть профиль в Telegram', href: `tg://user?id=${v}`, icon: Send, hover: 'hover:text-[#27A5E7]' }] : [];
+      return /^\d+$/.test(v) ? [{ title: t('Открыть профиль в Telegram'), href: `tg://user?id=${v}`, icon: Send, hover: 'hover:text-[#27A5E7]' }] : [];
     default:
       return [];
   }

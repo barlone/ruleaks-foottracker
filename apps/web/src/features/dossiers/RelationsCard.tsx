@@ -6,6 +6,7 @@ import { normalizeRelationText } from '@ft/shared';
 import { Button, Card, ConfirmDeleteBtn, Dialog, Empty, Field, Input, Select, Spinner } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t } from '../../lib/i18n.ts';
 import { toast } from '../../lib/toast.ts';
 
 // «Связи» досье персоны: связи с другими персонами из словаря типов (предопределённые + свои),
@@ -23,6 +24,10 @@ export function RelationsCard({ dossierId, editable }: { dossierId: string; edit
   // Связь видна в обоих досье — обновляем все списки.
   const refresh = () => utils.relations.list.invalidate();
   const remove = trpc.relations.remove.useMutation({ onSuccess: refresh, onError: (e) => toast(errorText(e), 'error') });
+  // Предопределённые типы (ownerId = null) переводятся при показе, свои — текст пользователя.
+  const types = trpc.relations.types.useQuery(undefined, { enabled: !!list.data?.length, staleTime: 60_000 });
+  const predefined = new Set((types.data ?? []).filter((x) => x.ownerId === null).map((x) => x.id));
+  const typeLabel = (r: Rel) => (predefined.has(r.typeId) ? t(r.typeText) : r.typeText);
 
   // По одной строке на персону, внутри — её связи.
   const groups = useMemo(() => {
@@ -38,13 +43,13 @@ export function RelationsCard({ dossierId, editable }: { dossierId: string; edit
   return (
     <Card
       compact
-      title={<><Waypoints size={13} /> Связи</>}
-      actions={editable && <Button size="sm" variant="ghost" onClick={() => setDialog({})}><Plus size={13} /> Добавить</Button>}
+      title={<><Waypoints size={13} /> {t('Связи')}</>}
+      actions={editable && <Button size="sm" variant="ghost" onClick={() => setDialog({})}><Plus size={13} /> {t('Добавить')}</Button>}
     >
       {list.isLoading ? (
         <div className="grid h-16 place-items-center"><Spinner /></div>
       ) : groups.length === 0 ? (
-        <Empty>Связей нет</Empty>
+        <Empty>{t('Связей нет')}</Empty>
       ) : (
         <div className="divide-y divide-line-soft">
           {groups.map((g) => (
@@ -59,6 +64,7 @@ export function RelationsCard({ dossierId, editable }: { dossierId: string; edit
                     <RelationChip
                       key={r.id}
                       rel={r}
+                      typeText={typeLabel(r)}
                       otherTitle={g.other.title}
                       onEdit={editable && r.canEdit ? () => setDialog({ group: g }) : undefined}
                       onRemove={editable && r.canRemove ? () => remove.mutate({ id: r.id }) : undefined}
@@ -87,23 +93,23 @@ export function RelationsCard({ dossierId, editable }: { dossierId: string; edit
  * Тип связи и пояснение этого досье; при наведении — правка (окно со связями с этой персоной)
  * и удаление (как у атрибутов). Пояснение другой стороны — во всплывающей подсказке.
  */
-function RelationChip({ rel, otherTitle, onEdit, onRemove }: { rel: Rel; otherTitle: string; onEdit?: () => void; onRemove?: () => void }) {
+function RelationChip({ rel, typeText, otherTitle, onEdit, onRemove }: { rel: Rel; typeText: string; otherTitle: string; onEdit?: () => void; onRemove?: () => void }) {
   return (
     <span
-      title={`В досье «${otherTitle}»: ${rel.typeText}${rel.otherNote ? ` · ${rel.otherNote}` : ''}`}
+      title={t('В досье «{title}»: {type}', { title: otherTitle, type: typeText }) + (rel.otherNote ? ` · ${rel.otherNote}` : '')}
       className="group inline-flex items-center gap-1.5 rounded-md border border-line bg-mint/5 px-2 py-0.5 font-mono text-[11px] leading-5"
     >
       {rel.direction === 'in' && <ArrowLeftRight size={10} className="text-mute" />}
-      <span className="text-mint">{rel.typeText}</span>
+      <span className="text-mint">{typeText}</span>
       {rel.note && <span className="text-dim">· {rel.note}</span>}
       {(onEdit || onRemove) && (
         <span className="hidden items-center gap-1.5 group-hover:inline-flex has-[[data-armed]]:inline-flex">
           {onEdit && (
-            <button type="button" onClick={onEdit} title="Изменить связи с этой персоной" className="cursor-pointer text-mute hover:text-mint">
+            <button type="button" onClick={onEdit} title={t('Изменить связи с этой персоной')} className="cursor-pointer text-mute hover:text-mint">
               <Pencil size={11} />
             </button>
           )}
-          {onRemove && <ConfirmDeleteBtn onConfirm={onRemove} title="Удалить связь (из обоих досье)" />}
+          {onRemove && <ConfirmDeleteBtn onConfirm={onRemove} title={t('Удалить связь (из обоих досье)')} />}
         </span>
       )}
     </span>
@@ -183,38 +189,40 @@ function RelationDialog({
   // Словарь + типы, уже стоящие на связи (тип соавтора в нашем словаре может не быть).
   const list = [
     ...(types.data ?? []),
-    ...(group?.rels ?? []).filter((r) => !types.data?.some((t) => t.id === r.typeId)).map((r) => ({ id: r.typeId, ownerId: '', text: r.typeText })),
+    ...(group?.rels ?? []).filter((r) => !types.data?.some((x) => x.id === r.typeId)).map((r) => ({ id: r.typeId, ownerId: '', text: r.typeText })),
   ];
+  // Предопределённые типы (ownerId = null) переводятся при показе; хранятся и сравниваются по-русски.
+  const shownText = (x: { ownerId: string | null; text: string }) => (x.ownerId === null ? t(x.text) : x.text);
   const norm = normalizeRelationText(newType);
-  const exists = list.some((t) => t.text === norm);
+  const exists = list.some((x) => x.text === norm);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={editing ? 'Связи с персоной' : 'Новая связь'}>
+    <Dialog open={open} onOpenChange={onOpenChange} title={editing ? t('Связи с персоной') : t('Новая связь')}>
       <div className="space-y-4">
-        <Field label="Персона">
+        <Field label={t('Персона')}>
           {editing ? (
             // Персона зафиксирована — меняются только связи с ней.
             <Input value={group.other.title} disabled className="w-full disabled:opacity-100 disabled:text-text" />
           ) : (
             <Select value={otherId} onChange={(e) => setOtherId(e.target.value)} className="w-full">
-              <option value="">— выберите досье —</option>
+              <option value="">{t('— выберите досье —')}</option>
               {persons.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
             </Select>
           )}
         </Field>
 
-        <Field label="Тип связи (можно несколько)">
+        <Field label={t('Тип связи (можно несколько)')}>
           <div className="flex flex-wrap gap-1.5">
-            {list.map((t) => {
-              const on = picked.has(t.id);
+            {list.map((x) => {
+              const on = picked.has(x.id);
               return (
                 <span
-                  key={t.id}
+                  key={x.id}
                   className={clsx('group inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] transition', on ? 'border-mint bg-mint/15 text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text')}
                 >
-                  <button type="button" onClick={() => toggle(t.id)} className="cursor-pointer">{t.text}</button>
-                  {t.ownerId !== null && t.ownerId !== '' && (
-                    <ConfirmDeleteBtn onConfirm={() => removeType.mutate({ id: t.id })} title="Удалить из словаря (удалит и связи этого типа)" />
+                  <button type="button" onClick={() => toggle(x.id)} className="cursor-pointer">{shownText(x)}</button>
+                  {x.ownerId !== null && x.ownerId !== '' && (
+                    <ConfirmDeleteBtn onConfirm={() => removeType.mutate({ id: x.id })} title={t('Удалить из словаря (удалит и связи этого типа)')} />
                   )}
                 </span>
               );
@@ -229,9 +237,9 @@ function RelationDialog({
             if (norm && !exists) createType.mutate({ text: norm });
           }}
         >
-          <Input value={newType} maxLength={64} onChange={(e) => setNewType(e.target.value)} placeholder="свой тип связи…" className="h-8 lowercase" />
-          <Button type="submit" size="sm" disabled={!norm || exists || createType.isPending} title={exists ? 'Такой тип уже есть' : undefined}>
-            <Plus size={13} /> Тип
+          <Input value={newType} maxLength={64} onChange={(e) => setNewType(e.target.value)} placeholder={t('свой тип связи…')} className="h-8 lowercase" />
+          <Button type="submit" size="sm" disabled={!norm || exists || createType.isPending} title={exists ? t('Такой тип уже есть') : undefined}>
+            <Plus size={13} /> {t('Тип')}
           </Button>
         </form>
 
@@ -239,26 +247,26 @@ function RelationDialog({
           <div className="space-y-2 rounded-xl border border-line-soft p-3">
             <div className="grid grid-cols-[8rem_1fr_1fr] gap-2 font-mono text-[10px] uppercase tracking-wider text-mute">
               <span />
-              <span>пояснение здесь</span>
-              <span className="truncate">{otherTitle ? `в досье «${otherTitle}»` : 'в досье другой персоны'}</span>
+              <span>{t('пояснение здесь')}</span>
+              <span className="truncate">{otherTitle ? t('в досье «{title}»', { title: otherTitle }) : t('в досье другой персоны')}</span>
             </div>
             {[...picked].map(([id, n]) => (
               <div key={id} className="grid grid-cols-[8rem_1fr_1fr] items-center gap-2">
-                <span className="truncate font-mono text-[11px] text-mint">{list.find((t) => t.id === id)?.text}</span>
+                <span className="truncate font-mono text-[11px] text-mint">{(() => { const x = list.find((y) => y.id === id); return x && shownText(x); })()}</span>
                 <Input
                   value={n.note}
                   maxLength={500}
                   onChange={(e) => setPicked((prev) => new Map(prev).set(id, { ...n, note: e.target.value }))}
-                  placeholder="например «сын»"
+                  placeholder={t('например «сын»')}
                   className="h-8 text-xs"
                 />
                 <Input
                   value={n.otherNote}
                   maxLength={500}
                   disabled={!!other && !otherEditable}
-                  title={other && !otherEditable ? 'Досье только для чтения — пояснение допишет его владелец' : undefined}
+                  title={other && !otherEditable ? t('Досье только для чтения — пояснение допишет его владелец') : undefined}
                   onChange={(e) => setPicked((prev) => new Map(prev).set(id, { ...n, otherNote: e.target.value }))}
-                  placeholder="например «отец»"
+                  placeholder={t('например «отец»')}
                   className="h-8 text-xs"
                 />
               </div>
@@ -266,11 +274,11 @@ function RelationDialog({
           </div>
         )}
         {editing && picked.size === 0 && (
-          <div className="font-mono text-[11px] text-warn">Ни одного типа не отмечено — все связи с этой персоной будут удалены.</div>
+          <div className="font-mono text-[11px] text-warn">{t('Ни одного типа не отмечено — все связи с этой персоной будут удалены.')}</div>
         )}
 
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
           <Button
             variant="primary"
             disabled={!otherId || (!editing && picked.size === 0) || save.isPending}
@@ -289,7 +297,7 @@ function RelationDialog({
               })
             }
           >
-            {editing ? 'Сохранить' : 'Добавить'}
+            {editing ? t('Сохранить') : t('Добавить')}
           </Button>
         </div>
       </div>

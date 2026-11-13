@@ -1,5 +1,6 @@
 import { isPagesQuery, type EmailReport } from '@ft/shared';
 import type { PendingPage } from './AddPagesDialog.tsx';
+import { t } from '../../lib/i18n.ts';
 
 // Помощники страницы «Поиск по Email» (без разметки — правило Fast Refresh: .tsx экспортирует только компоненты).
 
@@ -8,7 +9,7 @@ export function manualSearchLinks(email: string): { label: string; url: string }
   const q = encodeURIComponent(`"${email}"`);
   return [
     { label: 'Google', url: `https://www.google.com/search?q=${q}` },
-    { label: 'Яндекс', url: `https://yandex.ru/search/?text=${q}` },
+    { label: t('Яндекс'), url: `https://yandex.ru/search/?text=${q}` },
     { label: 'Bing', url: `https://www.bing.com/search?q=${q}` },
     { label: 'DuckDuckGo', url: `https://duckduckgo.com/?q=${q}` },
   ];
@@ -25,8 +26,9 @@ export function reportLinks(r: EmailReport): PendingPage[] {
   const links: PendingPage[] = [];
   if (r.google.status === 'ok' && !r.google.data.demo) {
     const g = r.google.data;
-    if (g.maps.status === 'ok' && g.maps.data.state === 'ok') links.push({ site: 'Google Карты', url: g.maps.data.profileUrl });
-    if (g.calendar.status === 'ok' && g.calendar.data.icsUrl) links.push({ site: 'Google Календарь', url: g.calendar.data.icsUrl });
+    // Названия сайтов сохраняются в досье — остаются русскими.
+    if (g.maps.status === 'ok' && g.maps.data.state === 'ok') links.push({ site: 'Google Карты', url: g.maps.data.profileUrl }); // i18n-ignore
+    if (g.calendar.status === 'ok' && g.calendar.data.icsUrl) links.push({ site: 'Google Календарь', url: g.calendar.data.icsUrl }); // i18n-ignore
   }
   if (r.sites.status === 'ok') {
     for (const c of r.sites.data.checks) if (c.status === 'claimed') links.push({ site: c.site, url: c.url, by: 'email' });

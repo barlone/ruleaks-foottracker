@@ -19,7 +19,7 @@ export type ItemLike =
 /** Номера и документы: разделители в записи ничего не значат («45 10 123456» = «4510123456»). */
 const COMPACT_FIELDS = new Set(['inns', 'snilss', 'pasps', 'forpasps', 'bsvids', 'ogrnips', 'tgids', 'bankcards', 'milpns', 'plates', 'vins']);
 
-const text = (s: string) => s.normalize('NFKC').toLowerCase().replaceAll('ё', 'е').replace(/\s+/g, ' ').trim();
+const text = (s: string) => s.normalize('NFKC').toLowerCase().replaceAll('ё', 'е').replace(/\s+/g, ' ').trim(); // i18n-ignore: нормализация
 
 const compact = (s: string) => text(s).replace(/[^\p{L}\p{N}]/gu, '');
 

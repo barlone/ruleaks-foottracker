@@ -10,6 +10,7 @@ import clsx from 'clsx';
 import { Bold, Code, Heading2, Highlighter, Italic, List, ListChecks, ListOrdered, Quote, Strikethrough, X } from 'lucide-react';
 import { HIGHLIGHT_COLORS, HIGHLIGHT_DEFAULT, MARK_SPAN_RE, highlightKey, type HighlightKey } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
+import { t } from '../lib/i18n.ts';
 
 // Редактор Markdown на TipTap. Сам файл нигде не импортируется напрямую: его подгружает обёртка MarkdownEditor
 // из Markdown.tsx — так TipTap не попадает в стартовый файл сайта.
@@ -51,7 +52,7 @@ interface MentionItem { id: string; title: string; kind: string }
 export interface MarkdownEditorProps { value: string; onChange: (md: string) => void; placeholder?: string; className?: string; autoFocus?: boolean }
 
 export function MarkdownEditor({
-  value, onChange, placeholder = 'Текст в Markdown… «@» — упомянуть досье', className, autoFocus,
+  value, onChange, placeholder = t('Текст в Markdown… «@» — упомянуть досье'), className, autoFocus,
 }: MarkdownEditorProps) {
   const options = trpc.dossiers.options.useQuery(undefined, { staleTime: 60_000 });
   const itemsRef = useRef<MentionItem[]>([]);
@@ -117,8 +118,8 @@ export function MarkdownEditor({
   // autofocus TipTap срабатывает до вставки в DOM диалога — фокусируем после монтирования.
   useEffect(() => {
     if (!editor || !autoFocus) return;
-    const t = setTimeout(() => editor.commands.focus('end'), 30);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => editor.commands.focus('end'), 30);
+    return () => clearTimeout(timer);
   }, [editor, autoFocus]);
 
   return (
@@ -132,7 +133,7 @@ export function MarkdownEditor({
           style={{ top: popup.rect.bottom - (wrapRect?.top ?? 0) + 6, left: popup.rect.left - (wrapRect?.left ?? 0) }}
         >
           {popup.items.length === 0 ? (
-            <div className="px-3 py-2 font-mono text-xs text-mute">Нет досье</div>
+            <div className="px-3 py-2 font-mono text-xs text-mute">{t('Нет досье')}</div>
           ) : (
             popup.items.map((it, i) => (
               <button
@@ -141,7 +142,7 @@ export function MarkdownEditor({
                 className={clsx('block w-full cursor-pointer px-3 py-2 text-left text-sm', i === popup.index ? 'bg-mint/15 text-mint' : 'text-dim hover:bg-mint/5')}
               >
                 @{it.title}
-                <span className="ml-2 font-mono text-[10px] text-mute">{it.kind === 'group' ? 'группа' : 'персона'}</span>
+                <span className="ml-2 font-mono text-[10px] text-mute">{it.kind === 'group' ? t('группа') : t('персона')}</span>
               </button>
             ))
           )}
@@ -186,7 +187,7 @@ function HighlightButton({ editor }: { editor: Editor }) {
     <div ref={ref} className="relative">
       <button
         type="button"
-        title="Выделить цветом"
+        title={t('Выделить цветом')}
         // mousedown без потери выделения в редакторе
         onMouseDown={(e) => { e.preventDefault(); setOpen((v) => !v); }}
         className={clsx('grid size-7 cursor-pointer place-items-center rounded-md transition', active || open ? 'bg-mint/15 text-mint' : 'text-mute hover:bg-mint/5 hover:text-mint')}
@@ -199,7 +200,7 @@ function HighlightButton({ editor }: { editor: Editor }) {
             <button
               key={c.key}
               type="button"
-              title={c.label}
+              title={t(c.label)}
               onMouseDown={(e) => { e.preventDefault(); pick(c.key); }}
               className={clsx('size-6 cursor-pointer rounded-md border border-text/25 transition hover:scale-110', current === c.key && 'ring-2 ring-mint ring-offset-2 ring-offset-panel')}
               style={{ background: c.color }}
@@ -207,7 +208,7 @@ function HighlightButton({ editor }: { editor: Editor }) {
           ))}
           <button
             type="button"
-            title="Убрать выделение"
+            title={t('Убрать выделение')}
             onMouseDown={(e) => { e.preventDefault(); pick(null); }}
             className="grid size-6 cursor-pointer place-items-center rounded-md border border-text/25 text-dim transition hover:text-danger"
           >
@@ -233,17 +234,17 @@ function Toolbar({ editor }: { editor: Editor }) {
   const c = () => editor.chain().focus();
   return (
     <div className="flex flex-wrap gap-0.5 border-b border-line-soft px-2 py-1.5">
-      {btn(editor.isActive('heading', { level: 2 }), () => c().toggleHeading({ level: 2 }).run(), <Heading2 size={15} />, 'Заголовок')}
-      {btn(editor.isActive('bold'), () => c().toggleBold().run(), <Bold size={15} />, 'Жирный')}
-      {btn(editor.isActive('italic'), () => c().toggleItalic().run(), <Italic size={15} />, 'Курсив')}
-      {btn(editor.isActive('strike'), () => c().toggleStrike().run(), <Strikethrough size={15} />, 'Зачёркнутый')}
-      {btn(editor.isActive('code'), () => c().toggleCode().run(), <Code size={15} />, 'Код')}
+      {btn(editor.isActive('heading', { level: 2 }), () => c().toggleHeading({ level: 2 }).run(), <Heading2 size={15} />, t('Заголовок'))}
+      {btn(editor.isActive('bold'), () => c().toggleBold().run(), <Bold size={15} />, t('Жирный'))}
+      {btn(editor.isActive('italic'), () => c().toggleItalic().run(), <Italic size={15} />, t('Курсив'))}
+      {btn(editor.isActive('strike'), () => c().toggleStrike().run(), <Strikethrough size={15} />, t('Зачёркнутый'))}
+      {btn(editor.isActive('code'), () => c().toggleCode().run(), <Code size={15} />, t('Код'))}
       <HighlightButton editor={editor} />
       <span className="mx-1 w-px bg-line-soft" />
-      {btn(editor.isActive('bulletList'), () => c().toggleBulletList().run(), <List size={15} />, 'Список')}
-      {btn(editor.isActive('orderedList'), () => c().toggleOrderedList().run(), <ListOrdered size={15} />, 'Нумерованный')}
-      {btn(editor.isActive('taskList'), () => c().toggleTaskList().run(), <ListChecks size={15} />, 'Задачи')}
-      {btn(editor.isActive('blockquote'), () => c().toggleBlockquote().run(), <Quote size={15} />, 'Цитата')}
+      {btn(editor.isActive('bulletList'), () => c().toggleBulletList().run(), <List size={15} />, t('Список'))}
+      {btn(editor.isActive('orderedList'), () => c().toggleOrderedList().run(), <ListOrdered size={15} />, t('Нумерованный'))}
+      {btn(editor.isActive('taskList'), () => c().toggleTaskList().run(), <ListChecks size={15} />, t('Задачи'))}
+      {btn(editor.isActive('blockquote'), () => c().toggleBlockquote().run(), <Quote size={15} />, t('Цитата'))}
       <span className="ml-auto self-center pr-1 font-mono text-[10px] text-mute">markdown</span>
     </div>
   );

@@ -4,6 +4,7 @@ import { markDuplicates } from '@ft/shared';
 import { Button, Dialog, Field, Input, Select, Segmented, WarnNote } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t, tc } from '../../lib/i18n.ts';
 import { guessPlatform } from '../../lib/platform.ts';
 import { toast } from '../../lib/toast.ts';
 import { useTargetItems } from './dossierTarget.ts';
@@ -51,6 +52,13 @@ export function AddPagesDialog({
   const duplicateCount = duplicates.filter(Boolean).length;
   const nothingNew = pages.length > 0 && duplicateCount === pages.length;
 
+  /** Примечание источника по умолчанию — на языке интерфейса: это текст пользователя, с ним ничего не сравнивается. */
+  function pagesNote(by: PendingPage['by']) {
+    if (by === 'email') return t('Поиск личных страниц по e-mail: {username}', { username });
+    if (by === 'username') return t('Поиск личных страниц по нику: {username}', { username });
+    return t('Поиск личных страниц: {username}', { username });
+  }
+
   async function submit() {
     setBusy(true);
     try {
@@ -69,11 +77,13 @@ export function AddPagesDialog({
           url: p.url,
           title: p.site,
           platform: guessPlatform(p.url),
-          source: { kind: 'url' as const, ref: p.url, note: note ?? `Поиск личных страниц${p.by === 'email' ? ' по e-mail' : p.by === 'username' ? ' по нику' : ''}: ${username}`, reliability: 'C' as const, credibility: '3' as const, capturedAt },
+          source: { kind: 'url' as const, ref: p.url, note: note ?? pagesNote(p.by), reliability: 'C' as const, credibility: '3' as const, capturedAt },
         })),
       });
       await utils.dossiers.invalidate();
-      toast(`Добавлено в досье: ссылок ${pages.length - skipped}${skipped ? ` из ${pages.length}, дубликаты пропущены` : ''}`);
+      toast(skipped
+        ? t('Добавлено в досье: ссылок {added} из {total}, дубликаты пропущены', { added: pages.length - skipped, total: pages.length })
+        : t('Добавлено в досье: ссылок {added}', { added: pages.length }));
       onOpenChange(false);
       void navigate({ to: '/dossiers/$id', params: { id } });
     } catch (e) {
@@ -84,41 +94,43 @@ export function AddPagesDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Добавить в досье">
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Добавить в досье')}>
       <div className="space-y-5">
         <div className="max-h-40 space-y-1 overflow-auto rounded-lg border border-line-soft bg-bg-soft p-3 font-mono text-xs">
           {pages.map((p, i) => (
             <div key={p.url} className="flex gap-2">
               <span className="w-32 shrink-0 truncate text-mute">{p.site}</span>
               <span className={duplicates[i] ? 'truncate text-mute line-through' : 'truncate text-text'}>{p.url}</span>
-              {duplicates[i] && <span className="ml-auto shrink-0 text-warn">дубликат</span>}
+              {duplicates[i] && <span className="ml-auto shrink-0 text-warn">{t('дубликат')}</span>}
             </div>
           ))}
         </div>
         {duplicateCount > 0 && (
           <WarnNote>
-            {nothingNew ? 'Все эти ссылки уже есть в досье — добавлять нечего.' : `Дубликаты: ${duplicateCount} из ${pages.length} — повторно добавлены не будут.`}
+            {nothingNew
+              ? t('Все эти ссылки уже есть в досье — добавлять нечего.')
+              : t('Дубликаты: {n} из {total} — повторно добавлены не будут.', { n: duplicateCount, total: pages.length })}
           </WarnNote>
         )}
-        <Segmented value={mode} onChange={setMode} options={[{ value: 'existing', label: 'В существующее' }, { value: 'new', label: 'Новое досье' }]} />
+        <Segmented value={mode} onChange={setMode} options={[{ value: 'existing', label: t('В существующее') }, { value: 'new', label: t('Новое досье') }]} />
         {mode === 'existing' ? (
-          <Field label="Досье">
+          <Field label={tc('поле', 'Досье')}>
             <Select value={dossierId} onChange={(e) => setDossierId(e.target.value)} className="w-full">
-              <option value="">— выберите —</option>
+              <option value="">{t('— выберите —')}</option>
               {editable.map((d) => (
-                <option key={d.id} value={d.id}>{d.title}{d.role === 'editor' ? ' (общее)' : ''}</option>
+                <option key={d.id} value={d.id}>{d.title}{d.role === 'editor' ? ` (${t('общее')})` : ''}</option>
               ))}
             </Select>
           </Field>
         ) : (
-          <Field label="Название (персона)">
+          <Field label={t('Название (персона)')}>
             <Input value={title} placeholder={username} onChange={(e) => setTitle(e.target.value)} />
           </Field>
         )}
-        <p className="text-xs text-mute">Ссылки попадут в раздел «Соцсети и ссылки».</p>
+        <p className="text-xs text-mute">{t('Ссылки попадут в раздел «Соцсети и ссылки».')}</p>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
-          <Button variant="primary" onClick={() => void submit()} disabled={busy || target.loading || nothingNew || !pages.length || (mode === 'existing' && !dossierId)}>Добавить</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
+          <Button variant="primary" onClick={() => void submit()} disabled={busy || target.loading || nothingNew || !pages.length || (mode === 'existing' && !dossierId)}>{t('Добавить')}</Button>
         </div>
       </div>
     </Dialog>

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink, TRPCClientError } from '@trpc/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { trpc } from './lib/trpc.ts';
+import { loadLang, setLang, storedLang } from './lib/i18n.ts';
 import { router } from './router.tsx';
 import './styles.css';
 
@@ -32,8 +33,15 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+// Язык последнего пользователя этого браузера — до первой отрисовки, чтобы страница не мигнула русским.
+// Словарь не загрузился — русский; язык из настроек пользователя потом применит Root (AppShell).
+const lang = storedLang();
+loadLang(lang)
+  .then(() => setLang(lang), () => {})
+  .finally(() =>
+    createRoot(document.getElementById('root')!).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    ),
+  );

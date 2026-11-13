@@ -11,6 +11,7 @@ import { MarkdownEditor } from '../../components/Markdown.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { ago, fmtDate } from '../../lib/format.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t, tn } from '../../lib/i18n.ts';
 
 export function InvestigationsPage() {
   const search = useSearch({ from: '/investigations' });
@@ -31,12 +32,12 @@ export function InvestigationsPage() {
     <div className="space-y-6 pt-2.5 pb-6 pl-6 pr-[30px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold">Расследования</h1>
-          <p className="mt-1 text-sm text-dim">Граф связей между персонами, организациями и событиями, база фактов и проверка гипотез.</p>
+          <h1 className="text-2xl font-extrabold">{t('Расследования')}</h1>
+          <p className="mt-1 text-sm text-dim">{t('Граф связей между персонами, организациями и событиями, база фактов и проверка гипотез.')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setImporting(true)} title="Расследование или досье из файла экспорта"><FileUp size={16} /> Импорт</Button>
-          <Button variant="primary" onClick={() => setCreating(true)}><Plus size={16} /> Новое расследование</Button>
+          <Button onClick={() => setImporting(true)} title={t('Расследование или досье из файла экспорта')}><FileUp size={16} /> {t('Импорт')}</Button>
+          <Button variant="primary" onClick={() => setCreating(true)}><Plus size={16} /> {t('Новое расследование')}</Button>
         </div>
       </header>
       <ImportDialog open={importing} onOpenChange={setImporting} />
@@ -45,30 +46,30 @@ export function InvestigationsPage() {
         <Segmented
           value={scope}
           onChange={(s) => void navigate({ search: { scope: s } })}
-          options={[{ value: 'all', label: 'Все' }, { value: 'mine', label: 'Мои' }, { value: 'shared', label: 'Доступные мне' }, { value: 'public', label: 'Публичные' }]}
+          options={[{ value: 'all', label: t('Все') }, { value: 'mine', label: t('Мои') }, { value: 'shared', label: t('Доступные мне') }, { value: 'public', label: t('Публичные') }]}
         />
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название содержит…" className="max-w-sm" />
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('Название содержит…')} className="max-w-sm" />
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-dim">Теги содержат:</span>
+          <span className="text-sm text-dim">{t('Теги содержат:')}</span>
           <TagFilter value={tagIds} onChange={setTagIds} />
         </div>
         {list.isFetching && <Spinner />}
         <div className="ml-auto"><ViewToggle value={view} onChange={setView} /></div>
       </div>
 
-      {list.data?.length === 0 && <Empty>Нет расследований</Empty>}
+      {list.data?.length === 0 && <Empty>{t('Нет расследований')}</Empty>}
 
       {view === 'table' && !!list.data?.length && (
         <div className={tableCls.wrap}>
           <table className={tableCls.table}>
             <thead>
               <tr>
-                <th className={tableCls.th}>Название</th>
-                <th className={tableCls.th}>Теги</th>
-                <th className={`${tableCls.th} text-right`}>Объектов</th>
-                <th className={`${tableCls.th} text-right`}>Фактов</th>
-                <th className={tableCls.th}>Доступ</th>
-                <th className={tableCls.th}>Изменено</th>
+                <th className={tableCls.th}>{t('Название')}</th>
+                <th className={tableCls.th}>{t('Теги')}</th>
+                <th className={`${tableCls.th} text-right`}>{t('Объектов')}</th>
+                <th className={`${tableCls.th} text-right`}>{t('Фактов')}</th>
+                <th className={tableCls.th}>{t('Доступ')}</th>
+                <th className={tableCls.th}>{t('Изменено')}</th>
               </tr>
             </thead>
             <tbody>
@@ -86,7 +87,7 @@ export function InvestigationsPage() {
                   <td className={tableCls.td}>
                     <span className="flex items-center gap-1.5">
                       <VisibilityTag v={inv.visibility} />
-                      {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? 'правка' : 'чтение'}</Tag>}
+                      {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? t('правка') : t('чтение')}</Tag>}
                     </span>
                   </td>
                   <td className={`${tableCls.td} whitespace-nowrap font-mono text-xs text-mute`} title={fmtDate(inv.updatedAt, true)}>{ago(inv.updatedAt)}</td>
@@ -110,15 +111,15 @@ export function InvestigationsPage() {
             <div className="mb-3 flex items-center justify-between">
               <Network size={20} className="text-mint" />
               <span className="flex gap-1.5">
-                {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? 'правка' : 'чтение'}</Tag>}
+                {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? t('правка') : t('чтение')}</Tag>}
                 <VisibilityTag v={inv.visibility} />
               </span>
             </div>
             <div className="text-lg font-bold leading-snug group-hover:text-mint">{inv.title}</div>
             <TagList tags={inv.tags} className="mt-2" />
             <div className="mt-4 flex gap-4 font-mono text-[11px] text-mute">
-              <span><b className="text-dim">{inv.nodeCount}</b> объектов</span>
-              <span><b className="text-dim">{inv.factCount}</b> фактов</span>
+              <span><b className="text-dim">{inv.nodeCount}</b> {tn(inv.nodeCount, 'объект|объекта|объектов')}</span>
+              <span><b className="text-dim">{inv.factCount}</b> {tn(inv.factCount, 'факт|факта|фактов')}</span>
               <span className="ml-auto">{ago(inv.updatedAt)}</span>
             </div>
           </Link>
@@ -142,12 +143,12 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
     },
   });
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Новое расследование" wide>
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Новое расследование')} wide>
       <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); create.mutate({ title, descriptionMd: desc }); }}>
-        <Field label="Название"><Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-        <Field label="Описание"><MarkdownEditor value={desc} onChange={setDesc} placeholder="Цель, гипотеза, рамки…" /></Field>
+        <Field label={t('Название')}><Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+        <Field label={t('Описание')}><MarkdownEditor value={desc} onChange={setDesc} placeholder={t('Цель, гипотеза, рамки…')} /></Field>
         {create.error && <div className="font-mono text-xs text-danger">{errorText(create.error)}</div>}
-        <div className="flex justify-end"><Button type="submit" variant="primary" disabled={!title.trim()}>Создать</Button></div>
+        <div className="flex justify-end"><Button type="submit" variant="primary" disabled={!title.trim()}>{t('Создать')}</Button></div>
       </form>
     </Dialog>
   );

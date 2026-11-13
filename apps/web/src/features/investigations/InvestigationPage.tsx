@@ -12,6 +12,7 @@ import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
+import { t } from '../../lib/i18n.ts';
 import { FactsPanel } from './FactsPanel.tsx';
 import { HypothesesPanel } from './HypothesesPanel.tsx';
 
@@ -64,7 +65,7 @@ export function InvestigationPage() {
         <div className="mb-2 flex items-center justify-between gap-4">
           {me.data ? (
             <Link to="/investigations" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
-              <ArrowLeft size={13} /> все расследования
+              <ArrowLeft size={13} /> {t('все расследования')}
             </Link>
           ) : <span />}
           <ObjectActions
@@ -83,10 +84,10 @@ export function InvestigationPage() {
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <VisibilityTag v={inv.visibility} />
-            {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? 'вы можете править' : 'только чтение'}</Tag>}
-            <span className="font-mono text-[11px] text-mute">v{inv.version} · изменено {fmtDate(inv.updatedAt, true)}</span>
+            {inv.role !== 'owner' && <Tag>{inv.role === 'editor' ? t('вы можете править') : t('только чтение')}</Tag>}
+            <span className="font-mono text-[11px] text-mute">{t('v{v} · изменено {date}', { v: inv.version, date: fmtDate(inv.updatedAt, true) })}</span>
             <button onClick={() => setShowDesc((v) => !v)} className="cursor-pointer font-mono text-[11px] text-mute hover:text-mint">
-              {showDesc ? 'скрыть описание' : 'показать описание'}
+              {showDesc ? t('скрыть описание') : t('показать описание')}
             </button>
           </div>
           {editTitle !== null ? (
@@ -104,7 +105,7 @@ export function InvestigationPage() {
             <h1 className="group flex items-center gap-2 text-2xl font-extrabold tracking-tight">
               {inv.title}
               {editable && (
-                <button onClick={() => setEditTitle(inv.title)} title="Изменить название" className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+                <button onClick={() => setEditTitle(inv.title)} title={t('Изменить название')} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
                   <Pencil size={16} />
                 </button>
               )}
@@ -124,8 +125,8 @@ export function InvestigationPage() {
               <div className="space-y-2">
                 <MarkdownEditor value={editDesc} onChange={setEditDesc} autoFocus />
                 <div className="flex justify-end gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setEditDesc(null)}>Отмена</Button>
-                  <Button size="sm" variant="primary" onClick={() => { update.mutate({ id, version: inv.version, patch: { descriptionMd: editDesc } }); setEditDesc(null); }}>Сохранить</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditDesc(null)}>{t('Отмена')}</Button>
+                  <Button size="sm" variant="primary" onClick={() => { update.mutate({ id, version: inv.version, patch: { descriptionMd: editDesc } }); setEditDesc(null); }}>{t('Сохранить')}</Button>
                 </div>
               </div>
             ) : (
@@ -138,18 +139,18 @@ export function InvestigationPage() {
         )}
 
         <nav className="mt-3 flex gap-1">
-          {TABS.map(({ id: t, label, icon: Icon }) => {
-            const count = t === 'graph' ? inv.nodes.length : t === 'facts' ? inv.facts.length : inv.hypotheses.length;
+          {TABS.map(({ id: tabId, label, icon: Icon }) => {
+            const count = tabId === 'graph' ? inv.nodes.length : tabId === 'facts' ? inv.facts.length : inv.hypotheses.length;
             return (
               <button
-                key={t}
-                onClick={() => void navigate({ search: { tab: t } })}
+                key={tabId}
+                onClick={() => void navigate({ search: { tab: tabId } })}
                 className={clsx(
                   'flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition',
-                  tab === t ? 'border-mint text-mint' : 'border-transparent text-dim hover:text-text',
+                  tab === tabId ?'border-mint text-mint' : 'border-transparent text-dim hover:text-text',
                 )}
               >
-                <Icon size={15} /> {label}
+                <Icon size={15} /> {t(label)}
                 <span className="font-mono text-[10px] text-mute">{count}</span>
               </button>
             );

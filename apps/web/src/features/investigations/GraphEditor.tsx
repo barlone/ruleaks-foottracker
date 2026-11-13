@@ -20,6 +20,7 @@ import { errorCode, errorText } from '../../lib/errors.ts';
 import { useStore } from '../../lib/store.ts';
 import { theme } from '../../lib/theme.ts';
 import { toast } from '../../lib/toast.ts';
+import { t, tc, tn } from '../../lib/i18n.ts';
 import { NODE_STYLE, RELATIONS, edgeStyle, withAlpha } from './nodeStyle.ts';
 
 // Визуальный редактор связей. Состояние графа живёт локально (React Flow),
@@ -39,10 +40,26 @@ type RelEdge = Edge<{ relation: string; credibility: GraphEdge['credibility']; f
  * Тип по умолчанию «связь» при пояснении опускается: он ничего не добавляет.
  */
 function edgeLabel(relation: string, note?: string): string {
-  if (!note?.trim()) return relation;
+  const isDefault = isDefaultRelation(relation);
+  if (!note?.trim()) return isDefault ? t('связь') : relation;
   const words = note.trim().split(/\s+/);
   const short = `${words.slice(0, 3).join(' ')}${words.length > 3 ? '…' : ''}`;
-  return relation.trim().toLowerCase() === 'связь' ? short : `${relation} · ${short}`;
+  return isDefault ? short : `${relation} · ${short}`;
+}
+
+/**
+ * Тип связи по умолчанию: новая связь получает его на языке интерфейса, в старых данных он по-русски —
+ * узнаём оба.
+ */
+/** Название узла: оставленное по умолчанию русское название типа («Персона») показывается на языке интерфейса. */
+function shownLabel(label: string): string {
+  return (Object.values(NODE_TYPE_LABELS) as string[]).includes(label) ? t(label) : label;
+}
+
+function isDefaultRelation(relation: string): boolean {
+  const r = relation.trim().toLowerCase();
+  // i18n-ignore: сравнение с сохранённым значением
+  return r === 'связь' || r === t('связь').toLowerCase();
 }
 
 /** level — id узла, внутри которого сейчас находимся; null — верхний уровень. */
@@ -76,7 +93,7 @@ const fromFlow = (nodes: EntityNode[], edges: RelEdge[]): { nodes: GraphNode[]; 
     position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
   })),
   edges: edges.map((e) => ({
-    id: e.id, source: e.source, target: e.target, relation: e.data?.relation ?? 'связь', label: e.data?.note,
+    id: e.id, source: e.source, target: e.target, relation: e.data?.relation ?? t('связь'), label: e.data?.note,
     credibility: e.data?.credibility ?? '6', factIds: e.data?.factIds ?? [],
   })),
 });
@@ -116,7 +133,7 @@ function EntityNodeView({ id, data, selected }: NodeProps<EntityNode>) {
         <button
           type="button"
           data-node-menu-btn
-          title="Действия с блоком"
+          title={t('Действия с блоком')}
           // nodrag/nopan: нажатие не начинает перетаскивание; stopPropagation — не выделяет узел и не открывает досье.
           onClick={(e) => { e.stopPropagation(); g.openMenu(id, e.currentTarget); }}
           onDoubleClick={(e) => e.stopPropagation()}
@@ -134,26 +151,26 @@ function EntityNodeView({ id, data, selected }: NodeProps<EntityNode>) {
           </span>
         )}
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold leading-tight">{data.label}</div>
+          <div className="truncate text-[13px] font-semibold leading-tight">{shownLabel(data.label)}</div>
           <div className="font-mono text-[9px] uppercase tracking-wider" style={{ color: withAlpha(color, 80) }}>
-            {NODE_TYPE_LABELS[data.type]}
+            {t(NODE_TYPE_LABELS[data.type])}
             {data.props.date && ` · ${data.props.date}`}
           </div>
         </div>
       </div>
       {(data.dossierId || data.factCount > 0 || inner > 0) && (
         <div className="mt-1.5 flex items-center gap-1.5 font-mono text-[9px] text-mute">
-          {data.dossierId && <span className="text-mint">● досье</span>}
-          {data.factCount > 0 && <span>{data.factCount} факт.</span>}
+          {data.dossierId && <span className="text-mint">{t('● досье')}</span>}
+          {data.factCount > 0 && <span>{tn(data.factCount, '{n} факт|{n} факта|{n} фактов')}</span>}
           {inner > 0 && (
             <button
               type="button"
-              title="Войти внутрь"
+              title={t('Войти внутрь')}
               onClick={(e) => { e.stopPropagation(); g.enter(id); }}
               onDoubleClick={(e) => e.stopPropagation()}
               className="nodrag nopan inline-flex cursor-pointer items-center gap-1 text-dim transition hover:text-mint"
             >
-              <Network size={9} /> внутри: {inner}
+              <Network size={9} /> {t('внутри: {n}', { n: inner })}
             </button>
           )}
         </div>
@@ -278,12 +295,12 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   const colorMode = useStore(theme);
   useEffect(() => {
     if (!dirty || !editable || saving) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       sentSeq.current = editSeq.current;
       const g = fromFlow(rf.getNodes(), rf.getEdges());
       save.mutate({ id: investigationId, version: versionRef.current, ...g });
     }, 1200);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, nodes, edges, saving]);
 
@@ -292,8 +309,8 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
     if (!focus) return;
     const target = srcNodes.find((n) => n.id === focus);
     if (target && (target.parentId ?? null) !== levelRef.current) enter(target.parentId ?? null, false);
-    const t = setTimeout(() => rf.fitView({ nodes: [{ id: focus }], maxZoom: 1.2, duration: 400 }), 150);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => rf.fitView({ nodes: [{ id: focus }], maxZoom: 1.2, duration: 400 }), 150);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, rf]);
 
@@ -306,7 +323,9 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   const onConnect = useCallback(
     (c: Connection) => {
       const id = newId();
-      setEdges((es) => addEdge({ ...c, id, label: 'связь', data: { relation: 'связь', credibility: '6', factIds: [] }, style: edgeStyle('6'), markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle('6').stroke } }, es));
+      // Тип по умолчанию — на языке интерфейса: это текст пользователя, он уходит в экспорт и PDF.
+      const relation = t('связь');
+      setEdges((es) => addEdge({ ...c, id, label: relation, data: { relation, credibility: '6', factIds: [] }, style: edgeStyle('6'), markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle('6').stroke } }, es));
       setSelected({ kind: 'edge', id });
       touch();
     },
@@ -358,8 +377,8 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   useEffect(() => {
     if (!menu) return;
     const onDown = (e: MouseEvent) => {
-      const t = e.target as Element;
-      if (!menuRef.current?.contains(t) && !t.closest?.('[data-node-menu-btn]')) setMenu(null);
+      const el = e.target as Element;
+      if (!menuRef.current?.contains(el) && !el.closest?.('[data-node-menu-btn]')) setMenu(null);
     };
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
     document.addEventListener('mousedown', onDown);
@@ -388,7 +407,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   // Клавиша Delete не удаляет узел с внутренним графом: это делается из меню блока, с подтверждением.
   const onBeforeDelete: OnBeforeDelete<EntityNode, RelEdge> = async ({ nodes: doomed }) => {
     if (!doomed.some((n) => childCount[n.id])) return true;
-    toast('У объекта есть внутренний граф — удалите его через меню блока', 'error');
+    toast(t('У объекта есть внутренний граф — удалите его через меню блока'), 'error');
     return false;
   };
 
@@ -397,7 +416,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
     const id = newId();
     setNodes((ns) => [
       ...ns.map((n) => ({ ...n, selected: false })),
-      { id, type: 'entity', position: { x: center.x - 80 + Math.random() * 40, y: center.y - 30 + Math.random() * 40 }, selected: true, data: { label: NODE_TYPE_LABELS[type], type, dossierId: null, parentId: levelRef.current, props: {}, factCount: 0 } },
+      { id, type: 'entity', position: { x: center.x - 80 + Math.random() * 40, y: center.y - 30 + Math.random() * 40 }, selected: true, data: { label: t(NODE_TYPE_LABELS[type]), type, dossierId: null, parentId: levelRef.current, props: {}, factCount: 0 } },
     ]);
     setSelected({ kind: 'node', id });
     touch();
@@ -517,11 +536,11 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
           <div ref={menuRef} className="absolute z-30 overflow-hidden rounded-lg border border-line bg-panel py-1 shadow-glow-sm" style={{ left: menu.x, top: menu.y, width: MENU_WIDTH }}>
             {n.data.parentId === null && (editable || inner > 0) && (
               <MenuItem icon={<LogIn size={13} />} onClick={() => enter(n.id)}>
-                Войти внутрь{inner > 0 && <span className="ml-1.5 font-mono text-[10px] text-mute">объектов: {inner}</span>}
+                {t('Войти внутрь')}{inner > 0 && <span className="ml-1.5 font-mono text-[10px] text-mute">{t('объектов: {n}', { n: inner })}</span>}
               </MenuItem>
             )}
             {n.data.dossierId && (
-              <MenuItem icon={<FolderOpen size={13} />} onClick={() => void navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId! } })}>Открыть досье</MenuItem>
+              <MenuItem icon={<FolderOpen size={13} />} onClick={() => void navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId! } })}>{t('Открыть досье')}</MenuItem>
             )}
             {editable && !fromDossier && (
               <MenuItem
@@ -532,7 +551,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                   fileRef.current?.click();
                 }}
               >
-                {n.data.props.image ? 'Заменить изображение…' : 'Добавить изображение…'}
+                {n.data.props.image ? t('Заменить изображение…') : t('Добавить изображение…')}
               </MenuItem>
             )}
             {editable && !fromDossier && n.data.props.image && (
@@ -544,16 +563,16 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                   setMenu(null);
                 }}
               >
-                Убрать изображение
+                {t('Убрать изображение')}
               </MenuItem>
             )}
-            {editable && fromDossier && <div className="px-3 py-1.5 text-[11px] text-mute">Изображение — фото из привязанного досье</div>}
+            {editable && fromDossier && <div className="px-3 py-1.5 text-[11px] text-mute">{t('Изображение — фото из привязанного досье')}</div>}
             {editable && (
               <>
                 <div className="my-1 border-t border-line-soft" />
                 {/* Блок с внутренним графом удаляется вторым нажатием. */}
                 <MenuItem icon={<Trash2 size={13} />} danger onClick={() => (inner > 0 && !menu.confirm ? setMenu({ ...menu, confirm: true }) : removeNode(n.id))}>
-                  {menu.confirm ? `Точно удалить? Внутри объектов: ${inner}` : 'Удалить блок'}
+                  {menu.confirm ? t('Точно удалить? Внутри объектов: {n}', { n: inner }) : t('Удалить блок')}
                 </MenuItem>
               </>
             )}
@@ -589,15 +608,15 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         {/* Внутри объекта: возврат на верхний уровень и название объекта. */}
         {level && (
           <>
-            <button onClick={() => enter(null)} title="Вернуться на верхний уровень" className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs text-mint transition hover:bg-mint/10">
-              <ArrowLeft size={13} /> Связи
+            <button onClick={() => enter(null)} title={t('Вернуться на верхний уровень')} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs text-mint transition hover:bg-mint/10">
+              <ArrowLeft size={13} /> {t('Связи')}
             </button>
             {levelNode && (() => {
               const { icon: Icon, color } = NODE_STYLE[levelNode.data.type];
               return (
-                <span className="flex h-8 max-w-56 items-center gap-1.5 px-1 text-xs font-semibold" title={`Внутри: ${levelNode.data.label}`}>
+                <span className="flex h-8 max-w-56 items-center gap-1.5 px-1 text-xs font-semibold" title={t('Внутри: {name}', { name: shownLabel(levelNode.data.label) })}>
                   <Icon size={14} style={{ color }} className="shrink-0" />
-                  <span className="truncate">{levelNode.data.label}</span>
+                  <span className="truncate">{shownLabel(levelNode.data.label)}</span>
                 </span>
               );
             })()}
@@ -605,40 +624,40 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
           </>
         )}
         {editable &&
-          (Object.keys(NODE_STYLE) as NodeType[]).map((t) => {
-            const { icon: Icon, color } = NODE_STYLE[t];
+          (Object.keys(NODE_STYLE) as NodeType[]).map((type) => {
+            const { icon: Icon, color } = NODE_STYLE[type];
             return (
-              <button key={t} onClick={() => addNode(t)} title={`Добавить: ${NODE_TYPE_LABELS[t]}`} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs text-dim transition hover:bg-mint/10 hover:text-text">
+              <button key={type} onClick={() => addNode(type)} title={t('Добавить: {type}', { type: t(NODE_TYPE_LABELS[type]) })} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs text-dim transition hover:bg-mint/10 hover:text-text">
                 <Plus size={11} /><Icon size={14} style={{ color }} />
-                <span className="max-xl:hidden">{NODE_TYPE_LABELS[t]}</span>
+                <span className="max-xl:hidden">{t(NODE_TYPE_LABELS[type])}</span>
               </button>
             );
           })}
         {editable && <span className="mx-1 h-5 w-px bg-line" />}
-        {editable && <Button size="sm" variant="ghost" onClick={autoLayout} title="Авторасстановка (ELK)"><LayoutGrid size={14} /></Button>}
-        <Button size="sm" variant="ghost" onClick={() => rf.fitView({ duration: 300 })} title="Показать всё"><Maximize size={14} /></Button>
+        {editable && <Button size="sm" variant="ghost" onClick={autoLayout} title={t('Авторасстановка (ELK)')}><LayoutGrid size={14} /></Button>}
+        <Button size="sm" variant="ghost" onClick={() => rf.fitView({ duration: 300 })} title={t('Показать всё')}><Maximize size={14} /></Button>
       </div>
         {/* Во весь экран и обратно: справа от панели инструментов. */}
         {fullscreen ? (
           <button onClick={() => onFullscreen(false)} className="pointer-events-auto flex h-[46px] cursor-pointer items-center gap-1.5 rounded-xl border border-line bg-panel/90 px-3 font-mono text-xs text-mint backdrop-blur transition hover:bg-mint/10">
-            <ArrowLeft size={13} /> вернуться в расследование
+            <ArrowLeft size={13} /> {t('вернуться в расследование')}
           </button>
         ) : (
-          <button onClick={() => onFullscreen(true)} title="Редактор связей во весь экран" className="pointer-events-auto flex h-[46px] cursor-pointer items-center gap-1.5 rounded-xl border border-line bg-panel/90 px-3 text-xs text-dim backdrop-blur transition hover:bg-mint/10 hover:text-text">
-            <Expand size={14} /> Во весь экран
+          <button onClick={() => onFullscreen(true)} title={t('Редактор связей во весь экран')} className="pointer-events-auto flex h-[46px] cursor-pointer items-center gap-1.5 rounded-xl border border-line bg-panel/90 px-3 text-xs text-dim backdrop-blur transition hover:bg-mint/10 hover:text-text">
+            <Expand size={14} /> {t('Во весь экран')}
           </button>
         )}
       </div>
 
       <div className="absolute right-3 top-3 font-mono text-[11px]">
         {!editable ? (
-          <Tag tone="dim">только просмотр</Tag>
+          <Tag tone="dim">{t('только просмотр')}</Tag>
         ) : save.isPending ? (
-          <Tag tone="dim"><Spinner className="size-2.5" /> сохраняю</Tag>
+          <Tag tone="dim"><Spinner className="size-2.5" /> {t('сохраняю')}</Tag>
         ) : dirty ? (
-          <Tag tone="warn">изменено</Tag>
+          <Tag tone="warn">{t('изменено')}</Tag>
         ) : (
-          <Tag>✓ сохранено · v{versionRef.current}</Tag>
+          <Tag>{t('✓ сохранено · v{v}', { v: versionRef.current })}</Tag>
         )}
       </div>
 
@@ -646,16 +665,16 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
       {(selNode || selEdge) && (
         <aside className="absolute bottom-3 right-3 top-12 z-10 w-80 overflow-auto rounded-xl border border-line bg-panel/95 p-4 backdrop-blur max-md:hidden">
           <div className="mb-4 flex items-center justify-between">
-            <span className="label-mono">{selNode ? NODE_TYPE_LABELS[selNode.data.type] : 'Связь'}</span>
+            <span className="label-mono">{selNode ? t(NODE_TYPE_LABELS[selNode.data.type]) : t('Связь')}</span>
             <button onClick={() => setSelected(null)} className="cursor-pointer text-mute hover:text-mint"><X size={15} /></button>
           </div>
 
           {selNode && (
             <div className="space-y-3">
-              <Field label="Название">
+              <Field label={t('Название')}>
                 <Input value={selNode.data.label} disabled={!editable} onChange={(e) => patchNode(selNode.id, { label: e.target.value })} />
               </Field>
-              <Field label="Пояснение">
+              <Field label={t('Пояснение')}>
                 <Textarea
                   rows={3}
                   value={selNode.data.props.note ?? ''}
@@ -666,25 +685,27 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                   }}
                 />
               </Field>
-              <Field label="Тип">
+              <Field label={t('Тип')}>
                 <Select value={selNode.data.type} disabled={!editable} onChange={(e) => patchNode(selNode.id, { type: e.target.value as NodeType })} className="w-full">
-                  {(Object.keys(NODE_TYPE_LABELS) as NodeType[]).map((t) => <option key={t} value={t}>{NODE_TYPE_LABELS[t]}</option>)}
+                  {(Object.keys(NODE_TYPE_LABELS) as NodeType[]).map((type) => <option key={type} value={type}>{t(NODE_TYPE_LABELS[type])}</option>)}
                 </Select>
               </Field>
               {(NODE_DOSSIER_KIND[selNode.data.type] || selNode.data.dossierId) && (
-                <Field label={selNode.data.type === 'group' ? 'Досье группы' : 'Досье'}>
+                <Field label={selNode.data.type === 'group' ? t('Досье группы') : tc('поле', 'Досье')}>
                   {editable ? (
                     <Select
                       value={selNode.data.dossierId ?? ''}
                       onChange={(e) => {
                         const d = dossiers.data?.find((x) => x.id === e.target.value);
                         // Узел с названием по умолчанию получает название досье.
-                        const rename = d && (!selNode.data.label.trim() || selNode.data.label === NODE_TYPE_LABELS[selNode.data.type]);
+                        // Название по умолчанию — подпись типа на любом языке (узел могли создать до смены языка).
+                        const typeLabel = NODE_TYPE_LABELS[selNode.data.type];
+                        const rename = d && (!selNode.data.label.trim() || selNode.data.label === typeLabel || selNode.data.label === t(typeLabel));
                         patchNode(selNode.id, { dossierId: e.target.value || null, ...(rename ? { label: d.title } : {}) });
                       }}
                       className="w-full"
                     >
-                      <option value="">— не привязано —</option>
+                      <option value="">{t('— не привязано —')}</option>
                       {/* Персоне — досье персон, группе — групповые; уже привязанное остаётся в списке при любом виде. */}
                       {dossiers.data
                         ?.filter((d) => d.id === selNode.data.dossierId || !NODE_DOSSIER_KIND[selNode.data.type] || d.kind === NODE_DOSSIER_KIND[selNode.data.type])
@@ -693,13 +714,13 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                   ) : null}
                   {selNode.data.dossierId && (
                     <Link to="/dossiers/$id" params={{ id: selNode.data.dossierId }} className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-mint hover:underline">
-                      <FolderOpen size={14} /> открыть досье
+                      <FolderOpen size={14} /> {t('открыть досье')}
                     </Link>
                   )}
                 </Field>
               )}
               {selNode.data.type === 'event' && (
-                <Field label="Дата">
+                <Field label={t('Дата')}>
                   <Input type="date" value={selNode.data.props.date ?? ''} disabled={!editable} onChange={(e) => patchNode(selNode.id, { props: { ...selNode.data.props, date: e.target.value } })} />
                 </Field>
               )}
@@ -709,22 +730,22 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
           {selEdge && (
             <div className="space-y-3">
               <div className="font-mono text-xs text-dim">
-                {nodes.find((n) => n.id === selEdge.source)?.data.label} → {nodes.find((n) => n.id === selEdge.target)?.data.label}
+                {shownLabel(nodes.find((n) => n.id === selEdge.source)?.data.label ?? '')} → {shownLabel(nodes.find((n) => n.id === selEdge.target)?.data.label ?? '')}
               </div>
-              <Field label="Тип связи">
+              <Field label={t('Тип связи')}>
                 <Input list="relations" value={selEdge.data?.relation ?? ''} disabled={!editable} onChange={(e) => patchEdge(selEdge.id, { relation: e.target.value })} />
-                <datalist id="relations">{RELATIONS.map((r) => <option key={r} value={r} />)}</datalist>
+                <datalist id="relations">{RELATIONS.map((r) => <option key={r} value={t(r)} />)}</datalist>
               </Field>
-              <Field label="Пояснение">
+              <Field label={t('Пояснение')}>
                 <Textarea rows={3} value={selEdge.data?.note ?? ''} disabled={!editable} onChange={(e) => patchEdge(selEdge.id, { note: e.target.value || undefined })} />
               </Field>
-              <Field label="Достоверность">
+              <Field label={t('Достоверность')}>
                 <Select value={selEdge.data?.credibility ?? '6'} disabled={!editable} onChange={(e) => patchEdge(selEdge.id, { credibility: e.target.value as GraphEdge['credibility'] })} className="w-full">
-                  {Object.entries(CREDIBILITY_LABELS).map(([k, v]) => <option key={k} value={k}>{k} — {v}</option>)}
+                  {Object.entries(CREDIBILITY_LABELS).map(([k, v]) => <option key={k} value={k}>{k} — {t(v)}</option>)}
                 </Select>
               </Field>
               {editable && (
-                <Field label="Подтверждающие факты">
+                <Field label={t('Подтверждающие факты')}>
                   <div className="max-h-40 space-y-1 overflow-auto">
                     {facts.map((f) => (
                       <label key={f.id} className="flex cursor-pointer gap-2 text-xs text-dim">
@@ -748,7 +769,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
 
           {relatedFacts.length > 0 && (
             <div className="mt-5 space-y-2 border-t border-line-soft pt-4">
-              <div className="label-mono">Факты</div>
+              <div className="label-mono">{t('Факты')}</div>
               {relatedFacts.map((f) => (
                 <div key={f.id} className="rounded-lg border border-line-soft p-2.5 text-xs">
                   <MarkdownView source={f.textMd} />
@@ -760,7 +781,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
           {/* Узел удаляется из меню блока (кнопка в его правом верхнем углу). */}
           {editable && selEdge && (
             <Button variant="danger" size="sm" className="mt-5 w-full" onClick={removeSelectedEdge}>
-              <Trash2 size={13} /> Удалить связь
+              <Trash2 size={13} /> {t('Удалить связь')}
             </Button>
           )}
         </aside>

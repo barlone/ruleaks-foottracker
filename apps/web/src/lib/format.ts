@@ -1,17 +1,28 @@
+import { fmtBytes as fmtBytesRu } from '@ft/shared';
+import { currentLang, locale, t } from './i18n.ts';
+
+/** Размер файла: «1,2 МБ» / «1.2 MB» (fmtBytes из @ft/shared — только русский, его же зовут отчёты сервера). */
+export function fmtBytes(n: number): string {
+  if (currentLang() !== 'en') return fmtBytesRu(n);
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1).replace('.0', '')} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
 export function fmtDate(iso: string | null | undefined, withTime = false): string {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('ru-RU', withTime
+  return d.toLocaleString(locale(), withTime
     ? { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
     : { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 export function ago(iso: string): string {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 60) return 'только что';
-  if (s < 3600) return `${Math.floor(s / 60)} мин назад`;
-  if (s < 86400) return `${Math.floor(s / 3600)} ч назад`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)} дн назад`;
+  if (s < 60) return t('только что');
+  if (s < 3600) return t('{n} мин назад', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('{n} ч назад', { n: Math.floor(s / 3600) });
+  if (s < 86400 * 30) return t('{n} дн назад', { n: Math.floor(s / 86400) });
   return fmtDate(iso);
 }
 
@@ -28,5 +39,5 @@ export function fmtUtc(s: string | null | undefined): string {
   const isoNoTz = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s);
   const d = new Date(isoNoTz ? `${s}Z` : s);
   if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString('ru-RU', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  return d.toLocaleString(locale(), { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
 }

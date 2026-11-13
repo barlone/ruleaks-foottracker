@@ -1,6 +1,8 @@
 // Квадратные картинки узлов графа: любое изображение приводится к 128×128. Квадратное — сразу, остальное —
 // через редактор обрезки (components/SquareCropDialog.tsx), который отдаёт сюда вырезаемый квадрат исходника.
 
+import { t } from './i18n.ts';
+
 export const NODE_IMAGE_SIZE = 128;
 
 export function loadImage(file: File): Promise<HTMLImageElement> {
@@ -10,7 +12,7 @@ export function loadImage(file: File): Promise<HTMLImageElement> {
     img.onload = () => resolve(img);
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('Не удалось прочитать изображение'));
+      reject(new Error(t('Не удалось прочитать изображение')));
     };
     img.src = url;
   });

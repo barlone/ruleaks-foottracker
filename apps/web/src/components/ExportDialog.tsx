@@ -3,6 +3,7 @@ import { FileDown, FileText } from 'lucide-react';
 import { trpc } from '../lib/trpc.ts';
 import { errorText } from '../lib/errors.ts';
 import { toast } from '../lib/toast.ts';
+import { t } from '../lib/i18n.ts';
 import { ProcessDialog } from './ProgressDialog.tsx';
 import { isCancelled, useProcess } from './process.ts';
 import { download } from '../lib/download.ts';
@@ -14,7 +15,7 @@ import { Button, Dialog, Field, Input, Spinner, Textarea } from './ui.tsx';
 //   pdf  — отчёт для чтения; пароль — шифрование PDF, без пароля PDF не шифруется.
 // Пока сервер работает, поверх окна — окно процесса (ProcessDialog); «Отмена» прерывает ожидание ответа.
 
-const NOUN = { dossier: 'досье', investigation: 'расследования' } as const;
+type Kind = 'dossier' | 'investigation';
 /** У досье связанные — участники и связанные персоны, у расследования — досье узлов графа. */
 const RELATED = { dossier: 'Связанные персоны и участники группы — отдельными разделами', investigation: 'Досье персон из графа — отдельными разделами' } as const;
 
@@ -30,7 +31,7 @@ function Check({ checked, onChange, children }: { checked: boolean; onChange: (v
 export function ExportDialog({
   kind, format, id, open, onOpenChange,
 }: {
-  kind: keyof typeof NOUN;
+  kind: Kind;
   format: 'file' | 'pdf';
   id: string;
   open: boolean;
@@ -60,19 +61,20 @@ export function ExportDialog({
   }, [open, me.data?.displayName]);
 
   const mismatch = password !== repeat;
+  const pdfTitle = kind === 'dossier' ? t('Отчёт досье в PDF') : t('Отчёт расследования в PDF');
   const submit = async () => {
     if (mismatch || pending) return;
     const base = { id, author, note, password };
     const api = kind === 'dossier' ? client.dossiers : client.investigations;
     try {
       const r = await process.run(
-        format === 'pdf' ? `Отчёт ${NOUN[kind]} в PDF` : `Экспорт ${NOUN[kind]}`,
+        format === 'pdf' ? pdfTitle : kind === 'dossier' ? t('Экспорт досье') : t('Экспорт расследования'),
         (p) => {
           if (format === 'file') {
-            p.set({ status: 'Сервер собирает и шифрует файл…' });
+            p.set({ status: t('Сервер собирает и шифрует файл…') });
             return api.exportFile.mutate({ ...base, options: { editable } }, { signal: p.signal });
           }
-          p.set({ status: 'Сервер формирует отчёт…', detail: 'Большие досье с фотографиями верстаются до минуты' });
+          p.set({ status: t('Сервер формирует отчёт…'), detail: t('Большие досье с фотографиями верстаются до минуты') });
           return api.exportPdf.mutate(
             { ...base, options: { photos, related, sources }, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
             { signal: p.signal },
@@ -81,7 +83,7 @@ export function ExportDialog({
         { cancellable: true },
       );
       download(r.fileName, r.data, format === 'pdf' ? 'application/pdf' : 'application/octet-stream');
-      toast(`Файл «${r.fileName}» сохранён`);
+      toast(t('Файл «{name}» сохранён', { name: r.fileName }));
       onOpenChange(false);
     } catch (e) {
       if (!isCancelled(e)) toast(errorText(e), 'error');
@@ -89,7 +91,7 @@ export function ExportDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={format === 'pdf' ? `Отчёт ${NOUN[kind]} в PDF` : `Экспорт ${NOUN[kind]} в файл`}>
+    <Dialog open={open} onOpenChange={onOpenChange} title={format === 'pdf' ? pdfTitle : kind === 'dossier' ? t('Экспорт досье в файл') : t('Экспорт расследования в файл')}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -97,23 +99,23 @@ export function ExportDialog({
           void submit();
         }}
       >
-        <Field label="Автор">
+        <Field label={t('Автор')}>
           <Input value={author} onChange={(e) => setAuthor(e.target.value)} maxLength={256} autoFocus />
         </Field>
-        <Field label="Примечание">
+        <Field label={t('Примечание')}>
           <Textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
             maxLength={4000}
-            placeholder={format === 'pdf' ? 'Попадёт в шапку отчёта' : 'Для кого и зачем этот файл'}
+            placeholder={format === 'pdf' ? t('Попадёт в шапку отчёта') : t('Для кого и зачем этот файл')}
           />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Пароль">
+          <Field label={t('Пароль')}>
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} maxLength={256} autoComplete="new-password" />
           </Field>
-          <Field label="Пароль ещё раз">
+          <Field label={t('Пароль ещё раз')}>
             <Input
               type="password"
               value={repeat}
@@ -126,25 +128,25 @@ export function ExportDialog({
         </div>
         <p className="text-xs leading-relaxed text-mute">
           {mismatch && repeat
-            ? <span className="text-danger">Пароли не совпадают</span>
+            ? <span className="text-danger">{t('Пароли не совпадают')}</span>
             : format === 'pdf'
-              ? 'Пароль необязателен. С паролем PDF шифруется (AES-256) и открывается только с ним; без пароля его прочтёт любой, у кого есть файл.'
-              : 'Пароль необязателен. Файл шифруется всегда, но без пароля его откроет любая установка Следопыта; с паролем — только тот, кто его знает.'}
+              ? t('Пароль необязателен. С паролем PDF шифруется (AES-256) и открывается только с ним; без пароля его прочтёт любой, у кого есть файл.')
+              : t('Пароль необязателен. Файл шифруется всегда, но без пароля его откроет любая установка Следопыта; с паролем — только тот, кто его знает.')}
         </p>
         {format === 'file' ? (
-          <Check checked={editable} onChange={setEditable}>Доступно редактирование</Check>
+          <Check checked={editable} onChange={setEditable}>{t('Доступно редактирование')}</Check>
         ) : (
           <div className="space-y-2">
-            <Check checked={photos} onChange={setPhotos}>Фотографии и изображения</Check>
-            <Check checked={sources} onChange={setSources}>Источники и их оценка</Check>
-            <Check checked={related} onChange={setRelated}>{RELATED[kind]}</Check>
+            <Check checked={photos} onChange={setPhotos}>{t('Фотографии и изображения')}</Check>
+            <Check checked={sources} onChange={setSources}>{t('Источники и их оценка')}</Check>
+            <Check checked={related} onChange={setRelated}>{t(RELATED[kind])}</Check>
           </div>
         )}
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
           <Button type="submit" variant="primary" disabled={mismatch || pending}>
             {pending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : format === 'pdf' ? <FileText size={15} /> : <FileDown size={15} />}
-            {format === 'pdf' ? 'Сформировать PDF' : 'Экспортировать'}
+            {format === 'pdf' ? t('Сформировать PDF') : t('Экспортировать')}
           </Button>
         </div>
       </form>

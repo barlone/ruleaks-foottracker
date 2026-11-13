@@ -9,6 +9,7 @@ import {
 import { Button, Card, Empty, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { currentLang, t, tn, tx } from '../../lib/i18n.ts';
 import { TgPdfDialog } from './TgPdfDialog.tsx';
 import { AddToDossierDialog, type PendingPost, type PendingValue } from './AddToDossierDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout } from './common.tsx';
@@ -17,6 +18,12 @@ import { CommentList, MonthActivity, MultiUserList, WeekActivity } from './TgRes
 import { ckey, commentToPost } from './tgPosts.ts';
 
 type Job = RouterOutputs['search']['job'];
+
+/** Запрос словами из checkFulltext (НЕ / И / ИЛИ между словами запроса) — по-английски NOT / AND / OR. */
+function explainText(s: string): string {
+  if (currentLang() !== 'en') return s;
+  return s.replace(/(^|[\s(])НЕ /g, '$1NOT ').replaceAll(' ИЛИ ', ' OR ').replaceAll(' И ', ' AND '); // i18n-ignore
+}
 
 /** «Поиск в Telegram» — /tgsearch бота. */
 export function TgSearchPage() {
@@ -72,8 +79,8 @@ export function TgSearchPage() {
   return (
     <SearchLayout
       section="tg"
-      title="Поиск в Telegram"
-      subtitle="Комментарии, реакции, ответы и активность пользователя в открытых группах и каналах."
+      title={t('Поиск в Telegram')}
+      subtitle={t('Комментарии, реакции, ответы и активность пользователя в открытых группах и каналах.')}
       activeId={jobId}
       onOpen={setJobId}
     >
@@ -88,7 +95,7 @@ export function TgSearchPage() {
                 mode === m.id ? 'border-mint/60 bg-mint/10 font-semibold text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
               )}
             >
-              {m.label}
+              {t(m.label)}
             </button>
           ))}
         </div>
@@ -110,24 +117,24 @@ export function TgSearchPage() {
                 autoFocus
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder={info.input === 'user' ? '1143789744 · @nickname · +7 916 123-45-67' : 'орлан краснополь or "беспилотник над городом" -продам'}
+                placeholder={info.input === 'user' ? '1143789744 · @nickname · +7 916 123-45-67' : FULLTEXT_EXAMPLE}
                 className="h-12 pl-10 font-mono text-base"
                 disabled={disabled}
               />
             </div>
             <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !value.trim() || start.isPending || (info.input === 'user' && !who) || !!ft?.errors.length}>
-              {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
+              {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : t('Искать')}
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
-            <span>{info.hint}</span>
+            <span>{t(info.hint)}</span>
             {info.input === 'text' && (
               <span>
-                Пример:{' '}
+                {t('Пример:')}{' '}
                 <button
                   type="button"
                   onClick={() => setValue(FULLTEXT_EXAMPLE)}
-                  title="Подставить пример в поле"
+                  title={t('Подставить пример в поле')}
                   className="cursor-pointer rounded border border-line-soft px-1.5 font-mono text-xs text-mint hover:border-mint/50"
                 >
                   {FULLTEXT_EXAMPLE}
@@ -136,9 +143,9 @@ export function TgSearchPage() {
             )}
             {info.input === 'user' && value.trim() && (
               who ? (
-                <Tag>{who.kind === 'tgid' ? 'Telegram ID' : who.kind === 'nik' ? <><AtSign size={11} />ник → ID</> : 'телефон → ID'}</Tag>
+                <Tag>{who.kind === 'tgid' ? 'Telegram ID' : who.kind === 'nik' ? <><AtSign size={11} />{t('ник → ID')}</> : t('телефон → ID')}</Tag>
               ) : (
-                <Tag tone="warn">нужен Telegram ID, @ник или телефон</Tag>
+                <Tag tone="warn">{t('нужен Telegram ID, @ник или телефон')}</Tag>
               )
             )}
             {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
@@ -147,12 +154,12 @@ export function TgSearchPage() {
             <div className="space-y-1.5 rounded-lg border border-line-soft bg-bg-soft px-3 py-2">
               {ft.explain && (
                 <div className="text-sm">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-mute">Поиск поймёт так: </span>
-                  <span className="font-mono text-mint">{ft.explain}</span>
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-mute">{t('Поиск поймёт так:')} </span>
+                  <span className="font-mono text-mint">{explainText(ft.explain)}</span>
                 </div>
               )}
-              {ft.errors.map((e) => <div key={e} className="text-sm text-danger">✕ {e}</div>)}
-              {ft.warnings.map((w) => <div key={w} className="text-sm text-warn">⚠ {w}</div>)}
+              {ft.errors.map((e) => <div key={e} className="text-sm text-danger">✕ {tx(e)}</div>)}
+              {ft.warnings.map((w) => <div key={w} className="text-sm text-warn">⚠ {tx(w)}</div>)}
             </div>
           )}
         </form>
@@ -162,16 +169,15 @@ export function TgSearchPage() {
         <TgJobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onRun={onRun} />
       ) : (
         <Empty>
-          Пользователя можно указать по ID, @нику или телефону — ник и телефон сервер
-          <br />
-          переведёт в Telegram ID так же, как это делает бот.
+          {t('Пользователя можно указать по ID, @нику или телефону — ник и телефон сервер переведёт в Telegram ID так же, как это делает бот.')}
         </Empty>
       )}
     </SearchLayout>
   );
 }
 
-const FULLTEXT_EXAMPLE = 'орлан краснополь or "беспилотник над городом" -продам';
+// Пример запроса к русскоязычным сообщениям — не переводится.
+const FULLTEXT_EXAMPLE = 'орлан краснополь or "беспилотник над городом" -продам'; // i18n-ignore
 
 /** Результат поиска; memo — набор текста в поле поиска его не перерисовывает. */
 const TgJobView = memo(function TgJobView({ job, loading, error, onRun }: { job: Job | undefined; loading: boolean; error?: string | null; onRun: (m: TgModeId, v: string) => void }) {
@@ -191,8 +197,8 @@ const TgJobView = memo(function TgJobView({ job, loading, error, onRun }: { job:
 
   if (job?.state === 'choose') {
     return (
-      <Card title="Ник принадлежит нескольким пользователям">
-        <p className="mb-3 text-sm text-dim">Выберите Telegram ID для запроса «{job.query}»:</p>
+      <Card title={t('Ник принадлежит нескольким пользователям')}>
+        <p className="mb-3 text-sm text-dim">{t('Выберите Telegram ID для запроса «{query}»:', { query: job.query })}</p>
         <div className="flex flex-wrap gap-2">
           {job.candidates?.map((id) => (
             <Button key={id} onClick={() => onRun(job.kind as TgModeId, id)}>{id}</Button>
@@ -239,7 +245,7 @@ const TgJobView = memo(function TgJobView({ job, loading, error, onRun }: { job:
   if (mode.result === 'comments') {
     const comments = (res.comments as TgComment[] | undefined) ?? [];
     total = comments.length;
-    summary = `${comments.length} сообщ.${res.truncated ? ' (не все)' : ''}`;
+    summary = tn(comments.length, '{n} сообщение|{n} сообщения|{n} сообщений') + (res.truncated ? t(' (не все)') : '');
     body = <CommentList comments={comments} groups={(res.groups as TgGroup[] | undefined) ?? []} selected={new Set(posts.keys())} onToggle={(c) => toggleComment(c, (res.groups as TgGroup[]) ?? [])} />;
   } else if (mode.result === 'multi') {
     const list = (res.users as TgUserMsgs[] | undefined) ?? [];
@@ -248,14 +254,18 @@ const TgJobView = memo(function TgJobView({ job, loading, error, onRun }: { job:
     if (job.kind === 'likes') {
       // Реакции: карточки — авторы сообщений, на которые реагировал пользователь.
       const n = list.reduce((s, u) => s + (u.comments ?? []).reduce((k, c) => k + (c.likes?.length ?? 0), 0), 0);
-      summary = `${n} реакц. · ${msgs} сообщ. · ${list.length} авт.`;
+      summary = [
+        tn(n, '{n} реакция|{n} реакции|{n} реакций'),
+        tn(msgs, '{n} сообщение|{n} сообщения|{n} сообщений'),
+        tn(list.length, '{n} автор|{n} автора|{n} авторов'),
+      ].join(' · ');
     } else {
-      summary = `${list.length} польз., ${msgs} сообщ.`;
+      summary = `${tn(list.length, '{n} пользователь|{n} пользователя|{n} пользователей')}, ${tn(msgs, '{n} сообщение|{n} сообщения|{n} сообщений')}`;
     }
     body = (
       <>
       {job.kind === 'likes' && list.length > 0 && (
-        <p className="font-mono text-xs text-dim">Сообщения, на которые пользователь поставил реакции, — по авторам сообщений.</p>
+        <p className="font-mono text-xs text-dim">{t('Сообщения, на которые пользователь поставил реакции, — по авторам сообщений.')}</p>
       )}
       <MultiUserList
         users={list}
@@ -269,10 +279,10 @@ const TgJobView = memo(function TgJobView({ job, loading, error, onRun }: { job:
       </>
     );
   } else if (mode.result === 'month') {
-    summary = 'активность по месяцам';
+    summary = t('активность по месяцам');
     body = <MonthActivity years={(res.years as TgMonthActivity | undefined) ?? {}} />;
   } else {
-    summary = 'активность по часам';
+    summary = t('активность по часам');
     body = <WeekActivity years={(res.years as TgWeekActivity | undefined) ?? {}} />;
   }
 
@@ -280,8 +290,8 @@ const TgJobView = memo(function TgJobView({ job, loading, error, onRun }: { job:
     <>
       {job.params.tgid && (
         <div className="font-mono text-xs text-dim">
-          Пользователь: <span className="text-mint">ID {job.params.tgid}</span>
-          {job.params.via && job.params.via !== 'id' && <> · найден по {job.params.via}</>}
+          {t('Пользователь:')} <span className="text-mint">ID {job.params.tgid}</span>
+          {job.params.via && job.params.via !== 'id' && <> · {t('найден по {via}', { via: tx(job.params.via) })}</>}
         </div>
       )}
       <ResultBar
@@ -289,7 +299,7 @@ const TgJobView = memo(function TgJobView({ job, loading, error, onRun }: { job:
         selected={posts.size + users.size}
         onAdd={() => setDialog(true)}
         extra={
-          <Button size="sm" onClick={() => setPdfOpen(true)} title="Отчёт по результату поиска в PDF">
+          <Button size="sm" onClick={() => setPdfOpen(true)} title={t('Отчёт по результату поиска в PDF')}>
             <FileText size={15} /> PDF
           </Button>
         }

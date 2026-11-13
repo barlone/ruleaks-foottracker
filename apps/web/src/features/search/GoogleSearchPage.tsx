@@ -9,6 +9,7 @@ import {
 import { ProgressDialog } from '../../components/ProgressDialog.tsx';
 import { Button, Card, Empty, Input, Spinner, Tag, WarnNote } from '../../components/ui.tsx';
 import { errorText } from '../../lib/errors.ts';
+import { t, tj, tx } from '../../lib/i18n.ts';
 import { ago } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
@@ -18,7 +19,7 @@ import { GoogleDalResult } from './GoogleDalResult.tsx';
 import { GoogleDriveResult } from './GoogleDriveResult.tsx';
 import { GoogleGeoResult } from './GoogleGeoResult.tsx';
 import { AccountResult } from './GoogleParts.tsx';
-import { GoogleRunContext } from './googleSearch.ts';
+import { GoogleRunContext, modeInline } from './googleSearch.ts';
 import { useRunOnMount } from './job.ts';
 
 // «Поиск по Google» — перенос GHunt: сервер собирает сведения (google.start), страница раз в секунду спрашивает ход
@@ -49,7 +50,7 @@ export function GoogleSearchPage() {
   if (!cfg.data) {
     return (
       <div className="pt-2.5 pb-6 pl-6 pr-[30px]">
-        <Empty>Поиск по Google выключен в настройках сервера.</Empty>
+        <Empty>{t('Поиск по Google выключен в настройках сервера.')}</Empty>
       </div>
     );
   }
@@ -115,23 +116,24 @@ function GoogleSearch({ demoModes }: { demoModes: GoogleModeId[] }) {
   // Ошибка запроса задания закрывает окно процесса: иначе оно показывало бы устаревшее «выполняется» без выхода.
   const running = !!jobId && !job.error && j?.state === 'running';
   const steps: readonly { id: string; label: string }[] = j ? GOOGLE_STEPS[j.mode] : [];
-  const step = j ? (j.step === 'queue' ? 'В очереди: поиски идут по одному' : steps.find((s) => s.id === j.step)?.label) : undefined;
+  const stepLabel = j ? steps.find((s) => s.id === j.step)?.label : undefined;
+  const step = j ? (j.step === 'queue' ? t('В очереди: поиски идут по одному') : stepLabel && t(stepLabel)) : undefined;
 
   return (
     <GoogleRunContext.Provider value={disabled ? null : run}>
       <SearchLayout
-        title="Поиск по Google"
+        title={t('Поиск по Google')}
         titleExtra={(
           <div className="font-mono text-[11px] text-mute">
             inspired by{' '}
             <a href={GHUNT_URL} target="_blank" rel="noreferrer" className="text-mint/80 underline underline-offset-4 hover:text-mint">GHunt</a>
           </div>
         )}
-        subtitle="Что Google раскрывает об аккаунте по Gaia ID, файле Drive, точке доступа Wi-Fi и связях сайтов с приложениями. Аккаунт по адресу почты — в разделе «Исследовать Email»."
+        subtitle={t('Что Google раскрывает об аккаунте по Gaia ID, файле Drive, точке доступа Wi-Fi и связях сайтов с приложениями. Аккаунт по адресу почты — в разделе «Исследовать Email».')}
         history={<GoogleHistory activeId={jobId} onOpen={setJobId} />}
       >
         {demoModes.includes(mode) && (
-          <WarnNote>Режим имитации: служебный аккаунт Google на сервере не настроен — ответы по Gaia ID и файлу Drive вымышленные.</WarnNote>
+          <WarnNote>{t('Режим имитации: служебный аккаунт Google на сервере не настроен — ответы по Gaia ID и файлу Drive вымышленные.')}</WarnNote>
         )}
         <Card className="animate-fade-up">
           <div className="mb-4 flex flex-wrap gap-1.5">
@@ -145,7 +147,7 @@ function GoogleSearch({ demoModes }: { demoModes: GoogleModeId[] }) {
                   mode === m.id ? 'border-mint/60 bg-mint/10 font-semibold text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
                 )}
               >
-                {m.label}
+                {t(m.label)}
               </button>
             ))}
           </div>
@@ -163,19 +165,19 @@ function GoogleSearch({ demoModes }: { demoModes: GoogleModeId[] }) {
                   autoFocus
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
-                  placeholder={info.placeholder}
+                  placeholder={t(info.placeholder)}
                   className="h-12 pl-10 font-mono text-base"
                   disabled={disabled}
                   maxLength={GOOGLE_QUERY_MAX + 1}
                 />
               </div>
               <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !query || !!problem || start.isPending}>
-                {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
+                {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : t('Искать')}
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
-              <span>{info.hint}</span>
-              {problem && <Tag tone="warn">{problem}</Tag>}
+              <span>{t(info.hint)}</span>
+              {problem && <Tag tone="warn">{tx(problem)}</Tag>}
               {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
             </div>
           </form>
@@ -183,9 +185,9 @@ function GoogleSearch({ demoModes }: { demoModes: GoogleModeId[] }) {
 
         <ProgressDialog
           open={running}
-          title={`Поиск по Google: ${findGoogleMode(j?.mode ?? mode)?.label.toLowerCase()}`}
+          title={t('Поиск по Google: {mode}', { mode: modeInline(findGoogleMode(j?.mode ?? mode)?.label ?? '') })}
           value={j && j.step !== 'queue' ? j.stepsDone / j.stepsTotal : null}
-          status={step ?? 'Запуск…'}
+          status={step ?? t('Запуск…')}
           detail={j?.query}
           startedAt={j ? new Date(j.startedAt).getTime() : null}
           onCancel={() => jobId && cancel.mutate({ id: jobId })}
@@ -196,9 +198,7 @@ function GoogleSearch({ demoModes }: { demoModes: GoogleModeId[] }) {
           <GoogleResult job={j} loading={job.isLoading} error={job.error ? errorText(job.error) : null} />
         ) : (
           <Empty>
-            Выберите вид поиска и введите запрос — сервер соберёт то,
-            <br />
-            что Google отдаёт о нём любому вошедшему пользователю.
+            {tj('Выберите вид поиска и введите запрос — сервер соберёт то,{br}что Google отдаёт о нём любому вошедшему пользователю.', { br: <br /> })}
           </Empty>
         )}
       </SearchLayout>
@@ -210,8 +210,8 @@ function GoogleHistory({ activeId, onOpen }: { activeId: string | null; onOpen: 
   const recent = trpc.google.recent.useQuery(undefined, { refetchInterval: (q) => (!q.state.error && q.state.data?.some((j) => j.state === 'running') ? 3000 : false) });
   const items = recent.data ?? [];
   return (
-    <Card title={<><History size={13} /> История</>}>
-      {!items.length && <div className="font-mono text-xs text-mute">Пока пусто</div>}
+    <Card title={<><History size={13} /> {t('История')}</>}>
+      {!items.length && <div className="font-mono text-xs text-mute">{t('Пока пусто')}</div>}
       <div className="max-h-[60vh] space-y-1 overflow-auto">
         {items.map((s) => (
           <button
@@ -221,18 +221,18 @@ function GoogleHistory({ activeId, onOpen }: { activeId: string | null; onOpen: 
           >
             <div className="truncate font-mono text-sm">{s.query}</div>
             <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-mute">
-              <span className="truncate">{findGoogleMode(s.mode)?.label ?? s.mode}</span>
-              {s.found === true && <span className="text-mint">найдено</span>}
-              {s.found === false && <span>не найдено</span>}
-              {s.state === 'failed' && <span className="text-danger">ошибка</span>}
-              {s.state === 'cancelled' && <span className="text-warn">остановлен</span>}
+              <span className="truncate">{t(findGoogleMode(s.mode)?.label ?? s.mode)}</span>
+              {s.found === true && <span className="text-mint">{t('найдено')}</span>}
+              {s.found === false && <span>{t('не найдено')}</span>}
+              {s.state === 'failed' && <span className="text-danger">{t('ошибка')}</span>}
+              {s.state === 'cancelled' && <span className="text-warn">{t('остановлен')}</span>}
               <span className="shrink-0">· {ago(s.startedAt)}</span>
               {s.state === 'running' && <Spinner className="size-2.5" />}
             </div>
           </button>
         ))}
       </div>
-      {items.length > 0 && <div className="mt-3 border-t border-line-soft pt-3 font-mono text-[10px] text-mute">Результаты хранятся в памяти сервера около часа.</div>}
+      {items.length > 0 && <div className="mt-3 border-t border-line-soft pt-3 font-mono text-[10px] text-mute">{t('Результаты хранятся в памяти сервера около часа.')}</div>}
     </Card>
   );
 }
@@ -242,27 +242,29 @@ function summaryOf(r: GoogleReport): { text: string; links: PendingPage[]; title
   switch (r.mode) {
     case 'gaia': {
       const links: PendingPage[] = [];
-      if (r.maps.status === 'ok' && r.maps.data.state === 'ok') links.push({ site: 'Google Карты', url: r.maps.data.profileUrl });
-      const extra = r.containers.length > 1 ? ` · контейнеры: ${r.containers.join(', ')}` : '';
-      return { text: r.profile ? `аккаунт найден · Gaia ID ${r.profile.gaiaId}${extra}` : 'аккаунт найден', links, title: r.gaiaId };
+      if (r.maps.status === 'ok' && r.maps.data.state === 'ok') links.push({ site: t('Google Карты'), url: r.maps.data.profileUrl });
+      const extra = r.containers.length > 1 ? ` · ${t('контейнеры: {list}', { list: r.containers.join(', ') })}` : '';
+      return { text: r.profile ? `${t('аккаунт найден')} · Gaia ID ${r.profile.gaiaId}${extra}` : t('аккаунт найден'), links, title: r.gaiaId };
     }
     case 'drive':
       return {
-        text: r.file ? `${r.file.isFolder ? 'папка' : 'файл'} найден · ${r.file.title}` : 'не найден',
+        text: r.file ? `${t(r.file.isFolder ? 'папка найдена' : 'файл найден')} · ${r.file.title}` : t('не найден'),
         links: r.file?.link ? [{ site: r.file.title ? `Google Drive: ${r.file.title}` : 'Google Drive', url: r.file.link }] : [],
         title: r.file?.title || r.fileId,
       };
     case 'geolocate':
       return {
-        text: r.lat !== null && r.lon !== null ? `точка найдена · ${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} ± ${r.accuracyM ?? 0} м` : 'не найдена',
-        links: r.lat !== null && r.lon !== null ? [{ site: `Точка Wi-Fi ${r.bssids[0]}`, url: `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}` }] : [],
+        text: r.lat !== null && r.lon !== null
+          ? t('точка найдена · {lat}, {lon} ± {m} м', { lat: r.lat.toFixed(5), lon: r.lon.toFixed(5), m: r.accuracyM ?? 0 })
+          : t('не найдена'),
+        links: r.lat !== null && r.lon !== null ? [{ site: t('Точка Wi-Fi {bssid}', { bssid: r.bssids[0] ?? '' }), url: `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}` }] : [],
         title: r.bssids.join(', '),
       };
     case 'spiderdal':
       return {
-        text: `сайтов ${r.sites.length} · пакетов ${r.packages.length} · опрошено ${r.scanned} активов за ${r.rounds} кр.`,
+        text: t('сайтов {sites} · пакетов {packages} · опрошено {scanned} активов за {rounds} кр.', { sites: r.sites.length, packages: r.packages.length, scanned: r.scanned, rounds: r.rounds }),
         links: [
-          ...r.sites.map((s) => ({ site: 'Сайт (Digital Asset Links)', url: s.site })),
+          ...r.sites.map((s) => ({ site: t('Сайт (Digital Asset Links)'), url: s.site })),
           ...r.packages.filter((p) => p.public).map((p) => ({ site: `Google Play: ${p.name}`, url: `https://play.google.com/store/apps/details?id=${encodeURIComponent(p.name)}` })),
         ],
         title: r.query,
@@ -279,14 +281,14 @@ function GoogleResult({ job, loading, error }: { job: Job | undefined; loading: 
     return (
       <Card>
         <div className="flex items-center gap-3 font-mono text-sm text-mint">
-          <Spinner /> Идёт поиск: {job.query}
+          <Spinner /> {t('Идёт поиск: {query}', { query: job.query })}
         </div>
       </Card>
     );
   }
-  if (job.state === 'failed') return <Card><div className="text-danger">{job.error ?? 'Поиск не удался'}</div></Card>;
+  if (job.state === 'failed') return <Card><div className="text-danger">{job.error ? tx(job.error) : t('Поиск не удался')}</div></Card>;
   const report = job.report;
-  if (job.state === 'cancelled' || !report) return <Empty>Поиск остановлен.</Empty>;
+  if (job.state === 'cancelled' || !report) return <Empty>{t('Поиск остановлен.')}</Empty>;
 
   const { text, links, title } = summaryOf(report);
   const mode = findGoogleMode(report.mode)!;
@@ -296,10 +298,10 @@ function GoogleResult({ job, loading, error }: { job: Job | undefined; loading: 
         <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-panel/95 px-4 py-2.5 backdrop-blur">
           <div className="min-w-0 truncate font-mono text-xs text-dim">
             <span className="text-mint">{text}</span>
-            {report.demo && <span className="ml-2 text-warn">· имитация</span>}
+            {report.demo && <span className="ml-2 text-warn">· {t('имитация')}</span>}
           </div>
-          <Button variant="primary" size="sm" onClick={() => setAdding(links)} disabled={!links.length} title={links.length ? 'Найденные ссылки — в «Соцсети и ссылки» досье' : 'Ссылок для досье нет'}>
-            <FolderPlus size={15} /> Ссылки в досье
+          <Button variant="primary" size="sm" onClick={() => setAdding(links)} disabled={!links.length} title={links.length ? t('Найденные ссылки — в «Соцсети и ссылки» досье') : t('Ссылок для досье нет')}>
+            <FolderPlus size={15} /> {t('Ссылки в досье')}
           </Button>
         </div>
       )}
@@ -309,7 +311,7 @@ function GoogleResult({ job, loading, error }: { job: Job | undefined; loading: 
       {report.mode === 'geolocate' && <GoogleGeoResult report={report} />}
       {report.mode === 'spiderdal' && <GoogleDalResult report={report} />}
 
-      <AddPagesDialog open={!!adding} onOpenChange={(v) => !v && setAdding(null)} pages={adding ?? []} username={title} note={`Поиск по Google (${mode.label.toLowerCase()}): ${job.query}`} />
+      <AddPagesDialog open={!!adding} onOpenChange={(v) => !v && setAdding(null)} pages={adding ?? []} username={title} note={t('Поиск по Google ({mode}): {query}', { mode: modeInline(mode.label), query: job.query })} />
     </>
   );
 }

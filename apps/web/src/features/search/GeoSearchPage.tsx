@@ -5,6 +5,7 @@ import { GEO_RADIUS_MAX_M, geoQuery, parseGeoloc } from '@ft/shared';
 import { Button, Card, Dialog, Empty, Field, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t } from '../../lib/i18n.ts';
 import { JobView } from './AttrSearchPage.tsx';
 import { SearchLayout } from './common.tsx';
 import { useRunOnMount, useSearchJob } from './job.ts';
@@ -15,9 +16,9 @@ const MAX_RADIUS_KM = GEO_RADIUS_MAX_M / 1000;
 
 /** Число с точкой или запятой в дробной части; null — пусто или не число. */
 function num(s: string): number | null {
-  const t = s.trim().replace(',', '.');
-  if (!/^[-+]?\d+(\.\d+)?$/.test(t)) return null;
-  return Number(t);
+  const v = s.trim().replace(',', '.');
+  if (!/^[-+]?\d+(\.\d+)?$/.test(v)) return null;
+  return Number(v);
 }
 
 /** «55.7558, 37.6173» (как копируют из карт) — пара координат; «55,75» — одно число с запятой, не пара. */
@@ -58,7 +59,7 @@ export function GeoSearchPage() {
   if (!geo.data) {
     return (
       <div className="pt-2.5 pb-6 pl-6 pr-[30px]">
-        <Empty>Поиск по геоданным выключен в настройках сервера.</Empty>
+        <Empty>{t('Поиск по геоданным выключен в настройках сервера.')}</Empty>
       </div>
     );
   }
@@ -169,8 +170,8 @@ function GeoSearch({ config }: { config: GeoConfig }) {
   return (
     <SearchLayout
       section="geo"
-      title="Поиск по геоданным"
-      subtitle="Выберите точку на карте или введите координаты и задайте радиус области поиска."
+      title={t('Поиск по геоданным')}
+      subtitle={t('Выберите точку на карте или введите координаты и задайте радиус области поиска.')}
       activeId={jobId}
       onOpen={setJobId}
     >
@@ -205,10 +206,10 @@ function GeoSearch({ config }: { config: GeoConfig }) {
                   inputMode="decimal"
                 />
               </Field>
-              <Button type="button" className="h-12" onClick={() => setLinkOpen(true)} title="Координаты из ссылки Google Maps, Яндекс Карт или OpenStreetMap">
-                <Link2 size={16} /> Из ссылки
+              <Button type="button" className="h-12" onClick={() => setLinkOpen(true)} title={t('Координаты из ссылки Google Maps, Яндекс Карт или OpenStreetMap')}>
+                <Link2 size={16} /> {t('Из ссылки')}
               </Button>
-              <Field label="Радиус, км">
+              <Field label={t('Радиус, км')}>
                 <Input
                   value={radiusText}
                   onChange={(e) => {
@@ -221,15 +222,15 @@ function GeoSearch({ config }: { config: GeoConfig }) {
                 />
               </Field>
               <div className="flex gap-2">
-                <Button type="button" className="h-12" disabled={!point} title="Показать область на карте" onClick={() => setFocus((f) => f + 1)}>
-                  <Crosshair size={16} /> Показать
+                <Button type="button" className="h-12" disabled={!point} title={t('Показать область на карте')} onClick={() => setFocus((f) => f + 1)}>
+                  <Crosshair size={16} /> {t('Показать')}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   className="h-12"
                   disabled={!latText && !lonText}
-                  title="Убрать точку"
+                  title={t('Убрать точку')}
                   onClick={() => {
                     setLatText('');
                     setLonText('');
@@ -238,16 +239,16 @@ function GeoSearch({ config }: { config: GeoConfig }) {
                   <Eraser size={16} />
                 </Button>
                 <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !point || !searchRadius || start.isPending}>
-                  {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
+                  {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : t('Искать')}
                 </Button>
               </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
-            <span className="flex items-center gap-1.5"><MapPin size={14} className="text-mint/70" /> Щёлкните по карте или перетащите маркер; пару «широта, долгота» или ссылку на карту можно вставить в любое поле.</span>
-            {latBad && <Tag tone="warn">широта — число от −90 до 90</Tag>}
-            {lonBad && <Tag tone="warn">долгота — число от −180 до 180</Tag>}
-            {radiusBad && <Tag tone="warn">радиус — от 0 до {MAX_RADIUS_KM} км</Tag>}
+            <span className="flex items-center gap-1.5"><MapPin size={14} className="text-mint/70" /> {t('Щёлкните по карте или перетащите маркер; пару «широта, долгота» или ссылку на карту можно вставить в любое поле.')}</span>
+            {latBad && <Tag tone="warn">{t('широта — число от −90 до 90')}</Tag>}
+            {lonBad && <Tag tone="warn">{t('долгота — число от −180 до 180')}</Tag>}
+            {radiusBad && <Tag tone="warn">{t('радиус — от 0 до {max} км', { max: MAX_RADIUS_KM })}</Tag>}
             {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
           </div>
         </form>
@@ -281,7 +282,7 @@ function MapLinkDialog({ open, onOpenChange, onPick }: { open: boolean; onOpenCh
   const found = text.trim() ? parseMapLink(text) : null;
   const short = !found && isShortMapLink(text);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Координаты из ссылки" wide>
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Координаты из ссылки')} wide>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -302,13 +303,13 @@ function MapLinkDialog({ open, onOpenChange, onPick }: { open: boolean; onOpenCh
               {fmt(found.lat)}, {fmt(found.lon)} <span className="text-dim">· {found.what}</span>
             </span>
           )}
-          {short && <Tag tone="warn">короткая ссылка без координат — откройте её в браузере и скопируйте полный адрес</Tag>}
-          {text.trim() && !found && !short && <Tag tone="warn">в ссылке нет координат</Tag>}
-          {!text.trim() && <span className="text-dim">Google Maps, Яндекс Карты или OpenStreetMap. Для ссылки на место берутся координаты места, иначе — центр карты.</span>}
+          {short && <Tag tone="warn">{t('короткая ссылка без координат — откройте её в браузере и скопируйте полный адрес')}</Tag>}
+          {text.trim() && !found && !short && <Tag tone="warn">{t('в ссылке нет координат')}</Tag>}
+          {!text.trim() && <span className="text-dim">{t('Google Maps, Яндекс Карты или OpenStreetMap. Для ссылки на место берутся координаты места, иначе — центр карты.')}</span>}
         </div>
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
-          <Button type="submit" variant="primary" disabled={!found}>Подставить</Button>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
+          <Button type="submit" variant="primary" disabled={!found}>{t('Подставить')}</Button>
         </div>
       </form>
     </Dialog>

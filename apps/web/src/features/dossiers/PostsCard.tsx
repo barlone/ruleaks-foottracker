@@ -5,7 +5,8 @@ import { POST_KIND_LABELS, type DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { Button, Card, ConfirmDeleteBtn, Empty, Segmented, Tag } from '../../components/ui.tsx';
 import { fmtUtc } from '../../lib/format.ts';
-import { PLATFORM_LABELS } from './labels.ts';
+import { t } from '../../lib/i18n.ts';
+import { platformLabel } from './labels.ts';
 
 // «Посты и реакции» досье персоны: посты, комментарии, ответы и реакции в соцсетях.
 // Переносятся из «Поиска в Telegram» (отмеченные сообщения) или добавляются вручную.
@@ -34,11 +35,11 @@ export function PostsCard({
   return (
     <Card
       compact
-      title={<><MessageSquareText size={13} /> Посты и реакции</>}
-      actions={editable && <Button size="sm" variant="ghost" onClick={onAdd}><Plus size={13} /> Добавить</Button>}
+      title={<><MessageSquareText size={13} /> {t('Посты и реакции')}</>}
+      actions={editable && <Button size="sm" variant="ghost" onClick={onAdd}><Plus size={13} /> {t('Добавить')}</Button>}
     >
       {posts.length === 0 ? (
-        <Empty>Переносятся из «Поиска в Telegram» или добавляются вручную</Empty>
+        <Empty>{t('Переносятся из «Поиска в Telegram» или добавляются вручную')}</Empty>
       ) : (
         <div className="space-y-[0.8rem]">
           {present.length > 1 && (
@@ -46,8 +47,8 @@ export function PostsCard({
               value={active}
               onChange={setKind}
               options={[
-                { value: 'all', label: `все · ${posts.length}` },
-                ...present.map((k) => ({ value: k, label: `${POST_KIND_LABELS[k]} · ${posts.filter((p) => p.kind === k).length}` })),
+                { value: 'all', label: `${t('все')} · ${posts.length}` },
+                ...present.map((k) => ({ value: k, label: `${t(POST_KIND_LABELS[k])} · ${posts.filter((p) => p.kind === k).length}` })),
               ]}
             />
           )}
@@ -64,15 +65,15 @@ function PostRow({ post: p, editable, onRemove }: { post: Post; editable: boolea
   return (
     <article className="group rounded-xl border border-line-soft p-[0.8rem] transition hover:border-line">
       <div className="mb-1.5 flex flex-wrap items-center gap-2 font-mono text-[11px] text-mute">
-        <Tag tone={KIND_TONE[p.kind]}>{POST_KIND_LABELS[p.kind]}{p.emoji && <span className="ml-1 text-sm leading-none">{p.emoji}</span>}</Tag>
-        <Tag tone="dim">{PLATFORM_LABELS[p.platform] ?? p.platform}</Tag>
+        <Tag tone={KIND_TONE[p.kind]}>{t(POST_KIND_LABELS[p.kind])}{p.emoji && <span className="ml-1 text-sm leading-none">{p.emoji}</span>}</Tag>
+        <Tag tone="dim">{platformLabel(p.platform)}</Tag>
         {p.place && <span className="text-dim">{p.place}</span>}
-        {p.author && <span>· автор: <span className="text-dim">{p.author}</span></span>}
-        <span>{p.at ? <>{fmtUtc(p.at)} <span className="text-mute/70">(UTC)</span></> : 'дата неизвестна'}</span>
+        {p.author && <span>· {t('автор:')} <span className="text-dim">{p.author}</span></span>}
+        <span>{p.at ? <>{fmtUtc(p.at)} <span className="text-mute/70">(UTC)</span></> : t('дата неизвестна')}</span>
         <span className="ml-auto flex items-center gap-2">
           <SourceBadge source={p.source} />
           {p.url && (
-            <a href={p.url} target="_blank" rel="noreferrer noopener" title="Открыть сообщение" className="hover:text-mint">
+            <a href={p.url} target="_blank" rel="noreferrer noopener" title={t('Открыть сообщение')} className="hover:text-mint">
               <ExternalLink size={12} />
             </a>
           )}
@@ -89,7 +90,7 @@ function PostRow({ post: p, editable, onRemove }: { post: Post; editable: boolea
       )}
       {long && (
         <button onClick={() => setOpen((v) => !v)} className="mt-1 cursor-pointer font-mono text-[11px] text-mute hover:text-mint">
-          {open ? 'свернуть' : 'показать полностью'}
+          {open ? t('свернуть') : t('показать полностью')}
         </button>
       )}
     </article>

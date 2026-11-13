@@ -7,6 +7,7 @@ import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { ago } from '../../lib/format.ts';
 import { toast } from '../../lib/toast.ts';
+import { t, tx } from '../../lib/i18n.ts';
 import { kindLabel } from './job.ts';
 
 // Общее для разделов поиска: раскладка «поиск + история», состояние задачи, панель действий (хуки — в job.ts).
@@ -52,7 +53,7 @@ function HistoryCard({ section, activeId, onOpen }: { section: SearchSection; ac
   const clear = trpc.search.clearHistory.useMutation({
     onSuccess: (n) => {
       void utils.search.recent.invalidate({ section });
-      toast(`История очищена: ${n}`);
+      toast(t('История очищена: {n}', { n }));
       setConfirming(false);
     },
     onError: (e) => toast(errorText(e), 'error'),
@@ -60,8 +61,8 @@ function HistoryCard({ section, activeId, onOpen }: { section: SearchSection; ac
   const items = recent.data ?? [];
 
   return (
-    <Card title={<><History size={13} /> История</>}>
-      {!items.length && <div className="font-mono text-xs text-mute">Пока пусто</div>}
+    <Card title={<><History size={13} /> {t('История')}</>}>
+      {!items.length && <div className="font-mono text-xs text-mute">{t('Пока пусто')}</div>}
       <div className="max-h-[60vh] space-y-1 overflow-auto">
         {items.map((s) => (
           <button
@@ -73,8 +74,8 @@ function HistoryCard({ section, activeId, onOpen }: { section: SearchSection; ac
             <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-mute">
               <span className="truncate">{kindLabel(section, s.kind)}</span>
               {s.deep && <span className="text-mint">deep</span>}
-              {s.params.step2 && <span className="text-mint">шаг²</span>}
-              {s.state === 'failed' && <span className="text-danger">ошибка</span>}
+              {s.params.step2 && <span className="text-mint">{t('шаг²')}</span>}
+              {s.state === 'failed' && <span className="text-danger">{t('ошибка')}</span>}
               <span className="shrink-0">· {ago(s.startedAt)}</span>
               {s.state === 'running' && <Spinner className="size-2.5" />}
             </div>
@@ -85,13 +86,13 @@ function HistoryCard({ section, activeId, onOpen }: { section: SearchSection; ac
         <div className="mt-3 border-t border-line-soft pt-3">
           {confirming ? (
             <div className="flex items-center gap-2">
-              <span className="flex-1 font-mono text-[11px] text-dim">Удалить {items.length} запр.?</span>
-              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Нет</Button>
-              <Button size="sm" variant="danger" onClick={() => clear.mutate({ section })} disabled={clear.isPending}>Да</Button>
+              <span className="flex-1 font-mono text-[11px] text-dim">{t('Удалить {n} запр.?', { n: items.length })}</span>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>{t('Нет')}</Button>
+              <Button size="sm" variant="danger" onClick={() => clear.mutate({ section })} disabled={clear.isPending}>{t('Да')}</Button>
             </div>
           ) : (
             <Button size="sm" variant="ghost" className="w-full" onClick={() => setConfirming(true)}>
-              <Trash2 size={13} /> Очистить историю
+              <Trash2 size={13} /> {t('Очистить историю')}
             </Button>
           )}
         </div>
@@ -110,7 +111,7 @@ export function JobStatus({ job, loading, error }: { job: RouterOutputs['search'
     return (
       <Card>
         <div className="flex items-center gap-3 font-mono text-sm text-mint">
-          <Spinner /> Второй шаг: поиск по найденным атрибутам — {done} из {step2.queries.length}
+          <Spinner /> {t('Второй шаг: поиск по найденным атрибутам — {done} из {total}', { done, total: step2.queries.length })}
         </div>
         <div className="mt-3 h-1 overflow-hidden rounded bg-line-soft">
           <div className="h-full bg-mint transition-all" style={{ width: `${(done / Math.max(1, step2.queries.length)) * 100}%` }} />
@@ -122,12 +123,12 @@ export function JobStatus({ job, loading, error }: { job: RouterOutputs['search'
     return (
       <Card>
         <div className="flex items-center gap-3 font-mono text-sm text-mint">
-          <Spinner /> Запрос выполняется в базе… шлюз вернул задачу, опрашиваю результат
+          <Spinner /> {t('Запрос выполняется в базе… шлюз вернул задачу, опрашиваю результат')}
         </div>
       </Card>
     );
   }
-  if (job.state === 'failed') return <Card><div className="text-danger">{job.error}</div></Card>;
+  if (job.state === 'failed') return <Card><div className="text-danger">{tx(job.error ?? '')}</div></Card>;
   return null;
 }
 
@@ -146,12 +147,12 @@ export function ResultBar({
   return (
     <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-xl border border-line bg-panel/95 px-4 py-2.5 backdrop-blur">
       <div className="font-mono text-xs text-dim">
-        <span className="text-mint">{summary}</span> · отмечено: {selected}
+        <span className="text-mint">{summary}</span> · {t('отмечено: {n}', { n: selected })}
       </div>
       <div className="flex items-center gap-2">
         {lead}
         <Button variant="primary" size="sm" onClick={onAdd}>
-          <FolderPlus size={15} /> {label ?? (selected ? 'Отмеченное в досье' : 'Снимок в досье')}
+          <FolderPlus size={15} /> {label ?? (selected ? t('Отмеченное в досье') : t('Снимок в досье'))}
         </Button>
         {extra}
       </div>

@@ -8,6 +8,7 @@ import { Button, Dialog, Field, Input, Segmented, Spinner, Textarea } from '../.
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
+import { t } from '../../lib/i18n.ts';
 
 // Экспорт результата поиска по атрибутам / геоданным в PDF или Excel. Файл собирает сервер из сохранённого
 // снимка поиска. Есть отметки — в файл идут только отмеченные значения, нет — весь результат; включённый фильтр
@@ -18,11 +19,11 @@ type Printing = 'none' | 'low' | 'high';
 
 const MIME = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as const;
 const SCANS_FIELD = 'scans';
-const fieldLabel = (f: string) => (f === SCANS_FIELD ? 'Сканы документов' : LEAK_FIELDS[f as LeakField] ?? f);
+const fieldLabel = (f: string) => (f === SCANS_FIELD ? t('Сканы документов') : t(LEAK_FIELDS[f as LeakField] ?? f));
 
 /** Имя файла без запрещённых в Windows символов, как у остальных экспортов: «Название ГГГГ-ММ-ДД». */
 function defaultName(section: SearchSection, query: string): string {
-  const title = `${section === 'geo' ? 'Поиск по геоданным' : 'Поиск по атрибутам'} ${query}`;
+  const title = `${section === 'geo' ? t('Поиск по геоданным') : t('Поиск по атрибутам')} ${query}`;
   return `${safeName(title).slice(0, 80)} ${new Date().toISOString().slice(0, 10)}`;
 }
 // eslint-disable-next-line no-control-regex
@@ -110,13 +111,13 @@ export function AttrExportDialog({
     };
     try {
       const r = await process.run(
-        format === 'pdf' ? 'Результат поиска в PDF' : 'Результат поиска в Excel',
+        format === 'pdf' ? t('Результат поиска в PDF') : t('Результат поиска в Excel'),
         (p) => {
           if (format === 'xlsx') {
-            p.set({ status: 'Сервер собирает таблицу…' });
+            p.set({ status: t('Сервер собирает таблицу…') });
             return client.search.exportAttrXlsx.mutate({ ...pick, layout }, { signal: p.signal });
           }
-          p.set({ status: 'Сервер формирует отчёт…', detail: scansAvailable && withScans ? 'Сканы документов загружаются из хранилища' : undefined });
+          p.set({ status: t('Сервер формирует отчёт…'), detail: scansAvailable && withScans ? t('Сканы документов загружаются из хранилища') : undefined });
           return client.search.exportAttrPdf.mutate(
             { ...pick, author, note, password, options: { printing, copying, scans: scansAvailable && withScans, landscape, watermark } },
             { signal: p.signal },
@@ -125,7 +126,7 @@ export function AttrExportDialog({
         { cancellable: true },
       );
       download(fileName, r.data, MIME[format]);
-      toast(`Файл «${fileName}» сохранён`);
+      toast(t('Файл «{name}» сохранён', { name: fileName }));
       onOpenChange(false);
     } catch (e) {
       if (!isCancelled(e)) toast(errorText(e), 'error');
@@ -133,7 +134,7 @@ export function AttrExportDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={format === 'pdf' ? 'Результат поиска в PDF' : 'Результат поиска в Excel'}>
+    <Dialog open={open} onOpenChange={onOpenChange} title={format === 'pdf' ? t('Результат поиска в PDF') : t('Результат поиска в Excel')}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -141,7 +142,7 @@ export function AttrExportDialog({
           void submit();
         }}
       >
-        <Field label="Имя файла">
+        <Field label={t('Имя файла')}>
           <div className="flex items-center gap-2">
             <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} autoFocus className="flex-1" />
             <span className="font-mono text-sm text-dim">{ext}</span>
@@ -150,13 +151,13 @@ export function AttrExportDialog({
 
         <div className="space-y-2 rounded-lg border border-line-soft bg-bg-soft px-3 py-2.5 text-sm">
           <div>
-            В файл войдут:{' '}
-            <span className="text-mint">{selected.length ? `только отмеченные значения (${selected.length})` : 'все найденные значения'}</span>
+            {t('В файл войдут:')}{' '}
+            <span className="text-mint">{selected.length ? t('только отмеченные значения ({n})', { n: selected.length }) : t('все найденные значения')}</span>
           </div>
           {fields.length > 0 && (
             <Check checked={useFilter} onChange={setUseFilter}>
               <span>
-                Только атрибуты из фильтра: <span className="text-dim">{fields.map(fieldLabel).join(', ')}</span>
+                {t('Только атрибуты из фильтра:')} <span className="text-dim">{fields.map(fieldLabel).join(', ')}</span>
               </span>
             </Check>
           )}
@@ -164,32 +165,31 @@ export function AttrExportDialog({
 
         {format === 'xlsx' ? (
           <div className="space-y-3">
-            <Radio checked={layout === 'rows'} onChange={() => setLayout('rows')} title="Построчно">
-              Как на странице: утечка, под ней записи — строки «атрибут — значение», записи разделены чертой.
+            <Radio checked={layout === 'rows'} onChange={() => setLayout('rows')} title={t('Построчно')}>
+              {t('Как на странице: утечка, под ней записи — строки «атрибут — значение», записи разделены чертой.')}
             </Radio>
-            <Radio checked={layout === 'columns'} onChange={() => setLayout('columns')} title="Поколоночно">
-              Таблица: каждый атрибут — колонка, каждая запись утечки — строка; несколько значений — в одной ячейке
-              с переносом. Шапка закреплена, есть автофильтр.
+            <Radio checked={layout === 'columns'} onChange={() => setLayout('columns')} title={t('Поколоночно')}>
+              {t('Таблица: каждый атрибут — колонка, каждая запись утечки — строка; несколько значений — в одной ячейке с переносом. Шапка закреплена, есть автофильтр.')}
             </Radio>
           </div>
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Автор">
+              <Field label={t('Автор')}>
                 <Input value={author} onChange={(e) => setAuthor(e.target.value)} maxLength={256} />
               </Field>
-              <Field label="Водяной знак">
-                <Input value={watermark} onChange={(e) => setWatermark(e.target.value)} maxLength={60} placeholder="например, ДСП" />
+              <Field label={t('Водяной знак')}>
+                <Input value={watermark} onChange={(e) => setWatermark(e.target.value)} maxLength={60} placeholder={t('например, ДСП')} />
               </Field>
             </div>
-            <Field label="Примечание">
-              <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={4000} placeholder="Попадёт в шапку отчёта" />
+            <Field label={t('Примечание')}>
+              <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={4000} placeholder={t('Попадёт в шапку отчёта')} />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Пароль на открытие">
+              <Field label={t('Пароль на открытие')}>
                 <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} maxLength={256} autoComplete="new-password" />
               </Field>
-              <Field label="Пароль ещё раз">
+              <Field label={t('Пароль ещё раз')}>
                 <Input
                   type="password"
                   value={repeat}
@@ -200,41 +200,39 @@ export function AttrExportDialog({
                 />
               </Field>
             </div>
-            {mismatch && repeat && <p className="text-xs text-danger">Пароли не совпадают</p>}
+            {mismatch && repeat && <p className="text-xs text-danger">{t('Пароли не совпадают')}</p>}
 
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm">Печать</span>
+                <span className="text-sm">{t('Печать')}</span>
                 <Segmented<Printing>
                   value={printing}
                   onChange={setPrinting}
-                  options={[{ value: 'none', label: 'Запрещена' }, { value: 'low', label: 'Низкое качество' }, { value: 'high', label: 'Разрешена' }]}
+                  options={[{ value: 'none', label: t('Запрещена') }, { value: 'low', label: t('Низкое качество') }, { value: 'high', label: t('Разрешена') }]}
                 />
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm">Ориентация</span>
+                <span className="text-sm">{t('Ориентация')}</span>
                 <Segmented<'portrait' | 'landscape'>
                   value={landscape ? 'landscape' : 'portrait'}
                   onChange={(v) => setLandscape(v === 'landscape')}
-                  options={[{ value: 'portrait', label: 'Книжная' }, { value: 'landscape', label: 'Альбомная' }]}
+                  options={[{ value: 'portrait', label: t('Книжная') }, { value: 'landscape', label: t('Альбомная') }]}
                 />
               </div>
-              <Check checked={copying} onChange={setCopying}>Разрешить копирование текста</Check>
-              {scansAvailable && <Check checked={withScans} onChange={setWithScans}>Сканы документов ({scans})</Check>}
+              <Check checked={copying} onChange={setCopying}>{t('Разрешить копирование текста')}</Check>
+              {scansAvailable && <Check checked={withScans} onChange={setWithScans}>{t('Сканы документов ({n})', { n: scans })}</Check>}
             </div>
             <p className="text-xs leading-relaxed text-mute">
-              Пароль необязателен: с ним PDF шифруется (AES-256) и открывается только с паролем. Запрет печати и копирования
-              выполняют программы просмотра (Acrobat, браузеры) — от снимка экрана он не защищает. В альбомной ориентации
-              значения записи идут в две колонки, как на широком экране.
+              {t('Пароль необязателен: с ним PDF шифруется (AES-256) и открывается только с паролем. Запрет печати и копирования выполняют программы просмотра (Acrobat, браузеры) — от снимка экрана он не защищает. В альбомной ориентации значения записи идут в две колонки, как на широком экране.')}
             </p>
           </>
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
           <Button type="submit" variant="primary" disabled={mismatch || pending}>
             {pending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : format === 'pdf' ? <FileText size={15} /> : <FileSpreadsheet size={15} />}
-            {format === 'pdf' ? 'Сформировать PDF' : 'Сформировать Excel'}
+            {format === 'pdf' ? t('Сформировать PDF') : t('Сформировать Excel')}
           </Button>
         </div>
       </form>

@@ -5,6 +5,7 @@ import { KeyRound, Send } from 'lucide-react';
 import { APP_VERSION } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
 import { errorText } from '../lib/errors.ts';
+import { t } from '../lib/i18n.ts';
 import { Button, Input, Spinner } from './ui.tsx';
 
 // Вход зависит от [config] auth на сервере:
@@ -33,10 +34,10 @@ function LoginFrame({ footer, children }: { footer: string; children: ReactNode 
         <div className="mb-9 flex flex-col items-center text-center">
           <img src="/logo.png" alt="" className="mb-4 size-40 drop-shadow-[0_0_40px_rgba(46,224,172,0.25)]" />
           <h1 className="text-4xl font-extrabold tracking-tight">
-            RuLeaks<span className="text-mint">.Следопыт</span>
+            RuLeaks<span className="text-mint">{t('.Следопыт')}</span>
           </h1>
           <p className="mt-3 font-mono text-sm uppercase tracking-[0.22em] text-mint/95">
-            humint · досье · расследования<span className="animate-blink">_</span>
+            {t('humint · досье · расследования')}<span className="animate-blink">_</span>
           </p>
         </div>
 
@@ -55,7 +56,7 @@ function PasswordLogin() {
   const login = trpc.auth.password.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
 
   return (
-    <LoginFrame footer="Персональный режим: один пользователь">
+    <LoginFrame footer={t('Персональный режим: один пользователь')}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -64,7 +65,7 @@ function PasswordLogin() {
       >
         <h2 className="label-mono mb-4 flex items-center justify-center gap-2.5">
           <span className="size-1.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />
-          Вход по паролю
+          {t('Вход по паролю')}
         </h2>
         <div className="flex justify-center gap-2">
           <Input
@@ -73,11 +74,11 @@ function PasswordLogin() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Пароль"
+            placeholder={t('Пароль')}
             className="max-w-sm"
           />
           <Button type="submit" variant="primary" disabled={!password || login.isPending}>
-            {login.isPending ? <Spinner /> : <KeyRound size={16} />} Войти
+            {login.isPending ? <Spinner /> : <KeyRound size={16} />} {t('Войти')}
           </Button>
         </div>
         {login.error && <div className="mt-3 text-center font-mono text-xs text-danger">{errorText(login.error)}</div>}
@@ -126,21 +127,21 @@ function BotLogin() {
   const link = botLink.data;
 
   return (
-    <LoginFrame footer="Доступ по действующей подписке бота RuLeaks">
+    <LoginFrame footer={t('Доступ по действующей подписке бота RuLeaks')}>
       <div className="grid items-center gap-8 md:grid-cols-[1fr_auto]">
         <div>
           <h2 className="label-mono mb-3 flex items-center gap-2.5">
             <span className="size-1.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />
-            Вход через Telegram-бот
+            {t('Вход через Telegram-бот')}
           </h2>
           <ol className="space-y-2 text-dim">
             <li>
-              <span className="font-mono text-mint">01</span> Нажмите кнопку или отсканируйте QR-код
+              <span className="font-mono text-mint">01</span> {t('Нажмите кнопку или отсканируйте QR-код')}
               <div className="mt-3 mb-4">
                 {link ? (
                   <a href={link} target="_blank" rel="noreferrer">
                     <Button variant="primary" size="lg">
-                      <Send size={22} /> Перейти в бот для авторизации
+                      <Send size={22} /> {t('Перейти в бот для авторизации')}
                     </Button>
                   </a>
                 ) : (
@@ -148,8 +149,8 @@ function BotLogin() {
                 )}
               </div>
             </li>
-            <li><span className="font-mono text-mint">02</span> Нажмите в боте кнопку генерации ссылки авторизации и перейдите по ней</li>
-            <li><span className="font-mono text-mint">03</span> Вход под вашей учетной записью будет выполнен автоматически</li>
+            <li><span className="font-mono text-mint">02</span> {t('Нажмите в боте кнопку генерации ссылки авторизации и перейдите по ней')}</li>
+            <li><span className="font-mono text-mint">03</span> {t('Вход под вашей учетной записью будет выполнен автоматически')}</li>
           </ol>
         </div>
         {link && (
@@ -161,11 +162,11 @@ function BotLogin() {
 
       {devLogin.data?.mode === 'profiles' && nonce && (
         <div className="mt-8 border-t border-dashed border-line pt-5">
-          <div className="mb-3 font-mono text-[11px] uppercase tracking-widest text-warn">dev · имитация подтверждения ботом</div>
+          <div className="mb-3 font-mono text-[11px] uppercase tracking-widest text-warn">{t('dev · имитация подтверждения ботом')}</div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => devConfirm.mutate({ nonce, profile: 'active' })}>Следопыт (подписка)</Button>
-            <Button size="sm" onClick={() => devConfirm.mutate({ nonce, profile: 'colleague' })}>Коллега (безлимит)</Button>
-            <Button size="sm" variant="danger" onClick={() => devConfirm.mutate({ nonce, profile: 'expired' })}>Без подписки</Button>
+            <Button size="sm" onClick={() => devConfirm.mutate({ nonce, profile: 'active' })}>{t('Следопыт (подписка)')}</Button>
+            <Button size="sm" onClick={() => devConfirm.mutate({ nonce, profile: 'colleague' })}>{t('Коллега (безлимит)')}</Button>
+            <Button size="sm" variant="danger" onClick={() => devConfirm.mutate({ nonce, profile: 'expired' })}>{t('Без подписки')}</Button>
           </div>
         </div>
       )}
@@ -179,11 +180,11 @@ function BotLogin() {
             if (tgId.trim()) devConfirm.mutate({ nonce, tgId: tgId.trim() });
           }}
         >
-          <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-warn">dev · вход по Telegram ID пользователя бота</div>
-          <p className="mb-3 text-xs text-mute">Подписка и токен API берутся из базы бота. Доступно только при запуске на localhost.</p>
+          <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-warn">{t('dev · вход по Telegram ID пользователя бота')}</div>
+          <p className="mb-3 text-xs text-mute">{t('Подписка и токен API берутся из базы бота. Доступно только при запуске на localhost.')}</p>
           <div className="flex gap-2">
             <Input value={tgId} onChange={(e) => setTgId(e.target.value)} placeholder="Telegram ID (chat_id)" inputMode="numeric" className="max-w-xs font-mono" />
-            <Button type="submit" disabled={!tgId.trim() || devConfirm.isPending}>Войти</Button>
+            <Button type="submit" disabled={!tgId.trim() || devConfirm.isPending}>{t('Войти')}</Button>
             {devLogin.data.quickTgId && (
               <Button
                 type="button"
@@ -191,7 +192,7 @@ function BotLogin() {
                 disabled={devConfirm.isPending}
                 onClick={() => devConfirm.mutate({ nonce, tgId: devLogin.data!.quickTgId! })}
               >
-                Войти как {devLogin.data.quickTgId}
+                {t('Войти как {id}', { id: devLogin.data.quickTgId })}
               </Button>
             )}
           </div>

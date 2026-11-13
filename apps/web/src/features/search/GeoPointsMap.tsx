@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
+import { t } from '../../lib/i18n.ts';
 import { useStore } from '../../lib/store.ts';
 import { cssColor, theme as themeStore } from '../../lib/theme.ts';
 import { EMPTY, boundsOf, circle, createMap, type GeoConfig } from './geoMap.ts';
@@ -56,7 +57,7 @@ export function GeoPointsMap({ config, points, className }: { config: GeoConfig;
       }
       if (p.lines.length > POPUP_LINES) {
         const more = document.createElement('div');
-        more.textContent = `… ещё ${p.lines.length - POPUP_LINES}`;
+        more.textContent = t('… ещё {n}', { n: p.lines.length - POPUP_LINES });
         el.appendChild(more);
       }
       popup.setLngLat([p.lon, p.lat]).setDOMContent(el).addTo(map);

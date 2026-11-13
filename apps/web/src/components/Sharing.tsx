@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { Globe, Lock, Users, X } from 'lucide-react';
 import type { Share } from '@ft/shared';
 import { Button, Dialog, Field, Input, Select, Tag } from './ui.tsx';
+import { t } from '../lib/i18n.ts';
 
 export type Visibility = 'private' | 'shared' | 'public';
 
 export function VisibilityTag({ v }: { v: Visibility }) {
-  if (v === 'public') return <Tag tone="info"><Globe size={11} /> публичное</Tag>;
-  if (v === 'shared') return <Tag><Users size={11} /> общее</Tag>;
-  return <Tag tone="dim"><Lock size={11} /> личное</Tag>;
+  if (v === 'public') return <Tag tone="info"><Globe size={11} /> {t('публичное')}</Tag>;
+  if (v === 'shared') return <Tag><Users size={11} /> {t('общее')}</Tag>;
+  return <Tag tone="dim"><Lock size={11} /> {t('личное')}</Tag>;
 }
 
 /** Диалог доступа: общий для досье и расследований. Публичность — только у расследований. */
@@ -28,14 +29,14 @@ export function ShareDialog({
   const [username, setUsername] = useState('');
   const [role, setRole] = useState<'viewer' | 'editor'>('viewer');
   const levels: { v: Visibility; icon: typeof Lock; title: string; text: string }[] = [
-    { v: 'private', icon: Lock, title: 'Личное', text: 'Видите только вы. Список доступа сохраняется, но не действует.' },
-    { v: 'shared', icon: Users, title: 'Общее', text: 'Видят исследователи из списка ниже — с правами чтения или правки.' },
+    { v: 'private', icon: Lock, title: t('Личное'), text: t('Видите только вы. Список доступа сохраняется, но не действует.') },
+    { v: 'shared', icon: Users, title: t('Общее'), text: t('Видят исследователи из списка ниже — с правами чтения или правки.') },
     ...(allowPublic
-      ? [{ v: 'public' as const, icon: Globe, title: 'Публичное', text: 'Доступно по ссылке любому, даже без входа. Привязанные личные досье остаются скрытыми.' }]
+      ? [{ v: 'public' as const, icon: Globe, title: t('Публичное'), text: t('Доступно по ссылке любому, даже без входа. Привязанные личные досье остаются скрытыми.') }]
       : []),
   ];
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Доступ">
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Доступ')}>
       <div className="space-y-5">
         <div className="space-y-2">
           {levels.map(({ v, icon: Icon, title, text }) => (
@@ -64,19 +65,19 @@ export function ShareDialog({
             <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="@colleague_dev" />
           </Field>
           <Select value={role} onChange={(e) => setRole(e.target.value as 'viewer' | 'editor')}>
-            <option value="viewer">чтение</option>
-            <option value="editor">правка</option>
+            <option value="viewer">{t('чтение')}</option>
+            <option value="editor">{t('правка')}</option>
           </Select>
-          <Button type="submit">Добавить</Button>
+          <Button type="submit">{t('Добавить')}</Button>
         </form>
         {error && <div className="font-mono text-xs text-danger">{error}</div>}
         <div className="space-y-1">
-          {shares.length === 0 && <div className="font-mono text-xs text-mute">Ни с кем не поделено</div>}
+          {shares.length === 0 && <div className="font-mono text-xs text-mute">{t('Ни с кем не поделено')}</div>}
           {shares.map((s) => (
             <div key={s.userId} className="flex items-center justify-between rounded-lg border border-line-soft px-3 py-2 text-sm">
               <span>{s.displayName}</span>
               <span className="flex items-center gap-2">
-                <Tag tone={s.role === 'editor' ? 'mint' : 'dim'}>{s.role === 'editor' ? 'правка' : 'чтение'}</Tag>
+                <Tag tone={s.role === 'editor' ? 'mint' : 'dim'}>{s.role === 'editor' ? t('правка') : t('чтение')}</Tag>
                 <button onClick={() => onUnshare(s.userId)} className="cursor-pointer text-mute hover:text-danger"><X size={14} /></button>
               </span>
             </div>

@@ -146,7 +146,7 @@ export function emailDomainInfo(domain: string): EmailDomainInfo {
 /** Зоны, которых нет, но в которые легко опечататься, → настоящая. Существующие зоны (.co, .cm, .ne) сюда нельзя. */
 const TLD_TYPOS: Record<string, string> = {
   con: 'com', cmo: 'com', ocm: 'com', vom: 'com', xom: 'com', cpm: 'com', comm: 'com', coml: 'com', 'com,': 'com',
-  nte: 'net', nett: 'net', ogr: 'org', orgg: 'org', rru: 'ru', ruu: 'ru', ry: 'ru', 'ру': 'ru',
+  nte: 'net', nett: 'net', ogr: 'org', orgg: 'org', rru: 'ru', ruu: 'ru', ry: 'ru', 'ру': 'ru', // i18n-ignore: опечатка зоны
 };
 
 /** Расстояние Дамерау — Левенштейна (перестановка соседних букв — одна правка), не больше max + 1. */

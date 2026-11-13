@@ -5,13 +5,15 @@ import clsx from 'clsx';
 import { Check, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FileImage, FolderPlus, RotateCcw, RotateCw, X } from 'lucide-react';
 import { scanDoctypeLabel } from '@ft/shared';
 import { Card, Spinner, Tag } from '../../components/ui.tsx';
+import { t, tn } from '../../lib/i18n.ts';
 import { SaveScanDialog } from './SaveScanDialog.tsx';
 import type { FoundScans, Meta } from './foundScans.ts';
 
 // Сканы документов из результатов поиска ([scanstore-api]): в записи утечки ключ scans — uuid сканов,
 // картинку сервер отдаёт по /scans/<uuid> (scans.config.imagePath), подписи — из scans.meta.
 
-const doctypeLabel = scanDoctypeLabel;
+/** Подпись типа документа на текущем языке (вызывать при отрисовке). */
+const doctypeLabel = (type: string | undefined) => t(scanDoctypeLabel(type));
 
 /**
  * Версия адреса картинок (?v=): сервер параметр не читает, он только делает адрес новым для кэшей.
@@ -34,7 +36,7 @@ export function ScansBox({ scans }: { scans: FoundScans }) {
   const titled = groups.length > 1;
 
   return (
-    <Card title="Сканы документов" actions={<Tag tone="dim">{all.length}</Tag>}>
+    <Card title={t('Сканы документов')} actions={<Tag tone="dim">{all.length}</Tag>}>
       <div className="space-y-4">
         {groups.map((g) => (
           <div key={g.key}>
@@ -59,7 +61,7 @@ export function ScansBox({ scans }: { scans: FoundScans }) {
           </div>
         ))}
       </div>
-      {scans.metaError && <p className="mt-3 font-mono text-[11px] text-warn">Не удалось получить описания сканов — показаны только изображения</p>}
+      {scans.metaError && <p className="mt-3 font-mono text-[11px] text-warn">{t('Не удалось получить описания сканов — показаны только изображения')}</p>}
       <ScanViewer
         scans={all.map((s) => ({ id: s.id, src: src(s.id), meta: metaData?.[s.id] ?? undefined, person: s.group.person, leak: s.group.leak }))}
         index={open}
@@ -78,15 +80,15 @@ async function probeImage(src: string): Promise<string> {
     try {
       const r = await fetch(src, { cache });
       const size = (await r.arrayBuffer()).byteLength;
-      return `HTTP ${r.status}, ${r.headers.get('content-type') ?? 'без типа'}, ${size} байт`;
+      return `HTTP ${r.status}, ${r.headers.get('content-type') ?? t('без типа')}, ${tn(size, '{n} байт|{n} байта|{n} байт')}`;
     } catch (e) {
-      return `сеть: ${e instanceof Error ? e.message : String(e)}`;
+      return t('сеть: {error}', { error: e instanceof Error ? e.message : String(e) });
     }
   };
   // <img> берёт ответ и из кэша браузера: если там не то же, что отдаёт сервер, — виноват кэш.
   const server = await describe('no-store');
   const cached = await describe('force-cache');
-  return cached === server ? server : `сервер: ${server}; кэш браузера: ${cached}`;
+  return cached === server ? server : t('сервер: {server}; кэш браузера: {cached}', { server, cached });
 }
 
 function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | undefined; missing: boolean; onOpen: () => void }) {
@@ -97,6 +99,7 @@ function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | u
     setState('error');
     void probeImage(src).then((r) => {
       setReason(r);
+      // i18n-ignore: сообщение в консоль разработчика
       console.warn(`скан ${src} не загрузился: ${r}`);
     });
   };
@@ -106,7 +109,13 @@ function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | u
       onClick={onOpen}
       disabled={failed}
       // Описание есть, а картинка не загрузилась — это не «нет скана», а сбой выдачи картинки (/scans не проксируется, хранилище недоступно).
-      title={missing ? 'Скан не найден в хранилище' : failed ? `Не удалось загрузить изображение скана${reason ? `: ${reason}` : ''}` : 'Открыть скан'}
+      title={
+        missing
+          ? t('Скан не найден в хранилище')
+          : failed
+            ? reason ? t('Не удалось загрузить изображение скана: {reason}', { reason }) : t('Не удалось загрузить изображение скана')
+            : t('Открыть скан')
+      }
       className={clsx(
         'group flex flex-col overflow-hidden rounded-lg border border-line bg-bg-soft text-left transition',
         failed ? 'cursor-default opacity-60' : 'cursor-zoom-in hover:border-mint/60 hover:shadow-glow-sm',
@@ -131,7 +140,7 @@ function ScanThumb({ src, meta, missing, onOpen }: { src: string; meta: Meta | u
         )}
       </div>
       <div className="space-y-0.5 border-t border-line-soft px-2 py-1.5">
-        <div className="truncate font-mono text-[10px] uppercase tracking-wide text-mint">{meta ? doctypeLabel(meta.doctype) : failed ? 'Нет файла' : 'Скан'}</div>
+        <div className="truncate font-mono text-[10px] uppercase tracking-wide text-mint">{meta ? doctypeLabel(meta.doctype) : failed ? t('Нет файла') : t('Скан')}</div>
         {meta?.docnum && <div className="truncate font-mono text-[11px] text-dim">{meta.docnum}</div>}
         {reason && <div className="font-mono text-[10px] leading-tight break-words text-danger">{reason}</div>}
       </div>
@@ -166,11 +175,11 @@ async function renderScan(src: string, deg: number, type: 'image/png' | 'image/j
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.rotate((deg * Math.PI) / 180);
   ctx.drawImage(img, -w / 2, -h / 2, w, h);
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('не удалось подготовить изображение'))), type, 0.92));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t('не удалось подготовить изображение')))), type, 0.92));
 }
 
 /** Исходный файл скана (из кэша браузера). */
-const fetchScan = (src: string) => fetch(src).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`скан не загрузился (${r.status})`))));
+const fetchScan = (src: string) => fetch(src).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(t('скан не загрузился ({status})', { status: r.status })))));
 
 const blobToDataUrl = (b: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -242,22 +251,22 @@ function ScanViewer({ scans, index, onIndex }: { scans: ViewerScan[]; index: num
       a.download = scanFileName(s);
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      return 'Сохранено';
+      return t('Сохранено');
     });
   const copy = (s: ViewerScan) =>
     run(async () => {
       // Буфер обмена принимает картинки только в PNG и только в безопасном контексте (HTTPS, localhost).
       if (!window.isSecureContext || !navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
-        throw new Error('Копирование картинок недоступно: сайт открыт не по HTTPS');
+        throw new Error(t('Копирование картинок недоступно: сайт открыт не по HTTPS'));
       }
       // Промис, а не готовый Blob: Safari требует вызвать write сразу в обработчике клика.
       try {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': renderScan(s.src, deg, 'image/png') })]);
       } catch (e) {
-        if (e instanceof DOMException && e.name === 'NotAllowedError') throw new Error('Браузер не разрешил запись в буфер обмена');
+        if (e instanceof DOMException && e.name === 'NotAllowedError') throw new Error(t('Браузер не разрешил запись в буфер обмена'));
         throw e;
       }
-      return 'Скопировано';
+      return t('Скопировано');
     });
 
   /** Картинка для досье: исходный файл, а повёрнутая или слишком большая — перекодированная в JPEG. */
@@ -307,34 +316,34 @@ function ScanViewer({ scans, index, onIndex }: { scans: ViewerScan[]; index: num
                     {flash.text}
                     {flash.dossierId && (
                       <Link to="/dossiers/$id" params={{ id: flash.dossierId }} className="ml-2 text-dim underline hover:text-mint">
-                        открыть
+                        {t('открыть')}
                       </Link>
                     )}
                   </span>
                 )}
                 {scans.length > 1 && <span className="font-mono text-[11px] text-dim">{index! + 1} / {scans.length}</span>}
                 <div className="flex items-center gap-1">
-                  <ToolButton title="Повернуть против часовой стрелки" onClick={() => setRotation((r) => r - 90)}>
+                  <ToolButton title={t('Повернуть против часовой стрелки')} onClick={() => setRotation((r) => r - 90)}>
                     <RotateCcw size={16} />
                   </ToolButton>
-                  <ToolButton title="Повернуть по часовой стрелке" onClick={() => setRotation((r) => r + 90)}>
+                  <ToolButton title={t('Повернуть по часовой стрелке')} onClick={() => setRotation((r) => r + 90)}>
                     <RotateCw size={16} />
                   </ToolButton>
                   <span className="mx-1 h-4 w-px bg-line" />
-                  <ToolButton title={deg ? 'Сохранить в медиа досье (с поворотом)' : 'Сохранить в медиа досье'} disabled={busy || !natural} onClick={() => setSaveOpen(true)}>
+                  <ToolButton title={deg ? t('Сохранить в медиа досье (с поворотом)') : t('Сохранить в медиа досье')} disabled={busy || !natural} onClick={() => setSaveOpen(true)}>
                     <FolderPlus size={16} />
                   </ToolButton>
-                  <ToolButton title={deg ? 'Сохранить в файл (с поворотом)' : 'Сохранить в файл'} disabled={busy} onClick={() => save(scan)}>
+                  <ToolButton title={deg ? t('Сохранить в файл (с поворотом)') : t('Сохранить в файл')} disabled={busy} onClick={() => save(scan)}>
                     <Download size={16} />
                   </ToolButton>
-                  <ToolButton title="Скопировать изображение в буфер обмена" disabled={busy} onClick={() => copy(scan)}>
-                    {flash?.ok && flash.text === 'Скопировано' ? <Check size={16} className="text-mint" /> : <Copy size={16} />}
+                  <ToolButton title={t('Скопировать изображение в буфер обмена')} disabled={busy} onClick={() => copy(scan)}>
+                    {flash?.ok && flash.text === t('Скопировано') ? <Check size={16} className="text-mint" /> : <Copy size={16} />}
                   </ToolButton>
-                  <a href={scan.src} target="_blank" rel="noreferrer" title="Открыть в новой вкладке" className={TOOL_CLASS}>
+                  <a href={scan.src} target="_blank" rel="noreferrer" title={t('Открыть в новой вкладке')} className={TOOL_CLASS}>
                     <ExternalLink size={16} />
                   </a>
                   <span className="mx-1 h-4 w-px bg-line" />
-                  <RDialog.Close className={TOOL_CLASS} aria-label="Закрыть" title="Закрыть (Esc)">
+                  <RDialog.Close className={TOOL_CLASS} aria-label={t('Закрыть')} title={t('Закрыть (Esc)')}>
                     <X size={18} />
                   </RDialog.Close>
                 </div>
@@ -375,7 +384,7 @@ function ScanViewer({ scans, index, onIndex }: { scans: ViewerScan[]; index: num
                 lastDossierId={lastDossierId}
                 onSaved={(d) => {
                   setLastDossierId(d.id);
-                  setFlash({ ok: true, text: `Сохранено в досье «${d.title}»`, dossierId: d.id });
+                  setFlash({ ok: true, text: t('Сохранено в досье «{title}»', { title: d.title }), dossierId: d.id });
                 }}
               />
             </>
@@ -403,7 +412,7 @@ function NavButton({ side, onClick }: { side: 'left' | 'right'; onClick: () => v
     <button
       type="button"
       onClick={onClick}
-      title={side === 'left' ? 'Предыдущий скан (←)' : 'Следующий скан (→)'}
+      title={side === 'left' ? t('Предыдущий скан (←)') : t('Следующий скан (→)')}
       className={clsx(
         'absolute top-1/2 grid size-10 -translate-y-1/2 cursor-pointer place-items-center rounded-full border border-line bg-panel/80 text-dim transition hover:border-mint hover:text-mint',
         side === 'left' ? 'left-4' : 'right-4',

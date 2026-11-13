@@ -10,6 +10,7 @@ import { Button, Dialog, Empty, Field, Input, Segmented, Spinner, Tag } from '..
 import { trpc } from '../../lib/trpc.ts';
 import { ago, fmtDate } from '../../lib/format.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t, tn } from '../../lib/i18n.ts';
 
 export function DossiersPage() {
   const search = useSearch({ from: '/dossiers' });
@@ -30,12 +31,12 @@ export function DossiersPage() {
     <div className="space-y-6 pt-2.5 pb-6 pl-6 pr-[30px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold">Досье</h1>
-          <p className="mt-1 text-sm text-dim">Личности и группы: атрибуты, ссылки на соцсети, медиа, заметки и снимки поиска.</p>
+          <h1 className="text-2xl font-extrabold">{t('Досье')}</h1>
+          <p className="mt-1 text-sm text-dim">{t('Личности и группы: атрибуты, ссылки на соцсети, медиа, заметки и снимки поиска.')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setImporting(true)} title="Досье или расследование из файла экспорта"><FileUp size={16} /> Импорт</Button>
-          <Button variant="primary" onClick={() => setCreating(true)}><Plus size={16} /> Новое досье</Button>
+          <Button onClick={() => setImporting(true)} title={t('Досье или расследование из файла экспорта')}><FileUp size={16} /> {t('Импорт')}</Button>
+          <Button variant="primary" onClick={() => setCreating(true)}><Plus size={16} /> {t('Новое досье')}</Button>
         </div>
       </header>
       <ImportDialog open={importing} onOpenChange={setImporting} />
@@ -44,30 +45,30 @@ export function DossiersPage() {
         <Segmented
           value={scope}
           onChange={(s) => void navigate({ search: { scope: s } })}
-          options={[{ value: 'all', label: 'Все' }, { value: 'mine', label: 'Мои' }, { value: 'shared', label: 'Доступные мне' }]}
+          options={[{ value: 'all', label: t('Все') }, { value: 'mine', label: t('Мои') }, { value: 'shared', label: t('Доступные мне') }]}
         />
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название содержит…" className="max-w-sm" />
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('Название содержит…')} className="max-w-sm" />
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-dim">Теги содержат:</span>
+          <span className="text-sm text-dim">{t('Теги содержат:')}</span>
           <TagFilter value={tagIds} onChange={setTagIds} />
         </div>
         {list.isFetching && <Spinner />}
         <div className="ml-auto"><ViewToggle value={view} onChange={setView} /></div>
       </div>
 
-      {list.data?.length === 0 && <Empty>{scope === 'shared' ? 'С вами ещё ничем не поделились' : 'Досье пока нет'}</Empty>}
+      {list.data?.length === 0 && <Empty>{scope === 'shared' ? t('С вами ещё ничем не поделились') : t('Досье пока нет')}</Empty>}
 
       {view === 'table' && !!list.data?.length && (
         <div className={tableCls.wrap}>
           <table className={tableCls.table}>
             <thead>
               <tr>
-                <th className={tableCls.th}>Название</th>
-                <th className={tableCls.th}>Вид</th>
-                <th className={tableCls.th}>Теги</th>
-                <th className={`${tableCls.th} text-right`}>Элем.</th>
-                <th className={tableCls.th}>Доступ</th>
-                <th className={tableCls.th}>Изменено</th>
+                <th className={tableCls.th}>{t('Название')}</th>
+                <th className={tableCls.th}>{t('Вид')}</th>
+                <th className={tableCls.th}>{t('Теги')}</th>
+                <th className={`${tableCls.th} text-right`}>{t('Элем.')}</th>
+                <th className={tableCls.th}>{t('Доступ')}</th>
+                <th className={tableCls.th}>{t('Изменено')}</th>
               </tr>
             </thead>
             <tbody>
@@ -81,13 +82,13 @@ export function DossiersPage() {
                       <Link to="/dossiers/$id" params={{ id: d.id }} onClick={(e) => e.stopPropagation()} className="font-semibold hover:text-mint">{d.title}</Link>
                     </div>
                   </td>
-                  <td className={`${tableCls.td} whitespace-nowrap font-mono text-xs text-dim`}>{d.kind === 'group' ? 'группа' : 'персона'}</td>
+                  <td className={`${tableCls.td} whitespace-nowrap font-mono text-xs text-dim`}>{d.kind === 'group' ? t('группа') : t('персона')}</td>
                   <td className={tableCls.td}><TagList tags={d.tags} /></td>
                   <td className={`${tableCls.td} text-right font-mono text-xs text-dim`}>{d.itemCount}</td>
                   <td className={tableCls.td}>
                     <span className="flex items-center gap-1.5">
                       <VisibilityTag v={d.visibility} />
-                      {d.role !== 'owner' && <Tag>{d.role === 'editor' ? 'правка' : 'чтение'}</Tag>}
+                      {d.role !== 'owner' && <Tag>{d.role === 'editor' ? t('правка') : t('чтение')}</Tag>}
                     </span>
                   </td>
                   <td className={`${tableCls.td} whitespace-nowrap font-mono text-xs text-mute`} title={fmtDate(d.updatedAt, true)}>{ago(d.updatedAt)}</td>
@@ -117,15 +118,15 @@ export function DossiersPage() {
                 </div>
               )}
               <div className="absolute left-3 top-3 flex gap-1.5">
-                <Tag tone="dim" className="bg-bg/70">{d.kind === 'group' ? 'группа' : 'персона'}</Tag>
-                {d.role !== 'owner' && <Tag className="bg-bg/70">{d.role === 'editor' ? 'правка' : 'чтение'}</Tag>}
+                <Tag tone="dim" className="bg-bg/70">{d.kind === 'group' ? t('группа') : t('персона')}</Tag>
+                {d.role !== 'owner' && <Tag className="bg-bg/70">{d.role === 'editor' ? t('правка') : t('чтение')}</Tag>}
               </div>
             </div>
             <div className="space-y-2 p-4">
               <div className="font-bold leading-snug group-hover:text-mint">{d.title}</div>
               <TagList tags={d.tags} />
               <div className="flex items-center justify-between font-mono text-[11px] text-mute">
-                <span>{d.itemCount} элем. · {ago(d.updatedAt)}</span>
+                <span>{tn(d.itemCount, '{n} элем.')} · {ago(d.updatedAt)}</span>
                 <VisibilityTag v={d.visibility} />
               </div>
             </div>
@@ -150,7 +151,7 @@ function CreateDossierDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     },
   });
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Новое досье">
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Новое досье')}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -158,13 +159,13 @@ function CreateDossierDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           create.mutate({ kind, title, summaryMd: '' });
         }}
       >
-        <Segmented value={kind} onChange={setKind} options={[{ value: 'person', label: 'Персона' }, { value: 'group', label: 'Группа лиц' }]} />
-        <Field label="Название">
-          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'person' ? 'Фамилия Имя Отчество' : 'Название группы'} />
+        <Segmented value={kind} onChange={setKind} options={[{ value: 'person', label: t('Персона') }, { value: 'group', label: t('Группа лиц') }]} />
+        <Field label={t('Название')}>
+          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'person' ? t('Фамилия Имя Отчество') : t('Название группы')} />
         </Field>
         {create.error && <div className="font-mono text-xs text-danger">{errorText(create.error)}</div>}
         <div className="flex justify-end">
-          <Button type="submit" variant="primary" disabled={!title.trim() || create.isPending}>Создать</Button>
+          <Button type="submit" variant="primary" disabled={!title.trim() || create.isPending}>{t('Создать')}</Button>
         </div>
       </form>
     </Dialog>

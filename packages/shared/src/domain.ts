@@ -69,9 +69,13 @@ export const Access = z.object({
 
 export const Theme = z.enum(['dark', 'light']);
 
+/** Язык интерфейса (apps/web/src/lib/i18n.ts). Отчёты PDF/Excel и сами данные не переводятся. */
+export const Lang = z.enum(['ru', 'en']);
+
 /** Новая настройка = поле здесь + значение в DEFAULT_USER_SETTINGS. */
 export const UserSettings = z.object({
   theme: Theme,
+  lang: Lang,
 });
 
 /** Изменение настроек: только переданные ключи, остальные остаются как есть. */
@@ -416,6 +420,7 @@ export type DossierRelation = z.infer<typeof DossierRelation>;
 export type Source = z.infer<typeof Source>;
 export type Access = z.infer<typeof Access>;
 export type Theme = z.infer<typeof Theme>;
+export type Lang = z.infer<typeof Lang>;
 export type UserSettings = z.infer<typeof UserSettings>;
 export type UserSettingsPatch = z.infer<typeof UserSettingsPatch>;
 export type User = z.infer<typeof User>;

@@ -7,6 +7,7 @@ import { Button, DELETE_GAP, Dialog, Empty, Field, Input, Select, Tag } from '..
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
+import { t } from '../../lib/i18n.ts';
 
 type Inv = RouterOutputs['investigations']['get'];
 
@@ -42,10 +43,10 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
     <div className="h-full overflow-auto">
       <div className="space-y-[1rem] py-[1.2rem] pl-6 pr-[30px]">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-dim">Отметьте для каждого факта, подкрепляет он гипотезу или противоречит ей.</p>
-          {editable && <Button variant="primary" size="sm" onClick={() => setEditing('new')}><Plus size={14} /> Гипотеза</Button>}
+          <p className="text-sm text-dim">{t('Отметьте для каждого факта, подкрепляет он гипотезу или противоречит ей.')}</p>
+          {editable && <Button variant="primary" size="sm" onClick={() => setEditing('new')}><Plus size={14} /> {t('Гипотеза')}</Button>}
         </div>
-        {inv.hypotheses.length === 0 && <Empty>Гипотез нет</Empty>}
+        {inv.hypotheses.length === 0 && <Empty>{t('Гипотез нет')}</Empty>}
 
         <div className="grid gap-[1rem] lg:grid-cols-2">
           {inv.hypotheses.map((h) => {
@@ -56,13 +57,13 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
               <article key={h.id} className="group animate-fade-up rounded-2xl border border-line bg-panel p-4">
                 <header className="mb-[0.6rem] flex items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    <Tag tone={STATUS[h.status].tone}>{STATUS[h.status].label}</Tag>
+                    <Tag tone={STATUS[h.status].tone}>{t(STATUS[h.status].label)}</Tag>
                     <h3 className="mt-2 text-lg font-bold leading-snug">{h.title}</h3>
                   </div>
                   {editable && (
                     <span className="flex gap-2 text-mute opacity-0 transition group-hover:opacity-100">
                       <button onClick={() => setEditing(h)} className="cursor-pointer hover:text-mint"><Pencil size={14} /></button>
-                      <button onClick={() => remove.mutate({ id: inv.id, hypothesisId: h.id })} title="Удалить" className={`${DELETE_GAP} cursor-pointer hover:text-danger`}><Trash2 size={14} /></button>
+                      <button onClick={() => remove.mutate({ id: inv.id, hypothesisId: h.id })} title={t('Удалить')} className={`${DELETE_GAP} cursor-pointer hover:text-danger`}><Trash2 size={14} /></button>
                     </span>
                   )}
                 </header>
@@ -70,8 +71,8 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
 
                 <div className="my-4">
                   <div className="mb-1 flex justify-between font-mono text-[10px]">
-                    <span className="text-mint">за: {pro}</span>
-                    <span className="text-danger">против: {con}</span>
+                    <span className="text-mint">{t('за: {n}', { n: pro })}</span>
+                    <span className="text-danger">{t('против: {n}', { n: con })}</span>
                   </div>
                   <div className="flex h-1.5 overflow-hidden rounded-full bg-text/5">
                     <div className="bg-mint" style={{ width: `${(pro / total) * 100}%` }} />
@@ -88,10 +89,10 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
                         <span className="line-clamp-2 flex-1 text-dim">{factById.get(f.id)?.textMd}</span>
                         {editable && (
                           <span className="flex shrink-0 gap-1">
-                            <button title="Подкрепляет" onClick={() => setStance(h, f.id, stance === 'supports' ? null : 'supports')} className={clsx('grid size-6 cursor-pointer place-items-center rounded border', stance === 'supports' ? 'border-mint bg-mint text-mint-ink' : 'border-line-soft text-mute hover:text-mint')}>
+                            <button title={t('Подкрепляет')} onClick={() => setStance(h, f.id, stance === 'supports' ? null : 'supports')} className={clsx('grid size-6 cursor-pointer place-items-center rounded border', stance === 'supports' ? 'border-mint bg-mint text-mint-ink' : 'border-line-soft text-mute hover:text-mint')}>
                               <Plus size={12} />
                             </button>
-                            <button title="Противоречит" onClick={() => setStance(h, f.id, stance === 'contradicts' ? null : 'contradicts')} className={clsx('grid size-6 cursor-pointer place-items-center rounded border', stance === 'contradicts' ? 'border-danger bg-danger text-bg' : 'border-line-soft text-mute hover:text-danger')}>
+                            <button title={t('Противоречит')} onClick={() => setStance(h, f.id, stance === 'contradicts' ? null : 'contradicts')} className={clsx('grid size-6 cursor-pointer place-items-center rounded border', stance === 'contradicts' ? 'border-danger bg-danger text-bg' : 'border-line-soft text-mute hover:text-danger')}>
                               <Minus size={12} />
                             </button>
                           </span>
@@ -106,7 +107,7 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
         </div>
       </div>
 
-      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)} title={editing === 'new' ? 'Новая гипотеза' : 'Гипотеза'} wide>
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)} title={editing === 'new' ? t('Новая гипотеза') : t('Гипотеза')} wide>
         {editing && (
           <HypothesisForm
             key={editing === 'new' ? 'new' : editing.id}
@@ -128,14 +129,14 @@ function HypothesisForm({ h, onSave }: { h: Hypothesis | null; onSave: (h: Omit<
   const [status, setStatus] = useState<HypothesisStatus>(h?.status ?? 'open');
   return (
     <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void onSave({ id: h?.id, title, textMd: text, status, evidence: h?.evidence ?? [] }); }}>
-      <Field label="Формулировка"><Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-      <Field label="Обоснование"><MarkdownEditor value={text} onChange={setText} /></Field>
-      <Field label="Статус">
+      <Field label={t('Формулировка')}><Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+      <Field label={t('Обоснование')}><MarkdownEditor value={text} onChange={setText} /></Field>
+      <Field label={t('Статус')}>
         <Select value={status} onChange={(e) => setStatus(e.target.value as HypothesisStatus)}>
-          {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{t(v.label)}</option>)}
         </Select>
       </Field>
-      <div className="flex justify-end"><Button type="submit" variant="primary" disabled={!title.trim()}>Сохранить</Button></div>
+      <div className="flex justify-end"><Button type="submit" variant="primary" disabled={!title.trim()}>{t('Сохранить')}</Button></div>
     </form>
   );
 }

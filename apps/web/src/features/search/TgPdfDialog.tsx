@@ -8,6 +8,7 @@ import { Button, Dialog, Field, Input, Spinner, Textarea } from '../../component
 import { trpc } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
+import { t } from '../../lib/i18n.ts';
 
 // PDF-отчёт по результату поиска в Telegram — как отчёт досье: автор, примечание, необязательный пароль
 // (шифрование PDF). Сообщения — все или только отмеченные; собирает сервер из сохранённого снимка поиска,
@@ -49,9 +50,9 @@ export function TgPdfDialog({
     if (mismatch || pending) return;
     try {
       const r = await process.run(
-        'Отчёт поиска в PDF',
+        t('Отчёт поиска в PDF'),
         (p) => {
-          p.set({ status: 'Сервер формирует отчёт…', detail: `сообщений: ${Math.min(count, TG_PDF_MAX)}` });
+          p.set({ status: t('Сервер формирует отчёт…'), detail: t('сообщений: {n}', { n: Math.min(count, TG_PDF_MAX) }) });
           return client.search.exportTgPdf.mutate(
             {
               jobId, author, note, password,
@@ -64,7 +65,7 @@ export function TgPdfDialog({
         { cancellable: true },
       );
       download(r.fileName, r.data, 'application/pdf');
-      toast(`Файл «${r.fileName}» сохранён`);
+      toast(t('Файл «{name}» сохранён', { name: r.fileName }));
       onOpenChange(false);
     } catch (e) {
       if (!isCancelled(e)) toast(errorText(e), 'error');
@@ -72,7 +73,7 @@ export function TgPdfDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Отчёт поиска в PDF">
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('Отчёт поиска в PDF')}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -80,17 +81,17 @@ export function TgPdfDialog({
           void submit();
         }}
       >
-        <Field label="Автор">
+        <Field label={t('Автор')}>
           <Input value={author} onChange={(e) => setAuthor(e.target.value)} maxLength={256} autoFocus />
         </Field>
-        <Field label="Примечание">
-          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={4000} placeholder="Попадёт в шапку отчёта" />
+        <Field label={t('Примечание')}>
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={4000} placeholder={t('Попадёт в шапку отчёта')} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Пароль">
+          <Field label={t('Пароль')}>
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} maxLength={256} autoComplete="new-password" />
           </Field>
-          <Field label="Пароль ещё раз">
+          <Field label={t('Пароль ещё раз')}>
             <Input
               type="password"
               value={repeat}
@@ -103,31 +104,31 @@ export function TgPdfDialog({
         </div>
         <p className="text-xs leading-relaxed text-mute">
           {mismatch && repeat
-            ? <span className="text-danger">Пароли не совпадают</span>
-            : 'Пароль необязателен. С паролем PDF шифруется (AES-256) и открывается только с ним.'}
+            ? <span className="text-danger">{t('Пароли не совпадают')}</span>
+            : t('Пароль необязателен. С паролем PDF шифруется (AES-256) и открывается только с ним.')}
         </p>
         {total !== null && (
           <div className="space-y-2 text-sm">
             <label className="flex cursor-pointer items-center gap-2">
               <input type="radio" checked={!onlySelected} onChange={() => setOnlySelected(false)} className="accent-[var(--color-mint)]" />
-              Все сообщения ({total})
+              {t('Все сообщения ({n})', { n: total })}
             </label>
             <label className={selected.length ? 'flex cursor-pointer items-center gap-2' : 'flex items-center gap-2 opacity-40'}>
               <input type="radio" disabled={!selected.length} checked={onlySelected} onChange={() => setOnlySelected(true)} className="accent-[var(--color-mint)]" />
-              Только отмеченные ({selected.length})
+              {t('Только отмеченные ({n})', { n: selected.length })}
             </label>
             {count > TG_PDF_MAX && (
               <p className="text-xs text-warn">
-                В отчёт войдут первые {TG_PDF_MAX} из {count} сообщений — отметьте нужные или сузьте поиск.
+                {t('В отчёт войдут первые {max} из {count} сообщений — отметьте нужные или сузьте поиск.', { max: TG_PDF_MAX, count })}
               </p>
             )}
           </div>
         )}
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
           <Button type="submit" variant="primary" disabled={mismatch || pending}>
             {pending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : <FileText size={15} />}
-            {pending ? 'Формирую…' : 'Сформировать PDF'}
+            {pending ? t('Формирую…') : t('Сформировать PDF')}
           </Button>
         </div>
       </form>

@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import * as RDialog from '@radix-ui/react-dialog';
 import { Check, Copy, Trash2, X } from 'lucide-react';
 import { copyText } from '../lib/clipboard.ts';
+import { t } from '../lib/i18n.ts';
 import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 
 // Базовые компоненты в стилистике ruleaks.link: чёрный фон, мятный акцент, моноширинные подписи.
@@ -134,7 +135,7 @@ export function Dialog({
           >
             <div className="mb-5 flex items-center justify-between">
               <RDialog.Title className="label-mono">{title}</RDialog.Title>
-              <RDialog.Close className="text-dim hover:text-mint cursor-pointer" aria-label="Закрыть">
+              <RDialog.Close className="text-dim hover:text-mint cursor-pointer" aria-label={t('Закрыть')}>
                 <X size={18} />
               </RDialog.Close>
             </div>
@@ -191,7 +192,8 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
 }
 
 /** Иконка «скопировать в буфер обмена»; после копирования на секунду показывает галочку. */
-export function CopyButton({ value, title = 'Скопировать', className }: { value: string; title?: string; className?: string }) {
+export function CopyButton({ value, title: titleProp, className }: { value: string; title?: string; className?: string }) {
+  const title = titleProp ?? t('Скопировать');
   const [state, setState] = useState<'idle' | 'ok' | 'fail'>('idle');
   useEffect(() => {
     if (state === 'idle') return;
@@ -202,7 +204,7 @@ export function CopyButton({ value, title = 'Скопировать', className 
     <button
       type="button"
       onClick={async () => setState((await copyText(value)) ? 'ok' : 'fail')}
-      title={state === 'ok' ? 'Скопировано' : state === 'fail' ? 'Не удалось скопировать' : title}
+      title={state === 'ok' ? t('Скопировано') : state === 'fail' ? t('Не удалось скопировать') : title}
       aria-label={title}
       className={clsx('shrink-0 cursor-pointer transition', state === 'ok' ? 'text-mint' : state === 'fail' ? 'text-danger' : 'text-mute hover:text-mint', className)}
     >
@@ -219,7 +221,8 @@ export const DELETE_GAP = 'ml-1.5';
  * Удаление в два нажатия: первое превращает корзину в красный квадрат с «?», второе в течение 3 с удаляет,
  * иначе кнопка возвращается к обычному виду. Пока ждёт подтверждения, видна и без наведения на строку.
  */
-export function ConfirmDeleteBtn({ onConfirm, className, title = 'Удалить' }: { onConfirm: () => void; className?: string; title?: string }) {
+export function ConfirmDeleteBtn({ onConfirm, className, title: titleProp }: { onConfirm: () => void; className?: string; title?: string }) {
+  const title = titleProp ?? t('Удалить');
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return;
@@ -234,8 +237,8 @@ export function ConfirmDeleteBtn({ onConfirm, className, title = 'Удалить
         setArmed(false);
         onConfirm();
       }}
-      title={armed ? 'Нажмите ещё раз, чтобы удалить' : title}
-      aria-label={armed ? 'Подтвердить удаление' : title}
+      title={armed ? t('Нажмите ещё раз, чтобы удалить') : title}
+      aria-label={armed ? t('Подтвердить удаление') : title}
       data-armed={armed || undefined}
       className={clsx(DELETE_GAP, 'grid size-3.5 shrink-0 cursor-pointer place-items-center transition', armed ? 'opacity-100' : 'text-mute opacity-0 hover:text-danger group-hover:opacity-100', className)}
     >
@@ -263,9 +266,9 @@ export function FilePicker({
   return (
     <span className={clsx('flex min-w-0 items-center gap-3', className)}>
       <Button type="button" size="sm" disabled={disabled} onClick={() => ref.current?.click()}>
-        {multiple ? 'Выбрать файлы' : 'Выбрать файл'}
+        {multiple ? t('Выбрать файлы') : t('Выбрать файл')}
       </Button>
-      <span className={clsx('min-w-0 truncate text-sm', name ? 'text-text' : 'text-dim')}>{name ?? (multiple ? 'Файлы не выбраны' : 'Файл не выбран')}</span>
+      <span className={clsx('min-w-0 truncate text-sm', name ? 'text-text' : 'text-dim')}>{name ?? (multiple ? t('Файлы не выбраны') : t('Файл не выбран'))}</span>
       <input
         ref={ref}
         type="file"
@@ -274,7 +277,7 @@ export function FilePicker({
         className="hidden"
         onChange={(e) => {
           const files = [...(e.target.files ?? [])];
-          setName(files.length > 1 ? `выбрано файлов: ${files.length}` : files[0]?.name ?? null);
+          setName(files.length > 1 ? t('выбрано файлов: {n}', { n: files.length }) : files[0]?.name ?? null);
           onFiles(files);
           // Тот же файл можно выбрать снова (иначе change не сработает).
           e.target.value = '';

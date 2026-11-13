@@ -11,6 +11,8 @@ import clsx from 'clsx';
 import { DRIVE_EMBED_RE, type DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { DELETE_GAP, Dialog } from '../../components/ui.tsx';
+import { t } from '../../lib/i18n.ts';
+import { albumLabel } from './labels.ts';
 
 type Media = Extract<DossierItem, { type: 'media' }>;
 
@@ -71,13 +73,13 @@ export function MediaGallery({
         index={open}
         close={() => setOpen(-1)}
         plugins={[Captions]}
-        slides={sorted.map((m) => ({ src: m.url, title: m.caption, description: m.album }))}
+        slides={sorted.map((m) => ({ src: m.url, title: m.caption, description: m.album && albumLabel(m.album) }))}
         styles={{ container: { backgroundColor: 'rgba(0,0,0,.92)' } }}
       />
       {/* Видео: встраиваемый плеер (Гугл-диск) — iframe в окне, Lightbox работает только с картинками и прямыми файлами. */}
-      <Dialog open={!!video} onOpenChange={(v) => !v && setVideo(null)} title={video?.caption || 'Видео'} wide>
+      <Dialog open={!!video} onOpenChange={(v) => !v && setVideo(null)} title={video?.caption || t('Видео')} wide>
         {/* Адрес проверен схемой при сохранении; здесь — ещё раз, на случай старых или пришедших в обход данных. */}
-        {video?.embedUrl && DRIVE_EMBED_RE.test(video.embedUrl) && <iframe src={video.embedUrl} title={video.caption ?? 'Видео'} allow="autoplay; fullscreen" allowFullScreen className="aspect-video w-full rounded-lg border border-line bg-bg" />}
+        {video?.embedUrl && DRIVE_EMBED_RE.test(video.embedUrl) && <iframe src={video.embedUrl} title={video.caption ?? t('Видео')} allow="autoplay; fullscreen" allowFullScreen className="aspect-video w-full rounded-lg border border-line bg-bg" />}
       </Dialog>
     </>
   );
@@ -96,7 +98,7 @@ function Tile({
         isDragging && 'z-10 border-mint shadow-glow',
       )}
     >
-      <button onClick={onOpen} className={clsx('relative block aspect-[4/3] w-full', m.embedUrl ? 'cursor-pointer' : 'cursor-zoom-in')} title={m.embedUrl ? 'Воспроизвести' : undefined}>
+      <button onClick={onOpen} className={clsx('relative block aspect-[4/3] w-full', m.embedUrl ? 'cursor-pointer' : 'cursor-zoom-in')} title={m.embedUrl ? t('Воспроизвести') : undefined}>
         <img src={m.url} alt={m.caption ?? ''} className="size-full object-cover" draggable={false} />
         {m.embedUrl && (
           <span className="absolute inset-0 grid place-items-center">
@@ -108,19 +110,19 @@ function Tile({
         <span className="min-w-0 flex-1 truncate text-xs text-dim">{m.caption ?? '—'}</span>
         <SourceBadge source={m.source} />
       </figcaption>
-      {m.album && <span className="absolute left-2 top-2 rounded bg-bg/70 px-1.5 font-mono text-[10px] text-mint">{m.album}</span>}
+      {m.album && <span className="absolute left-2 top-2 rounded bg-bg/70 px-1.5 font-mono text-[10px] text-mint">{albumLabel(m.album)}</span>}
       {editable && (
         <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
-          <button onClick={onCover} title="Сделать обложкой" className={clsx('grid size-7 cursor-pointer place-items-center rounded bg-bg/70', isCover ? 'text-mint' : 'text-dim hover:text-mint')}>
+          <button onClick={onCover} title={t('Сделать обложкой')} className={clsx('grid size-7 cursor-pointer place-items-center rounded bg-bg/70', isCover ? 'text-mint' : 'text-dim hover:text-mint')}>
             <Star size={13} fill={isCover ? 'currentColor' : 'none'} />
           </button>
-          <button onClick={onEdit} title="Править" className="grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-mint">
+          <button onClick={onEdit} title={t('Править')} className="grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-mint">
             <Pencil size={13} />
           </button>
-          <span {...attributes} {...listeners} title="Перетащить" className="grid size-7 cursor-grab place-items-center rounded bg-bg/70 text-dim hover:text-mint">
+          <span {...attributes} {...listeners} title={t('Перетащить')} className="grid size-7 cursor-grab place-items-center rounded bg-bg/70 text-dim hover:text-mint">
             <GripVertical size={13} />
           </span>
-          <button onClick={onRemove} title="Удалить" className={`${DELETE_GAP} grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-danger`}>
+          <button onClick={onRemove} title={t('Удалить')} className={`${DELETE_GAP} grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-danger`}>
             <Trash2 size={13} />
           </button>
         </div>

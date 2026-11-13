@@ -16,7 +16,8 @@
     "pages-sites-update": "npm run pages-sites-update -w @ft/server",
     "pages-email-update": "npm run pages-email-update -w @ft/server",
     "login-link": "npm run login-link -w @ft/server --",
-    "google-login": "npm run google-login -w @ft/server --"
+    "google-login": "npm run google-login -w @ft/server --",
+    "i18n-check": "node apps/web/scripts/i18n-check.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

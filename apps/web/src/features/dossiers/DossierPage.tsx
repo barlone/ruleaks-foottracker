@@ -8,7 +8,7 @@ import {
   ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, MailSearch, Maximize2, NotebookPen, Pencil, Plus, Trash2, X,
 } from 'lucide-react';
 import {
-  ATTR_PAIRS, ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, pairAllowed, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND, fmtBytes,
+  ATTR_PAIRS, ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, pairAllowed, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND,
   POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection,
   parseEmail, stripHighlight,
 } from '@ft/shared';
@@ -28,13 +28,14 @@ import { driveImageUrl, drivePreviewUrl, googleDriveId } from '../../lib/driveLi
 import { DriveHelpButton } from '../../components/DriveHelp.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
-import { fmtDate } from '../../lib/format.ts';
+import { fmtDate, fmtBytes } from '../../lib/format.ts';
 import { guessPlatform } from '../../lib/platform.ts';
+import { t, tx } from '../../lib/i18n.ts';
 import { toast } from '../../lib/toast.ts';
 import { MediaGallery } from './MediaGallery.tsx';
 import { CoverBox } from './PhotosDialog.tsx';
 import { PostsCard } from './PostsCard.tsx';
-import { PHOTO_ALBUM, PLATFORM_LABELS } from './labels.ts';
+import { PHOTO_ALBUM, PLATFORM_LABELS, attrLabelOf, platformLabel } from './labels.ts';
 import { RelationsCard } from './RelationsCard.tsx';
 
 type Of<T extends DossierItem['type']> = Extract<DossierItem, { type: T }>;
@@ -125,7 +126,7 @@ export function DossierPage() {
       {/* «Все досье» и кнопки (экспорт, доступ, удаление) — одной строкой над колонками. */}
       <div className="flex min-h-9 items-center justify-between gap-4">
         <Link to="/dossiers" className="inline-flex items-center gap-1.5 font-mono text-xs text-mute hover:text-mint">
-          <ArrowLeft size={13} /> все досье
+          <ArrowLeft size={13} /> {t('все досье')}
         </Link>
         <ObjectActions
           kind="dossier"
@@ -147,10 +148,10 @@ export function DossierPage() {
             <CoverBox dossierId={d.id} kind={d.kind} coverUrl={d.coverMediaUrl} photos={photos} editable={editable} />
             <div className="min-w-0 flex-1 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Tag tone="dim">{d.kind === 'group' ? 'группа лиц' : 'персона'}</Tag>
+                <Tag tone="dim">{d.kind === 'group' ? t('группа лиц') : t('персона')}</Tag>
                 <VisibilityTag v={d.visibility} />
-                {d.role !== 'owner' && <Tag>{d.role === 'editor' ? 'вы можете править' : 'только чтение'}</Tag>}
-                <span className="font-mono text-[11px] text-mute">v{d.version} · изменено {fmtDate(d.updatedAt, true)}</span>
+                {d.role !== 'owner' && <Tag>{d.role === 'editor' ? t('вы можете править') : t('только чтение')}</Tag>}
+                <span className="font-mono text-[11px] text-mute">v{d.version} · {t('изменено {date}', { date: fmtDate(d.updatedAt, true) })}</span>
               </div>
               {editTitle !== null ? (
                 <form
@@ -185,16 +186,16 @@ export function DossierPage() {
           </header>
 
           <Card compact
-            title="Сводка"
+            title={t('Сводка')}
             actions={editable && editSummary === null && (
-              <Button size="sm" variant="ghost" onClick={() => setEditSummary(d.summaryMd)}><Pencil size={13} /> Править</Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditSummary(d.summaryMd)}><Pencil size={13} /> {t('Править')}</Button>
             )}
           >
             {editSummary !== null ? (
               <div className="space-y-3">
                 <MarkdownEditor value={editSummary} onChange={setEditSummary} autoFocus />
                 <div className="flex justify-end gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setEditSummary(null)}>Отмена</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditSummary(null)}>{t('Отмена')}</Button>
                   <Button
                     variant="primary"
                     size="sm"
@@ -203,7 +204,7 @@ export function DossierPage() {
                       setEditSummary(null);
                     }}
                   >
-                    Сохранить
+                    {t('Сохранить')}
                   </Button>
                 </div>
               </div>
@@ -213,7 +214,7 @@ export function DossierPage() {
           </Card>
 
           {d.kind === 'group' && (
-            <Card compact title="Участники группы">
+            <Card compact title={t('Участники группы')}>
               <MembersEditor
                 memberIds={d.memberIds}
                 members={d.members}
@@ -231,13 +232,13 @@ export function DossierPage() {
           )}
 
           <Card compact
-            title={<><Camera size={13} /> Медиа</>}
+            title={<><Camera size={13} /> {t('Медиа')}</>}
             actions={(
               <span className="flex items-center gap-2">
                 {media.length > 0 && (
-                  <span className="font-mono text-[10px] text-mute" title="Объём встроенных медиафайлов досье">{fmtBytes(dossierMediaBytes(media))} / {fmtBytes(DOSSIER_MEDIA_MAX_BYTES)}</span>
+                  <span className="font-mono text-[10px] text-mute" title={t('Объём встроенных медиафайлов досье')}>{fmtBytes(dossierMediaBytes(media))} / {fmtBytes(DOSSIER_MEDIA_MAX_BYTES)}</span>
                 )}
-                {editable && <Button size="sm" variant="ghost" onClick={() => setAdding('media')}><Plus size={13} /> Добавить</Button>}
+                {editable && <Button size="sm" variant="ghost" onClick={() => setAdding('media')}><Plus size={13} /> {t('Добавить')}</Button>}
               </span>
             )}
           >
@@ -252,7 +253,7 @@ export function DossierPage() {
                 onEdit={setEditingMedia}
               />
             ) : (
-              <Empty>Медиафайлов нет</Empty>
+              <Empty>{t('Медиафайлов нет')}</Empty>
             )}
           </Card>
 
@@ -266,11 +267,11 @@ export function DossierPage() {
           )}
 
           <Card compact
-            title={<><NotebookPen size={13} /> Заметки</>}
-            actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('note')}><Plus size={13} /> Заметка</Button>}
+            title={<><NotebookPen size={13} /> {t('Заметки')}</>}
+            actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('note')}><Plus size={13} /> {t('Заметка')}</Button>}
           >
             <div className="space-y-[0.8rem]">
-              {items('note').length === 0 && <Empty>Заметок нет</Empty>}
+              {items('note').length === 0 && <Empty>{t('Заметок нет')}</Empty>}
               <NotesList
                 notes={items('note')}
                 editable={editable}
@@ -284,10 +285,10 @@ export function DossierPage() {
 
         <div className="space-y-[1.2rem]">
           <Card compact
-            title="Атрибуты"
-            actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('attribute')}><Plus size={13} /> Добавить</Button>}
+            title={t('Атрибуты')}
+            actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('attribute')}><Plus size={13} /> {t('Добавить')}</Button>}
           >
-            {items('attribute').length === 0 && <Empty>Пусто</Empty>}
+            {items('attribute').length === 0 && <Empty>{t('Пусто')}</Empty>}
             <AttributesList
               items={items('attribute')}
               editable={editable}
@@ -302,26 +303,26 @@ export function DossierPage() {
           {d.kind === 'person' && <RelationsCard dossierId={d.id} editable={editable} />}
 
           <Card compact
-            title={<><Link2 size={13} /> Соцсети и ссылки</>}
-            actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('link')}><Plus size={13} /> Добавить</Button>}
+            title={<><Link2 size={13} /> {t('Соцсети и ссылки')}</>}
+            actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('link')}><Plus size={13} /> {t('Добавить')}</Button>}
           >
-            {items('link').length === 0 && <Empty>Пусто</Empty>}
+            {items('link').length === 0 && <Empty>{t('Пусто')}</Empty>}
             <div className="space-y-1.5">
               {items('link').map((l) => (
                 <div key={l.id} className="group flex items-center gap-2.5 rounded-lg border border-line-soft px-3 py-2">
-                  <Tag tone="dim" className="w-20 justify-center">{PLATFORM_LABELS[l.platform]}</Tag>
+                  <Tag tone="dim" className="w-20 justify-center">{platformLabel(l.platform)}</Tag>
                   <div className="min-w-0 flex-1">
                     <a href={l.url} target="_blank" rel="noreferrer noopener" className="block truncate text-sm hover:text-mint">
                       {l.title || l.url}
                     </a>
                     {l.source?.ref && <div className="truncate font-mono text-[10px] text-mute" title={l.source.ref}>{l.source.ref}</div>}
                   </div>
-                  <a href={l.url} target="_blank" rel="noreferrer noopener" title="Открыть в новой вкладке" className="text-mute hover:text-mint">
+                  <a href={l.url} target="_blank" rel="noreferrer noopener" title={t('Открыть в новой вкладке')} className="text-mute hover:text-mint">
                     <ExternalLink size={12} />
                   </a>
                   {editable && (
                     <span className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                      <button type="button" onClick={() => setEditingLink(l)} title="Править" className="cursor-pointer text-mute hover:text-mint"><Pencil size={12} /></button>
+                      <button type="button" onClick={() => setEditingLink(l)} title={t('Править')} className="cursor-pointer text-mute hover:text-mint"><Pencil size={12} /></button>
                       <DeleteBtn onClick={() => removeItem.mutate({ id, itemId: l.id })} />
                     </span>
                   )}
@@ -330,15 +331,15 @@ export function DossierPage() {
             </div>
           </Card>
 
-          <Card compact title={<><FileSearch size={13} /> Снимки поиска</>}>
-            {items('snapshot').length === 0 && <Empty>Добавляются со страницы «Поиск»</Empty>}
+          <Card compact title={<><FileSearch size={13} /> {t('Снимки поиска')}</>}>
+            {items('snapshot').length === 0 && <Empty>{t('Добавляются со страницы «Поиск»')}</Empty>}
             <div className="space-y-1.5">
               {items('snapshot').map((s) => (
                 <div key={s.id} className="group flex items-center gap-2 rounded-lg border border-line-soft px-3 py-2">
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-mono text-sm">{s.query}</div>
                     <div className="font-mono text-[10px] text-mute">
-                      {kindLabel(s.section, s.kind)} {s.deep && '· deep'} · {s.summary} · {fmtDate(s.createdAt)}
+                      {t(kindLabel(s.section, s.kind))} {s.deep && '· deep'} · {tx(s.summary)} · {fmtDate(s.createdAt)}
                     </div>
                   </div>
                   <RepeatSearchLink section={s.section} kind={s.kind} query={s.query} deep={s.deep} />
@@ -509,7 +510,7 @@ function AttrRow({ a, child, pair, mode, editable, linkable, onEdit, onRemove, o
       tabIndex={target ? 0 : undefined}
       onClick={target ? onPickParent : undefined}
       onKeyDown={target ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPickParent()) : undefined}
-      title={target ? 'Сделать родительским атрибутом' : undefined}
+      title={target ? t('Сделать родительским атрибутом') : undefined}
       className={clsx(
         'group grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 py-2',
         isDragging && 'relative z-10 bg-panel',
@@ -523,19 +524,19 @@ function AttrRow({ a, child, pair, mode, editable, linkable, onEdit, onRemove, o
       <span className="flex items-center gap-1 pt-0.5 font-mono text-[10px] uppercase tracking-wider text-mute">
         {child && (
           editable && mode === 'normal' ? (
-            <button type="button" onClick={onUnlink} title="Отвязать от родительского атрибута" className="-ml-[1.125rem] inline-flex cursor-pointer items-center text-mint/70 transition hover:text-danger">
+            <button type="button" onClick={onUnlink} title={t('Отвязать от родительского атрибута')} className="-ml-[1.125rem] inline-flex cursor-pointer items-center text-mint/70 transition hover:text-danger">
               <Link2 size={12} />
             </button>
           ) : (
             <Link2 size={12} className="-ml-[1.125rem] text-mint/70" />
           )
         )}
-        <span className="truncate">{a.label}</span>
+        <span className="truncate">{attrLabelOf(a)}</span>
       </span>
       <div className="whitespace-pre-line break-words font-mono text-sm">{attrDisplayValue(a.key, a.value)}</div>
       <div className="flex items-center gap-1.5">
         {editable && mode === 'normal' && (
-          <span ref={setActivatorNodeRef} {...attributes} {...listeners} title="Перетащить" className="inline-flex cursor-grab items-center text-mute transition hover:text-mint active:cursor-grabbing">
+          <span ref={setActivatorNodeRef} {...attributes} {...listeners} title={t('Перетащить')} className="inline-flex cursor-grab items-center text-mute transition hover:text-mint active:cursor-grabbing">
             <DragDots />
           </span>
         )}
@@ -544,25 +545,25 @@ function AttrRow({ a, child, pair, mode, editable, linkable, onEdit, onRemove, o
       <div className="flex flex-wrap items-center gap-2">
         {mode === 'source' ? (
           <span className="flex items-center gap-2 font-mono text-[11px] text-mint">
-            Выберите родительский атрибут
-            <button type="button" onClick={onCancelLink} title="Отменить связывание (Esc)" className="inline-flex cursor-pointer items-center text-mute transition hover:text-danger"><X size={14} /></button>
+            {t('Выберите родительский атрибут')}
+            <button type="button" onClick={onCancelLink} title={t('Отменить связывание (Esc)')} className="inline-flex cursor-pointer items-center text-mute transition hover:text-danger"><X size={14} /></button>
           </span>
         ) : (
           <>
             {a.key === 'emails' && <ResearchEmailLink value={a.value} dossierId={dossierId} />}
             <ValueActions field={a.key} value={a.value} />
-            <CopyButton value={attrCopyValue(a.key, a.value)} title={`Скопировать: ${a.label}`} />
+            <CopyButton value={attrCopyValue(a.key, a.value)} title={t('Скопировать: {name}', { name: attrLabelOf(a) })} />
             {kind && (
-              <Link to="/search" search={{ kind, q: a.value, from: dossierId }} title="Искать" className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
+              <Link to="/search" search={{ kind, q: a.value, from: dossierId }} title={t('Искать')} className="text-mute opacity-0 transition hover:text-mint group-hover:opacity-100">
                 <FileSearch size={14} />
               </Link>
             )}
             {editable && mode === 'normal' && (
               <>
                 {linkable && (
-                  <button type="button" onClick={onStartLink} title={child ? 'Привязать к другому атрибуту' : 'Привязать к родительскому атрибуту'} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Link2 size={14} /></button>
+                  <button type="button" onClick={onStartLink} title={child ? t('Привязать к другому атрибуту') : t('Привязать к родительскому атрибуту')} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Link2 size={14} /></button>
                 )}
-                <button type="button" onClick={onEdit} title="Править" className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Pencil size={14} /></button>
+                <button type="button" onClick={onEdit} title={t('Править')} className="cursor-pointer text-mute opacity-0 transition hover:text-mint group-hover:opacity-100"><Pencil size={14} /></button>
                 <ConfirmDeleteBtn onConfirm={onRemove} />
               </>
             )}
@@ -586,13 +587,13 @@ function PairActions({ parent, child }: { parent: Of<'attribute'>; child: Of<'at
   const searchable = parent.key === 'names' && child.key === 'bdays';
   return (
     <div className="col-start-2 -ml-[1.125rem] flex items-center gap-2 pt-1">
-      <CopyButton value={combined} title={`Скопировать: ${parent.label} + ${child.label}`} />
+      <CopyButton value={combined} title={t('Скопировать: {name}', { name: `${attrLabelOf(parent)} + ${attrLabelOf(child)}` })} />
       {searchable && (
-        <Link to="/search" search={{ kind: 'name', q: combined, from: dossierId }} title="Искать по ФИО и дате рождения" className="text-mute transition hover:text-mint">
+        <Link to="/search" search={{ kind: 'name', q: combined, from: dossierId }} title={t('Искать по ФИО и дате рождения')} className="text-mute transition hover:text-mint">
           <FileSearch size={14} />
         </Link>
       )}
-      <span className="font-mono text-[10px] uppercase tracking-wider text-mute">{parent.label} + {child.label}</span>
+      <span className="font-mono text-[10px] uppercase tracking-wider text-mute">{attrLabelOf(parent)} + {attrLabelOf(child)}</span>
     </div>
   );
 }
@@ -614,10 +615,11 @@ function RepeatSearchLink({ section, kind, query, deep }: { section: SearchSecti
   const { id: dossierId } = useParams({ from: '/dossiers/$id' });
   const cls = 'text-mute hover:text-mint';
   const icon = <FileSearch size={14} />;
-  if (section === 'tg') return <Link to="/search/telegram" search={{ mode: kind, q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
-  if (section === 'fuzzy') return <Link to="/search/fuzzy" search={{ mode: kind, q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
-  if (section === 'geo') return <Link to="/search/geo" search={{ q: query }} title="Повторить поиск" className={cls}>{icon}</Link>;
-  return <Link to="/search" search={{ kind, q: query, deep, from: dossierId }} title="Повторить поиск" className={cls}>{icon}</Link>;
+  const title = t('Повторить поиск');
+  if (section === 'tg') return <Link to="/search/telegram" search={{ mode: kind, q: query }} title={title} className={cls}>{icon}</Link>;
+  if (section === 'fuzzy') return <Link to="/search/fuzzy" search={{ mode: kind, q: query }} title={title} className={cls}>{icon}</Link>;
+  if (section === 'geo') return <Link to="/search/geo" search={{ q: query }} title={title} className={cls}>{icon}</Link>;
+  return <Link to="/search" search={{ kind, q: query, deep, from: dossierId }} title={title} className={cls}>{icon}</Link>;
 }
 
 /** Заметка: свёрнутой остаётся строка с датой и началом текста; карандаш открывает редактор на месте. */
@@ -695,7 +697,7 @@ function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
         {/* В узкой колонке места мало: дата и превью усекаются, значки справа — нет. */}
         <span className="flex min-w-0 items-center gap-3">
           {editable && ownCollapsed && (
-            <span ref={setActivatorNodeRef} {...attributes} {...listeners} title="Перетащить" className="inline-flex cursor-grab items-center text-mute transition hover:text-mint active:cursor-grabbing">
+            <span ref={setActivatorNodeRef} {...attributes} {...listeners} title={t('Перетащить')} className="inline-flex cursor-grab items-center text-mute transition hover:text-mint active:cursor-grabbing">
               <DragDots />
             </span>
           )}
@@ -707,7 +709,7 @@ function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
           <button
             type="button"
             onClick={() => setCollapsed((v) => !v)}
-            title={ownCollapsed ? 'Развернуть' : 'Свернуть'}
+            title={ownCollapsed ? t('Развернуть') : t('Свернуть')}
             className="cursor-pointer text-mute hover:text-mint"
           >
             {ownCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
@@ -719,7 +721,7 @@ function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
                 setCollapsed(false);
                 setDraft(note.markdown);
               }}
-              title="Править"
+              title={t('Править')}
               className="cursor-pointer text-mute hover:text-mint"
             >
               <Pencil size={13} />
@@ -733,8 +735,8 @@ function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
           <MarkdownEditor value={draft} onChange={setDraft} autoFocus className="min-h-32" />
           {error && <WarnNote>{error}</WarnNote>}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setDraft(null)} disabled={saving}>Отмена</Button>
-            <Button variant="primary" size="sm" onClick={save} disabled={saving || draft === note.markdown}>Сохранить</Button>
+            <Button variant="ghost" size="sm" onClick={() => setDraft(null)} disabled={saving}>{t('Отмена')}</Button>
+            <Button variant="primary" size="sm" onClick={save} disabled={saving || draft === note.markdown}>{t('Сохранить')}</Button>
           </div>
         </div>
       ) : (
@@ -746,7 +748,7 @@ function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
 
 function DeleteBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button onClick={onClick} title="Удалить" className={`${DELETE_GAP} cursor-pointer text-mute hover:text-danger`}>
+    <button onClick={onClick} title={t('Удалить')} className={`${DELETE_GAP} cursor-pointer text-mute hover:text-danger`}>
       <Trash2 size={13} />
     </button>
   );
@@ -761,7 +763,7 @@ function ResearchEmailLink({ value, dossierId }: { value: string; dossierId: str
   const email = parseEmail(value)?.email;
   if (!cfg.data || !email) return null;
   return (
-    <Link to="/search/email" search={{ q: email, from: dossierId }} title="Исследовать email" aria-label="Исследовать email" className="shrink-0 text-mute transition hover:text-mint">
+    <Link to="/search/email" search={{ q: email, from: dossierId }} title={t('Исследовать email')} aria-label={t('Исследовать email')} className="shrink-0 text-mute transition hover:text-mint">
       <MailSearch size={14} />
     </Link>
   );
@@ -772,7 +774,7 @@ function BackToGroup({ id }: { id: string }) {
   const g = trpc.dossiers.get.useQuery({ id }, { select: (x) => x.title, staleTime: 60_000 });
   return (
     <Link to="/dossiers/$id" params={{ id }} className="inline-flex items-center gap-1.5 font-mono text-xs text-mute transition hover:text-mint">
-      <ArrowLeft size={13} /> в группу{g.data ? ` «${g.data}»` : ''}
+      <ArrowLeft size={13} /> {g.data ? t('в группу «{title}»', { title: g.data }) : t('в группу')}
     </Link>
   );
 }
@@ -797,7 +799,7 @@ function MembersEditor({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3">
-        {members.length === 0 && <span className="font-mono text-xs text-mute">Участников нет</span>}
+        {members.length === 0 && <span className="font-mono text-xs text-mute">{t('Участников нет')}</span>}
         {members.map((m) => (
           <div key={m.id} className="group flex items-center gap-2 rounded-full border border-line py-1 pl-1 pr-3">
             <span className="size-7 overflow-hidden rounded-full bg-bg-soft">{m.coverMediaUrl && <img src={m.coverMediaUrl} alt="" className="size-full object-cover" />}</span>
@@ -810,16 +812,16 @@ function MembersEditor({
         <div className="flex flex-wrap items-center gap-2">
           {candidates.length > 0 && (
             <Select value="" onChange={(e) => e.target.value && onChange([...memberIds, e.target.value])}>
-              <option value="">+ добавить участника…</option>
+              <option value="">{t('+ добавить участника…')}</option>
               {candidates.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
             </Select>
           )}
-          <Button size="sm" variant="ghost" onClick={() => { setTitle(''); setError(null); setCreating(true); }} title="Создать досье персоны и включить его в группу">
-            <Plus size={13} /> Новое досье
+          <Button size="sm" variant="ghost" onClick={() => { setTitle(''); setError(null); setCreating(true); }} title={t('Создать досье персоны и включить его в группу')}>
+            <Plus size={13} /> {t('Новое досье')}
           </Button>
         </div>
       )}
-      <Dialog open={creating} onOpenChange={(v) => !busy && setCreating(v)} title="Новое досье в группе">
+      <Dialog open={creating} onOpenChange={(v) => !busy && setCreating(v)} title={t('Новое досье в группе')}>
         <form
           className="space-y-4"
           onSubmit={(e) => {
@@ -833,12 +835,12 @@ function MembersEditor({
               .finally(() => setBusy(false));
           }}
         >
-          <Field label="Название" hint="Досье персоны будет создано, включено в эту группу и сразу открыто.">
-            <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Фамилия Имя Отчество" />
+          <Field label={t('Название')} hint={t('Досье персоны будет создано, включено в эту группу и сразу открыто.')}>
+            <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('Фамилия Имя Отчество')} />
           </Field>
           {error && <div className="font-mono text-xs text-danger">{error}</div>}
           <div className="flex justify-end">
-            <Button type="submit" variant="primary" disabled={!title.trim() || busy}>Создать</Button>
+            <Button type="submit" variant="primary" disabled={!title.trim() || busy}>{t('Создать')}</Button>
           </div>
         </form>
       </Dialog>
@@ -849,7 +851,7 @@ function MembersEditor({
 /** Правка медиа: подпись, альбом, источник и само изображение — новым файлом или ссылкой (в том числе Гугл-диска). */
 function EditMediaDialog({ media, onClose, onSave }: { media: Of<'media'> | null; onClose: () => void; onSave: (item: Of<'media'>) => Promise<void> }) {
   return (
-    <Dialog open={!!media} onOpenChange={(v) => !v && onClose()} title="Медиафайл">
+    <Dialog open={!!media} onOpenChange={(v) => !v && onClose()} title={t('Медиафайл')}>
       {media && <EditMediaForm key={media.id} media={media} onSave={onSave} />}
     </Dialog>
   );
@@ -874,7 +876,7 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
   function onFile(f: File | undefined) {
     if (!f) return;
     if (f.size > MEDIA_FILE_MAX_BYTES) {
-      setError(`Файл ${fmtBytes(f.size)} — больше ${fmtBytes(MEDIA_FILE_MAX_BYTES)}. Большие файлы держите на своём Гугл-диске и вставьте ссылку`);
+      setError(t('Файл {size} — больше {max}. Большие файлы держите на своём Гугл-диске и вставьте ссылку', { size: fmtBytes(f.size), max: fmtBytes(MEDIA_FILE_MAX_BYTES) }));
       return;
     }
     setError(null);
@@ -913,47 +915,47 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
         <img src={preview} alt="" className="max-h-48 min-w-0 rounded-lg border border-line" />
         {!replacing && (
           <button type="button" onClick={() => setReplacing(true)} className="shrink-0 cursor-pointer font-mono text-xs text-mute transition hover:text-mint">
-            заменить изображение
+            {t('заменить изображение')}
           </button>
         )}
       </div>
       {replacing && (
         <div className="space-y-3 rounded-xl border border-line-soft p-3">
-          <Field label="Новый файл" hint={`До ${fmtBytes(MEDIA_FILE_MAX_BYTES)}. Что больше — на свой Гугл-диск, сюда ссылку.`}>
+          <Field label={t('Новый файл')} hint={t('До {max}. Что больше — на свой Гугл-диск, сюда ссылку.', { max: fmtBytes(MEDIA_FILE_MAX_BYTES) })}>
             <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
           </Field>
           <Field
-            label="…или URL изображения"
+            label={t('…или URL изображения')}
             hint={(
               <>
-                {driveId ? 'Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»' : 'Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)'}
+                {driveId ? t('Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»') : t('Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)')}
                 {' '}
                 <DriveHelpButton />
               </>
             )}
           >
-            <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder="https://… или https://drive.google.com/file/d/…" />
+            <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder={t('https://… или https://drive.google.com/file/d/…')} />
           </Field>
           {driveId && (
-            <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: 'Изображение' }, { value: 'video', label: 'Видео' }]} />
+            <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: t('Изображение') }, { value: 'video', label: t('Видео') }]} />
           )}
           <button
             type="button"
             onClick={() => { setValue(''); setReplacing(false); setError(null); }}
             className="cursor-pointer font-mono text-xs text-mute transition hover:text-mint"
           >
-            оставить прежнее
+            {t('оставить прежнее')}
           </button>
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Подпись"><Input autoFocus value={caption} onChange={(e) => setCaption(e.target.value)} /></Field>
-        <Field label="Альбом"><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder="Соцсети, Наблюдение…" /></Field>
+        <Field label={t('Подпись')}><Input autoFocus value={caption} onChange={(e) => setCaption(e.target.value)} /></Field>
+        <Field label={t('Альбом')}><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder={t('Соцсети, Наблюдение…')} /></Field>
       </div>
       <SourceFields value={source} onChange={setSource} />
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
       <div className="flex justify-end">
-        <Button type="submit" variant="primary" disabled={saving}>Сохранить</Button>
+        <Button type="submit" variant="primary" disabled={saving}>{t('Сохранить')}</Button>
       </div>
     </form>
   );
@@ -961,12 +963,12 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
 
 /** Список типов атрибута; keep — ключ правящегося элемента: поле шлюза вне списка ручного ввода остаётся выбираемым. */
 function AttrTypeSelect({ value, onChange, keep }: { value: string; onChange: (key: string) => void; keep?: string }) {
-  const extra = keep && !ATTR_TYPES.some((t) => t.key === keep) ? attrTypeLabel(keep) : undefined;
+  const extra = keep && !ATTR_TYPES.some((x) => x.key === keep) ? attrTypeLabel(keep) : undefined;
   return (
     <Select value={value} onChange={(e) => onChange(e.target.value)} className="w-full">
-      {ATTR_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-      {extra && <option value={keep}>{extra}</option>}
-      <option value="custom">Свой…</option>
+      {ATTR_TYPES.map((x) => <option key={x.key} value={x.key}>{t(x.label)}</option>)}
+      {extra && <option value={keep}>{t(extra)}</option>}
+      <option value="custom">{t('Свой…')}</option>
     </Select>
   );
 }
@@ -975,15 +977,15 @@ function AttrTypeSelect({ value, onChange, keep }: { value: string; onChange: (k
 function AttrValueField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
   return (
-    <Field label="Значение">
+    <Field label={t('Значение')}>
       <div className="flex items-center gap-2">
         <Input autoFocus value={value} onChange={(e) => onChange(e.target.value)} className="font-mono" />
-        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)} title="Редактор для длинного значения"><Maximize2 size={14} /></Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)} title={t('Редактор для длинного значения')}><Maximize2 size={14} /></Button>
       </div>
-      <Dialog open={open} onOpenChange={setOpen} title="Значение" stacked>
+      <Dialog open={open} onOpenChange={setOpen} title={t('Значение')} stacked>
         <Textarea autoFocus rows={10} value={value} onChange={(e) => onChange(e.target.value)} className="font-mono" />
         <div className="mt-4 flex justify-end">
-          <Button type="button" variant="primary" onClick={() => setOpen(false)}>Готово</Button>
+          <Button type="button" variant="primary" onClick={() => setOpen(false)}>{t('Готово')}</Button>
         </div>
       </Dialog>
     </Field>
@@ -992,7 +994,7 @@ function AttrValueField({ value, onChange }: { value: string; onChange: (v: stri
 
 function EditAttrDialog({ attr, existing, onClose, onSave }: { attr: Of<'attribute'> | null; existing: DossierItem[]; onClose: () => void; onSave: (item: Of<'attribute'>) => Promise<void> }) {
   return (
-    <Dialog open={!!attr} onOpenChange={(v) => !v && onClose()} title="Атрибут">
+    <Dialog open={!!attr} onOpenChange={(v) => !v && onClose()} title={t('Атрибут')}>
       {attr && <EditAttrForm key={attr.id} attr={attr} existing={existing} onSave={onSave} />}
     </Dialog>
   );
@@ -1038,17 +1040,17 @@ function EditAttrForm({ attr, existing, onSave }: { attr: Of<'attribute'>; exist
       }}
     >
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Тип">
+        <Field label={t('Тип')}>
           <AttrTypeSelect value={key} onChange={setKey} keep={attr.key} />
         </Field>
-        {key === 'custom' && <Field label="Название"><Input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>}
+        {key === 'custom' && <Field label={t('Название')}><Input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>}
       </div>
       <AttrValueField value={value} onChange={setValue} />
       <SourceFields value={source} onChange={setSource} />
-      {duplicate && <WarnNote>Уже есть в досье: {duplicate.type === 'attribute' ? `${duplicate.label} — ${attrDisplayValue(duplicate.key, duplicate.value)}` : ''}</WarnNote>}
+      {duplicate && <WarnNote>{t('Уже есть в досье: {item}', { item: duplicate.type === 'attribute' ? `${attrLabelOf(duplicate)} — ${attrDisplayValue(duplicate.key, duplicate.value)}` : '' })}</WarnNote>}
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
       <div className="flex justify-end">
-        <Button type="submit" variant="primary" disabled={saving || !ready || !!duplicate}>Сохранить</Button>
+        <Button type="submit" variant="primary" disabled={saving || !ready || !!duplicate}>{t('Сохранить')}</Button>
       </div>
     </form>
   );
@@ -1056,7 +1058,7 @@ function EditAttrForm({ attr, existing, onSave }: { attr: Of<'attribute'>; exist
 
 function EditLinkDialog({ link, existing, onClose, onSave }: { link: Of<'link'> | null; existing: DossierItem[]; onClose: () => void; onSave: (item: Of<'link'>) => Promise<void> }) {
   return (
-    <Dialog open={!!link} onOpenChange={(v) => !v && onClose()} title="Ссылка на профиль">
+    <Dialog open={!!link} onOpenChange={(v) => !v && onClose()} title={t('Ссылка на профиль')}>
       {link && <EditLinkForm key={link.id} link={link} existing={existing} onSave={onSave} />}
     </Dialog>
   );
@@ -1095,22 +1097,22 @@ function EditLinkForm({ link, existing, onSave }: { link: Of<'link'>; existing: 
         void submit();
       }}
     >
-      <Field label="URL профиля" hint={url ? `Платформа: ${PLATFORM_LABELS[guessPlatform(url)]}` : undefined}>
+      <Field label={t('URL профиля')} hint={url ? t('Платформа: {name}', { name: platformLabel(guessPlatform(url)) }) : undefined}>
         <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://vk.com/id…" />
       </Field>
-      <Field label="Подпись"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+      <Field label={t('Подпись')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
       <SourceFields value={source} onChange={setSource} />
-      {duplicate && <WarnNote>Уже есть в досье: {duplicate.type === 'link' ? duplicate.url : ''}</WarnNote>}
+      {duplicate && <WarnNote>{t('Уже есть в досье: {item}', { item: duplicate.type === 'link' ? duplicate.url : '' })}</WarnNote>}
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
       <div className="flex justify-end">
-        <Button type="submit" variant="primary" disabled={saving || !url || !!duplicate}>Сохранить</Button>
+        <Button type="submit" variant="primary" disabled={saving || !url || !!duplicate}>{t('Сохранить')}</Button>
       </div>
     </form>
   );
 }
 
 function AddItemDialog({ kind, existing, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'media' | 'note' | 'post'; existing: DossierItem[]; onClose: () => void; onAdd: (i: NewItem) => Promise<void> }) {
-  const titles = { attribute: 'Новый атрибут', link: 'Ссылка на профиль', media: 'Медиафайл', note: 'Заметка', post: 'Пост или реакция' };
+  const titles = { attribute: t('Новый атрибут'), link: t('Ссылка на профиль'), media: t('Медиафайл'), note: t('Заметка'), post: t('Пост или реакция') };
   return (
     <Dialog open={!!kind} onOpenChange={(v) => !v && onClose()} title={kind ? titles[kind] : ''} wide={kind === 'note'}>
       {kind && <AddItemForm key={kind} kind={kind} existing={existing} onAdd={onAdd} />}
@@ -1177,7 +1179,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   function onFile(f: File | undefined) {
     if (!f) return;
     if (f.size > MEDIA_FILE_MAX_BYTES) {
-      setError(`Файл ${fmtBytes(f.size)} — больше ${fmtBytes(MEDIA_FILE_MAX_BYTES)}. Большие файлы держите на своём Гугл-диске и добавьте в досье ссылку («Соцсети и ссылки»)`);
+      setError(t('Файл {size} — больше {max}. Большие файлы держите на своём Гугл-диске и добавьте в досье ссылку («Соцсети и ссылки»)', { size: fmtBytes(f.size), max: fmtBytes(MEDIA_FILE_MAX_BYTES) }));
       return;
     }
     setError(null);
@@ -1192,10 +1194,10 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
     body = (
       <>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Тип">
+          <Field label={t('Тип')}>
             <AttrTypeSelect value={key} onChange={setKey} />
           </Field>
-          {key === 'custom' && <Field label="Название"><Input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>}
+          {key === 'custom' && <Field label={t('Название')}><Input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>}
         </div>
         <AttrValueField value={value} onChange={setValue} />
       </>
@@ -1203,37 +1205,42 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   } else if (kind === 'link') {
     body = (
       <>
-        <Field label="URL профиля" hint={value ? `Платформа: ${PLATFORM_LABELS[guessPlatform(value)]}` : undefined}>
+        <Field label={t('URL профиля')} hint={value ? t('Платформа: {name}', { name: platformLabel(guessPlatform(value)) }) : undefined}>
           <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://vk.com/id…" />
         </Field>
-        <Field label="Подпись"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+        <Field label={t('Подпись')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
       </>
     );
   } else if (kind === 'media') {
     body = (
       <>
-        <Field label="Файл" hint={`До ${fmtBytes(MEDIA_FILE_MAX_BYTES)} на файл и ${fmtBytes(DOSSIER_MEDIA_MAX_BYTES)} на досье (занято ${fmtBytes(dossierMediaBytes(existing))}). Что больше — на свой Гугл-диск, в досье ссылку.`}>
+        <Field
+          label={t('Файл')}
+          hint={t('До {file} на файл и {total} на досье (занято {used}). Что больше — на свой Гугл-диск, в досье ссылку.', {
+            file: fmtBytes(MEDIA_FILE_MAX_BYTES), total: fmtBytes(DOSSIER_MEDIA_MAX_BYTES), used: fmtBytes(dossierMediaBytes(existing)),
+          })}
+        >
           <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
         </Field>
         <Field
-          label="…или URL изображения"
+          label={t('…или URL изображения')}
           hint={(
             <>
-              {driveId ? 'Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»' : 'Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)'}
+              {driveId ? t('Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»') : t('Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)')}
               {' '}
               <DriveHelpButton />
             </>
           )}
         >
-          <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder="https://… или https://drive.google.com/file/d/…" />
+          <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder={t('https://… или https://drive.google.com/file/d/…')} />
         </Field>
         {driveId && (
-          <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: 'Изображение' }, { value: 'video', label: 'Видео' }]} />
+          <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: t('Изображение') }, { value: 'video', label: t('Видео') }]} />
         )}
         {value && <img src={driveId ? driveImageUrl(driveId) : value} alt="" className="max-h-48 rounded-lg border border-line" />}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Подпись"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-          <Field label="Альбом"><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder="Соцсети, Наблюдение…" /></Field>
+          <Field label={t('Подпись')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+          <Field label={t('Альбом')}><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder={t('Соцсети, Наблюдение…')} /></Field>
         </div>
       </>
     );
@@ -1241,23 +1248,23 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
     body = (
       <>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Вид">
+          <Field label={t('Вид')}>
             <Select value={postKind} onChange={(e) => setPostKind(e.target.value as typeof postKind)} className="w-full">
-              {Object.entries(POST_KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {Object.entries(POST_KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
             </Select>
           </Field>
-          <Field label="Площадка">
+          <Field label={t('Площадка')}>
             <Select value={platform} onChange={(e) => setPlatform(e.target.value as typeof platform)} className="w-full">
-              {Object.entries(PLATFORM_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {Object.keys(PLATFORM_LABELS).map((k) => <option key={k} value={k}>{platformLabel(k)}</option>)}
             </Select>
           </Field>
-          <Field label="Где (группа, канал, страница)"><Input value={place} onChange={(e) => setPlace(e.target.value)} /></Field>
-          <Field label="Время (UTC)"><Input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></Field>
+          <Field label={t('Где (группа, канал, страница)')}><Input value={place} onChange={(e) => setPlace(e.target.value)} /></Field>
+          <Field label={t('Время (UTC)')}><Input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></Field>
         </div>
-        <Field label="Ссылка на сообщение"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="https://t.me/…" /></Field>
-        {postKind === 'reaction' && <Field label="Реакция (эмодзи)"><Input value={emoji} onChange={(e) => setEmoji(e.target.value)} className="w-32" /></Field>}
-        {postKind === 'reply' && <Field label="В ответ на"><Textarea rows={2} value={replyTo} onChange={(e) => setReplyTo(e.target.value)} /></Field>}
-        <Field label={postKind === 'reaction' ? 'Текст сообщения, на которое реагировали' : 'Текст'}>
+        <Field label={t('Ссылка на сообщение')}><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="https://t.me/…" /></Field>
+        {postKind === 'reaction' && <Field label={t('Реакция (эмодзи)')}><Input value={emoji} onChange={(e) => setEmoji(e.target.value)} className="w-32" /></Field>}
+        {postKind === 'reply' && <Field label={t('В ответ на')}><Textarea rows={2} value={replyTo} onChange={(e) => setReplyTo(e.target.value)} /></Field>}
+        <Field label={postKind === 'reaction' ? t('Текст сообщения, на которое реагировали') : t('Текст')}>
           <Textarea autoFocus rows={5} value={value} onChange={(e) => setValue(e.target.value)} />
         </Field>
       </>
@@ -1278,12 +1285,14 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
       <SourceFields value={source} onChange={setSource} />
       {duplicate && (
         <WarnNote>
-          Уже есть в досье: {duplicate.type === 'attribute' ? `${duplicate.label} — ${attrDisplayValue(duplicate.key, duplicate.value)}` : duplicate.type === 'link' ? duplicate.url : ''}
+          {t('Уже есть в досье: {item}', {
+            item: duplicate.type === 'attribute' ? `${attrLabelOf(duplicate)} — ${attrDisplayValue(duplicate.key, duplicate.value)}` : duplicate.type === 'link' ? duplicate.url : '',
+          })}
         </WarnNote>
       )}
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
       <div className="flex justify-end">
-        <Button type="submit" variant="primary" disabled={!value.trim() || !!duplicate}>Добавить</Button>
+        <Button type="submit" variant="primary" disabled={!value.trim() || !!duplicate}>{t('Добавить')}</Button>
       </div>
     </form>
   );

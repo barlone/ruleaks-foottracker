@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { trpc } from '../lib/trpc.ts';
 import { errorText } from '../lib/errors.ts';
+import { t } from '../lib/i18n.ts';
 import { Button, Spinner } from './ui.tsx';
 
 // /login?tg=…&ts=…&n=…&sig=… — ссылка входа из бота. Страница один раз отдаёт параметры серверу
@@ -34,25 +35,25 @@ export function LoginLinkPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complete, me.isLoading]);
 
-  const problem = !complete ? 'В ссылке не хватает параметров — запросите в боте новую.' : login.error ? errorText(login.error) : null;
+  const problem = !complete ? t('В ссылке не хватает параметров — запросите в боте новую.') : login.error ? errorText(login.error) : null;
 
   return (
     <div className="bg-grid bg-glow relative flex min-h-full items-center justify-center px-6 py-12">
       <div className="relative z-10 w-full max-w-md animate-fade-up rounded-2xl border border-line bg-gradient-to-b from-mint/[0.05] to-mint/[0.01] p-8 text-center">
         <img src="/logo.png" alt="" className="mx-auto mb-4 size-24 drop-shadow-[0_0_30px_rgba(46,224,172,0.25)]" />
         <h1 className="text-2xl font-extrabold tracking-tight">
-          RuLeaks<span className="text-mint">.Следопыт</span>
+          RuLeaks<span className="text-mint">{t('.Следопыт')}</span>
         </h1>
         {problem ? (
           <>
             <p className="mt-4 font-mono text-sm text-danger">{problem}</p>
             <Link to="/search" className="mt-6 inline-block">
-              <Button variant="primary">На страницу входа</Button>
+              <Button variant="primary">{t('На страницу входа')}</Button>
             </Link>
           </>
         ) : (
           <p className="mt-4 flex items-center justify-center gap-2 font-mono text-sm text-dim">
-            <Spinner /> Вход по ссылке из бота…
+            <Spinner /> {t('Вход по ссылке из бота…')}
           </p>
         )}
       </div>

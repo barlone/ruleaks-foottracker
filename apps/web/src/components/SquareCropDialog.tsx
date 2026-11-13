@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Dialog } from './ui.tsx';
 import { cropSquare } from '../lib/squareImage.ts';
+import { t } from '../lib/i18n.ts';
 
 const VIEW = 320;
 const MAX_ZOOM = 5;
@@ -53,7 +54,7 @@ export function SquareCropDialog({ image, onDone, onCancel }: {
   }
 
   return (
-    <Dialog open={!!image} onOpenChange={(v) => !v && onCancel()} title="Область изображения" width="max-w-md" stacked>
+    <Dialog open={!!image} onOpenChange={(v) => !v && onCancel()} title={t('Область изображения')} width="max-w-md" stacked>
       {image && (
         <div className="space-y-4">
           <div
@@ -83,13 +84,13 @@ export function SquareCropDialog({ image, onDone, onCancel }: {
             />
           </div>
           <label className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-widest text-dim">
-            Масштаб
+            {t('Масштаб')}
             <input type="range" min={1} max={MAX_ZOOM} step={0.01} value={zoom} onChange={(e) => zoomTo(Number(e.target.value))} className="flex-1 accent-mint" />
           </label>
-          <p className="text-xs text-mute">Двигайте картинку мышью, масштаб — колесом или ползунком. В узел попадёт квадрат 128×128.</p>
+          <p className="text-xs text-mute">{t('Двигайте картинку мышью, масштаб — колесом или ползунком. В узел попадёт квадрат 128×128.')}</p>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onCancel}>Отмена</Button>
-            <Button variant="primary" onClick={done}>Готово</Button>
+            <Button variant="ghost" onClick={onCancel}>{t('Отмена')}</Button>
+            <Button variant="primary" onClick={done}>{t('Готово')}</Button>
           </div>
         </div>
       )}

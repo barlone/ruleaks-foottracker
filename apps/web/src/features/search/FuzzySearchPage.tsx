@@ -6,6 +6,7 @@ import { FUZZY_MODES, checkMask, findFuzzyMode, normalizePlateMask, type FuzzyMa
 import { Button, Card, Empty, Input, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
+import { t } from '../../lib/i18n.ts';
 import { AddToDossierDialog } from './AddToDossierDialog.tsx';
 import { ValueRow } from './AttrSearchPage.tsx';
 import { useSelection } from './selection.ts';
@@ -61,8 +62,8 @@ export function FuzzySearchPage() {
   return (
     <SearchLayout
       section="fuzzy"
-      title="Нечёткий поиск"
-      subtitle="Поиск по маске, когда известна только часть значения. Выполняется дольше обычного."
+      title={t('Нечёткий поиск')}
+      subtitle={t('Поиск по маске, когда известна только часть значения. Выполняется дольше обычного.')}
       activeId={jobId}
       onOpen={setJobId}
     >
@@ -77,7 +78,7 @@ export function FuzzySearchPage() {
                 mode === m.id ? 'border-mint/60 bg-mint/10 font-semibold text-mint' : 'border-line-soft text-dim hover:border-line hover:text-text',
               )}
             >
-              {m.label}
+              {t(m.label)}
             </button>
           ))}
         </div>
@@ -95,7 +96,7 @@ export function FuzzySearchPage() {
                 autoFocus
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder={info.placeholder}
+                placeholder={t(info.placeholder)}
                 className="h-12 pl-10 font-mono text-base"
                 disabled={disabled}
               />
@@ -103,23 +104,23 @@ export function FuzzySearchPage() {
             {mode === 'plate' && (
               <div className="relative md:w-56">
                 <Car size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-mint/70" />
-                <Input value={vehicpart} onChange={(e) => setVehicpart(e.target.value)} placeholder="марка: BMW" className="h-12 pl-10" disabled={disabled} />
+                <Input value={vehicpart} onChange={(e) => setVehicpart(e.target.value)} placeholder={t('марка: BMW')} className="h-12 pl-10" disabled={disabled} />
               </div>
             )}
             <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !value.trim() || !!problem || start.isPending}>
-              {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : 'Искать'}
+              {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : t('Искать')}
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-dim">
-            <span>{info.hint}</span>
+            <span>{t(info.hint)}</span>
             {mode === 'plate' && value.trim() && normalized !== value.trim() && <Tag tone="dim">→ {normalized}</Tag>}
-            {problem && <Tag tone="warn">{problem}</Tag>}
+            {problem && <Tag tone="warn">{t(problem)}</Tag>}
             {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
           </div>
         </form>
       </Card>
 
-      {jobId ? <FuzzyJobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} /> : <Empty>Используйте ? для одного неизвестного символа и * для любой последовательности.</Empty>}
+      {jobId ? <FuzzyJobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} /> : <Empty>{t('Используйте ? для одного неизвестного символа и * для любой последовательности.')}</Empty>}
     </SearchLayout>
   );
 }
@@ -137,12 +138,12 @@ function FuzzyJobView({ job, loading, error }: { job: Job | undefined; loading: 
 
   const matchField = job.kind === 'plate' ? 'plates' : 'emails';
   const pivot = (kind: string, q: string) => void navigate({ to: '/search', search: { kind, q } });
-  const summary = `совпадений: ${results.length}`;
+  const summary = t('совпадений: {n}', { n: results.length });
 
   return (
     <>
       <ResultBar summary={summary} selected={selected.size} onAdd={() => setDialog(true)} />
-      {results.length === 0 && <Empty>Ничего не найдено</Empty>}
+      {results.length === 0 && <Empty>{t('Ничего не найдено')}</Empty>}
       <div className="grid gap-3 lg:grid-cols-2">
         {results.map((r, i) => {
           const details = MATCH_FIELDS.some(([f]) => ((r[f] as string[] | undefined) ?? []).length > 0);

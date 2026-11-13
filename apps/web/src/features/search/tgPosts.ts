@@ -1,4 +1,5 @@
 import { tgTimeToIso, type TgComment, type TgGroup, type TgUser } from '@ft/shared';
+import { t } from '../../lib/i18n.ts';
 import type { PendingPost } from './AddToDossierDialog.tsx';
 
 /** Ключ комментария: msg_id уникален только внутри группы. */
@@ -15,7 +16,7 @@ export function commentToPost(c: TgComment, group: TgGroup | undefined, opts: { 
   return {
     kind,
     platform: 'telegram',
-    place: group?.name ?? `группа ${c.grp_id}`,
+    place: group?.name ?? t('группа {id}', { id: c.grp_id }),
     url: c.url || undefined,
     at: tgTimeToIso(opts.reaction ? c.likes?.[0]?.at ?? c.dt : c.dt),
     text: c.text,

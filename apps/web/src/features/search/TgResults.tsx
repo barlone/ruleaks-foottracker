@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router';
 import { WEEK_DAYS, highlightParts, type FtHighlight, type TgComment, type TgGroup, type TgMonthActivity, type TgUser, type TgUserMsgs, type TgWeekActivity } from '@ft/shared';
 import { Card, Empty, Segmented, Tag } from '../../components/ui.tsx';
 import { fmtUtc } from '../../lib/format.ts';
+import { t } from '../../lib/i18n.ts';
 import { ckey } from './tgPosts.ts';
 
 // Отрисовка ответов /tgcmnts/v1/*: комментарии одного пользователя, многих, счётчики активности.
@@ -63,15 +64,15 @@ function Pager({ page, pages, total, from, to, go }: { page: number; pages: numb
   );
   return (
     <nav className="flex flex-wrap items-center gap-1 rounded-xl border border-line-soft bg-panel px-2 py-1.5">
-      {btn(page - 1, <ChevronLeft size={14} />, 'Предыдущая страница')}
+      {btn(page - 1, <ChevronLeft size={14} />, t('Предыдущая страница'))}
       {nums.map((p, i) => (
         <span key={p} className="flex items-center gap-1">
           {i > 0 && p - nums[i - 1]! > 1 && <span className="px-0.5 font-mono text-xs text-mute">…</span>}
           {btn(p, p + 1)}
         </span>
       ))}
-      {btn(page + 1, <ChevronRight size={14} />, 'Следующая страница')}
-      <span className="ml-2 font-mono text-[11px] text-mute">{from + 1}–{to} из {total}</span>
+      {btn(page + 1, <ChevronRight size={14} />, t('Следующая страница'))}
+      <span className="ml-2 font-mono text-[11px] text-mute">{t('{from}–{to} из {total}', { from: from + 1, to, total })}</span>
     </nav>
   );
 }
@@ -100,12 +101,12 @@ export function CommentList({
   const shown = paginate ? filtered.slice(paging.from, paging.to) : filtered;
   const pager = paginate && <Pager {...paging} total={filtered.length} />;
 
-  if (!comments.length) return <Empty>Комментариев не найдено</Empty>;
+  if (!comments.length) return <Empty>{t('Комментариев не найдено')}</Empty>;
   return (
     <div ref={paging.anchor} className="scroll-mt-16 space-y-3">
       <div className="flex flex-wrap gap-1.5">
         <button onClick={() => setGroup(null)} className={clsx('cursor-pointer rounded-md px-2 py-1 font-mono text-xs', !group ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint')}>
-          все · {comments.length}
+          {t('все')} · {comments.length}
         </button>
         {[...counts].map(([gid, n]) => (
           <button key={gid} onClick={() => setGroup(gid)} className={clsx('cursor-pointer rounded-md px-2 py-1 font-mono text-xs', group === gid ? 'bg-mint/15 text-mint' : 'text-dim hover:text-mint')}>
@@ -121,14 +122,14 @@ export function CommentList({
           <article key={ckey(c)} className={clsx('group flex gap-3 rounded-xl border p-3 transition', on ? 'border-mint/50 bg-mint/5' : 'border-line-soft hover:border-line')}>
             <button
               onClick={() => onToggle(c)}
-              title="Отметить для досье"
+              title={t('Отметить для досье')}
               className={clsx('mt-0.5 grid size-4 shrink-0 cursor-pointer place-items-center rounded border', on ? 'border-mint bg-mint text-mint-ink' : 'border-line')}
             >
               {on && <Check size={11} strokeWidth={3} />}
             </button>
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-mute">
-                <Tag tone="info">{g?.name ?? `группа ${c.grp_id}`}</Tag>
+                <Tag tone="info">{g?.name ?? t('группа {id}', { id: c.grp_id })}</Tag>
                 <span>
                   {fmtUtc(c.dt)} <span className="text-mute/70">(UTC)</span>
                 </span>
@@ -146,7 +147,7 @@ export function CommentList({
                   сообщения и время реакции (UTC). */}
               {!!c.likes?.length && (
                 <div className="mt-3 border-t border-dashed border-line pt-2.5">
-                  <div className="mb-1.5 font-mono text-[11px] text-mute">Реакции ({c.likes.length}):</div>
+                  <div className="mb-1.5 font-mono text-[11px] text-mute">{t('Реакции ({n}):', { n: c.likes.length })}</div>
                   <div className="flex flex-wrap gap-2">
                     {c.likes.map((l, i) => (
                       <span key={i} className="inline-flex items-center gap-2 rounded-lg border border-line-soft bg-bg-soft px-2.5 py-0.5">
@@ -198,7 +199,7 @@ export function MultiUserList({
     }
     return out;
   }, [users, paging.from, paging.to]);
-  if (!users.length) return <Empty>Ничего не найдено</Empty>;
+  if (!users.length) return <Empty>{t('Ничего не найдено')}</Empty>;
   const pager = <Pager {...paging} total={total} />;
   return (
     <div ref={paging.anchor} className="scroll-mt-16 space-y-4">
@@ -217,15 +218,15 @@ export function MultiUserList({
                 {nik && <Tag tone="dim">@{nik}</Tag>}
                 <button
                   onClick={() => onPickUser(id, name ?? nik ?? id)}
-                  title="Отметить Telegram ID для досье"
+                  title={t('Отметить Telegram ID для досье')}
                   className={clsx('grid size-6 cursor-pointer place-items-center rounded border', picked.has(id) ? 'border-mint bg-mint text-mint-ink' : 'border-line text-mute hover:text-mint')}
                 >
                   <Check size={12} />
                 </button>
-                <button onClick={() => onUserComments(id)} title="Все комментарии пользователя" className="cursor-pointer text-mute hover:text-mint">
+                <button onClick={() => onUserComments(id)} title={t('Все комментарии пользователя')} className="cursor-pointer text-mute hover:text-mint">
                   <MessagesSquare size={15} />
                 </button>
-                <Link to="/search" search={{ kind: 'tgid', q: id }} title="Поиск по атрибутам" className="text-mute hover:text-mint">
+                <Link to="/search" search={{ kind: 'tgid', q: id }} title={t('Поиск по атрибутам')} className="text-mute hover:text-mint">
                   <SearchIcon size={15} />
                 </Link>
               </>
@@ -247,6 +248,7 @@ export function MultiUserList({
   );
 }
 
+// Подписи — ключи перевода: t(MONTHS[i]), t(DAYS_RU[i]).
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 const DAYS_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
@@ -255,16 +257,16 @@ const heat = (v: number, max: number) => (max ? `rgb(var(--ft-mint-rgb) / ${0.06
 export function MonthActivity({ years }: { years: TgMonthActivity }) {
   const ys = Object.keys(years).sort();
   const max = Math.max(0, ...ys.flatMap((y) => Object.values(years[y] ?? {})));
-  if (!ys.length) return <Empty>Активности нет</Empty>;
+  if (!ys.length) return <Empty>{t('Активности нет')}</Empty>;
   return (
-    <Card title="Комментарии по месяцам">
+    <Card title={t('Комментарии по месяцам')}>
       <div className="overflow-auto">
         <table className="w-full border-separate border-spacing-1 font-mono text-xs">
           <thead>
             <tr>
               <th />
-              {MONTHS.map((m) => <th key={m} className="font-normal text-mute">{m}</th>)}
-              <th className="font-normal text-mute">всего</th>
+              {MONTHS.map((m) => <th key={m} className="font-normal text-mute">{t(m)}</th>)}
+              <th className="font-normal text-mute">{t('всего')}</th>
             </tr>
           </thead>
           <tbody>
@@ -277,7 +279,7 @@ export function MonthActivity({ years }: { years: TgMonthActivity }) {
                   {MONTHS.map((_, i) => {
                     const v = row[String(i + 1)] ?? 0;
                     return (
-                      <td key={i} title={`${MONTHS[i]} ${y}: ${v}`} className="h-9 min-w-10 rounded text-center" style={{ background: heat(v, max), color: v > max * 0.55 ? 'var(--color-mint-ink)' : undefined }}>
+                      <td key={i} title={`${t(MONTHS[i]!)} ${y}: ${v}`} className="h-9 min-w-10 rounded text-center" style={{ background: heat(v, max), color: v > max * 0.55 ? 'var(--color-mint-ink)' : undefined }}>
                         {v || ''}
                       </td>
                     );
@@ -306,11 +308,11 @@ export function WeekActivity({ years }: { years: TgWeekActivity }) {
   const quiet = byHour
     .map((_, start) => ({ start, sum: Array.from({ length: 6 }, (_, k) => byHour[(start + k) % 24]!).reduce((a, b) => a + b, 0) }))
     .reduce((best, w) => (w.sum < best.sum ? w : best)).start;
-  if (!ys.length) return <Empty>Активности нет</Empty>;
+  if (!ys.length) return <Empty>{t('Активности нет')}</Empty>;
   return (
     <Card
-      title="Активность по дням недели и часам"
-      actions={<Segmented value={year} onChange={setYear} options={[{ value: 'all', label: 'все' }, ...ys.map((y) => ({ value: y, label: y }))]} />}
+      title={t('Активность по дням недели и часам')}
+      actions={<Segmented value={year} onChange={setYear} options={[{ value: 'all', label: t('все') }, ...ys.map((y) => ({ value: y, label: y }))]} />}
     >
       <div className="overflow-auto">
         <table className="border-separate border-spacing-[3px] font-mono text-[10px]">
@@ -323,9 +325,9 @@ export function WeekActivity({ years }: { years: TgWeekActivity }) {
           <tbody>
             {grid.map((row, di) => (
               <tr key={di}>
-                <td className="pr-2 text-dim">{DAYS_RU[di]}</td>
+                <td className="pr-2 text-dim">{t(DAYS_RU[di]!)}</td>
                 {row.map((v, h) => (
-                  <td key={h} title={`${DAYS_RU[di]} ${h}:00 — ${v}`} className="size-7 rounded-sm" style={{ background: heat(v, max) }} />
+                  <td key={h} title={`${t(DAYS_RU[di]!)} ${h}:00 — ${v}`} className="size-7 rounded-sm" style={{ background: heat(v, max) }} />
                 ))}
               </tr>
             ))}
@@ -333,7 +335,7 @@ export function WeekActivity({ years }: { years: TgWeekActivity }) {
         </table>
       </div>
       <p className="mt-3 font-mono text-[11px] text-mute">
-        Самые тихие часы: {quiet}:00–{(quiet + 6) % 24}:00. Ночной провал подсказывает часовой пояс и режим сна пользователя.
+        {t('Самые тихие часы: {from}:00–{to}:00. Ночной провал подсказывает часовой пояс и режим сна пользователя.', { from: quiet, to: (quiet + 6) % 24 })}
       </p>
     </Card>
   );

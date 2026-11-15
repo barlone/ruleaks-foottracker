@@ -52,10 +52,14 @@ export function graphSvg(nodes: GraphNode[], edges: GraphEdge[]): { svg: string;
     const p = sides ? side(a, e.sourceSide!) : border(a.x, a.y, b.x, b.y);
     const q = sides ? side(b, e.targetSide!) : border(b.x, b.y, a.x, a.y);
     parts.push(`<line x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}" stroke="${s.stroke}" stroke-width="1.4"${s.dash ? ` stroke-dasharray="${s.dash}"` : ''}/>`);
-    // Стрелка к цели.
+    // Стрелка к цели; у боковой связи — на обоих концах (она взаимная).
     const ang = Math.atan2(q.y - p.y, q.x - p.x);
-    const tip = (d: number, da: number) => `${q.x - d * Math.cos(ang + da)},${q.y - d * Math.sin(ang + da)}`;
-    parts.push(`<polygon points="${q.x},${q.y} ${tip(9, 0.4)} ${tip(9, -0.4)}" fill="${s.stroke}"/>`);
+    const arrow = (at: { x: number; y: number }, dir: number) => {
+      const tip = (d: number, da: number) => `${at.x - d * Math.cos(dir + da)},${at.y - d * Math.sin(dir + da)}`;
+      parts.push(`<polygon points="${at.x},${at.y} ${tip(9, 0.4)} ${tip(9, -0.4)}" fill="${s.stroke}"/>`);
+    };
+    arrow(q, ang);
+    if (sides) arrow(p, ang + Math.PI);
     const label = cut([e.relation, e.label].filter(Boolean).join(' · '), 34);
     if (label) {
       const mx = (p.x + q.x) / 2;

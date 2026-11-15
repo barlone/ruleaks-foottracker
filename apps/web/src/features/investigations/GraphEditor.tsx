@@ -86,9 +86,18 @@ const toFlowEdges = (edges: GraphEdge[], nodes: GraphNode[], level: string | nul
     label: edgeLabel(e.relation, e.label),
     data: { relation: e.relation, credibility: e.credibility, factIds: e.factIds, note: e.label },
     style: edgeStyle(e.credibility),
-    markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: edgeStyle(e.credibility).stroke },
+    ...edgeMarkers(e.credibility, !!(e.sourceSide && e.targetSide)),
   }));
 };
+
+/**
+ * Стрелки связи: у обычной — одна, к цели; у боковой (горизонтальной) — на обоих концах: такая связь взаимная,
+ * у неё нет «откуда» и «куда».
+ */
+function edgeMarkers(credibility: string, side: boolean) {
+  const marker = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: edgeStyle(credibility).stroke };
+  return { markerEnd: marker, markerStart: side ? marker : undefined };
+}
 
 /** Боковая точка блока (id точки соединения). */
 const isSide = (h: string | null | undefined): h is 'left' | 'right' => h === 'left' || h === 'right';
@@ -350,7 +359,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
       const id = newId();
       // Тип по умолчанию — на языке интерфейса: это текст пользователя, он уходит в экспорт и PDF.
       const relation = t('связь');
-      setEdges((es) => addEdge({ ...c, id, label: relation, data: { relation, credibility: '6', factIds: [] }, style: edgeStyle('6'), markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle('6').stroke } }, es));
+      setEdges((es) => addEdge({ ...c, id, label: relation, data: { relation, credibility: '6', factIds: [] }, style: edgeStyle('6'), ...edgeMarkers('6', isSide(c.sourceHandle)) }, es));
       setSelected({ kind: 'edge', id });
       touch();
     },
@@ -461,7 +470,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
       es.map((e) => {
         if (e.id !== id) return e;
         const data = { ...e.data!, ...patch };
-        return { ...e, data, label: edgeLabel(data.relation, data.note), style: edgeStyle(data.credibility, true), markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle(data.credibility).stroke } };
+        return { ...e, data, label: edgeLabel(data.relation, data.note), style: edgeStyle(data.credibility, true), ...edgeMarkers(data.credibility, isSide(e.sourceHandle)) };
       }),
     );
     touch();

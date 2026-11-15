@@ -181,11 +181,19 @@ export class Report {
       out.push(h2('Участники'), members.length ? { ul: members } : empty());
     }
 
-    const links = items('link');
+    // «Соцсети» — страницы самой персоны; «Ссылки» — внешние сайты (kind = web), со списком дат снимков страницы.
+    const links = items('link').filter((l) => l.kind !== 'web');
     if (links.length) {
-      out.push(tableSection('Соцсети и ссылки', [70, '*'], ['Платформа', 'Ссылка'], links.map((l) => [
+      out.push(tableSection('Соцсети', [70, '*'], ['Платформа', 'Ссылка'], links.map((l) => [
         { text: PLATFORM[l.platform] ?? l.platform },
         { text: [l.title ? { text: `${clean(l.title)}\n` } : '', { text: l.url, link: l.url, color: '#1a6fb5', fontSize: 7.5 }] },
+      ])));
+    }
+    const webLinks = items('link').filter((l) => l.kind === 'web');
+    if (webLinks.length) {
+      out.push(tableSection('Ссылки', ['*', 120], ['Ссылка', 'Снимки страницы'], webLinks.map((l) => [
+        { text: [l.title ? { text: `${clean(l.title)}\n` } : '', { text: l.url, link: l.url, color: '#1a6fb5', fontSize: 7.5 }] },
+        { text: (l.shots ?? []).map((s) => `по состоянию на ${s.at.split('-').reverse().join('.')}`).join('\n'), style: 'small' },
       ])));
     }
 

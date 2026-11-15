@@ -63,6 +63,7 @@ const en: Record<string, string> = {
   'Добавить: {type}': 'Add: {type}',
   'Авторасстановка (ELK)': 'Auto layout (ELK)',
   'Показать всё': 'Fit to view',
+  'Выделение рамкой: обведите блоки мышью и тащите всю группу. Без этого режима — то же с зажатым Shift': 'Box selection: drag a frame around blocks and move the whole group. Without this mode, hold Shift to do the same',
   'вернуться в расследование': 'back to the investigation',
   'Редактор связей во весь экран': 'Graph editor in full screen',
   'Во весь экран': 'Full screen',

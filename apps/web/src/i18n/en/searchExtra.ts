@@ -256,7 +256,7 @@ const en: Record<string, string> = {
   '— выберите —': '— select —',
   'общее': 'shared',
   'Название (персона)': 'Title (person)',
-  'Ссылки попадут в раздел «Соцсети и ссылки».': 'The links go to the “Social media and links” section.',
+  'Ссылки попадут в раздел «Соцсети».': 'The links go to the “Social networks” section.',
 
   // DriveHelp.tsx
   'Как использовать ссылки на Гугл-диск': 'How to use Google Drive links',

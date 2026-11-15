@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background, BackgroundVariant, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, ReactFlowProvider,
-  addEdge, useEdgesState, useNodesState, useReactFlow,
+  ConnectionMode, SelectionMode, addEdge, useEdgesState, useNodesState, useReactFlow,
   type Connection, type Edge, type Node, type NodeProps, type OnBeforeDelete,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Link, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ArrowLeft, Expand, FolderOpen, ImageOff, ImagePlus, LayoutGrid, LogIn, Maximize, MoreHorizontal, Network, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Expand, FolderOpen, ImageOff, ImagePlus, LayoutGrid, LogIn, Maximize, MoreHorizontal, Network, Plus, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import {
   CREDIBILITY_LABELS, NODE_DOSSIER_KIND, NODE_TYPE_LABELS, newId, type Fact, type GraphEdge, type GraphNode, type NodeType,
 } from '@ft/shared';
@@ -79,6 +79,9 @@ const toFlowEdges = (edges: GraphEdge[], nodes: GraphNode[], level: string | nul
     id: e.id,
     source: e.source,
     target: e.target,
+    // Точки соединения: у боковой связи — левая/правая, у обычной — нижняя у источника и верхняя у цели.
+    sourceHandle: e.sourceSide && e.targetSide ? e.sourceSide : 'bottom',
+    targetHandle: e.sourceSide && e.targetSide ? e.targetSide : 'top',
     hidden: parent.get(e.source) !== level,
     label: edgeLabel(e.relation, e.label),
     data: { relation: e.relation, credibility: e.credibility, factIds: e.factIds, note: e.label },
@@ -87,6 +90,19 @@ const toFlowEdges = (edges: GraphEdge[], nodes: GraphNode[], level: string | nul
   }));
 };
 
+/** Боковая точка блока (id точки соединения). */
+const isSide = (h: string | null | undefined): h is 'left' | 'right' => h === 'left' || h === 'right';
+
+/**
+ * Какие точки можно соединить: боковую — только с боковой (горизонтальная связь), нижнюю — только с верхней
+ * (обычная связь; тянуть можно и от верхней к нижней). Бок с верхом или низом не соединяется.
+ */
+function validConnection(c: { source: string | null; target: string | null; sourceHandle?: string | null; targetHandle?: string | null }): boolean {
+  if (!c.source || !c.target || c.source === c.target) return false;
+  if (isSide(c.sourceHandle) || isSide(c.targetHandle)) return isSide(c.sourceHandle) && isSide(c.targetHandle);
+  return (c.sourceHandle === 'bottom' && c.targetHandle === 'top') || (c.sourceHandle === 'top' && c.targetHandle === 'bottom');
+}
+
 const fromFlow = (nodes: EntityNode[], edges: RelEdge[]): { nodes: GraphNode[]; edges: GraphEdge[] } => ({
   nodes: nodes.map((n) => ({
     id: n.id, type: n.data.type, label: n.data.label, dossierId: n.data.dossierId, parentId: n.data.parentId, props: n.data.props,
@@ -94,6 +110,7 @@ const fromFlow = (nodes: EntityNode[], edges: RelEdge[]): { nodes: GraphNode[]; 
   })),
   edges: edges.map((e) => ({
     id: e.id, source: e.source, target: e.target, relation: e.data?.relation ?? t('связь'), label: e.data?.note,
+    ...(isSide(e.sourceHandle) && isSide(e.targetHandle) ? { sourceSide: e.sourceHandle, targetSide: e.targetHandle } : {}),
     credibility: e.data?.credibility ?? '6', factIds: e.data?.factIds ?? [],
   })),
 });
@@ -128,7 +145,7 @@ function EntityNodeView({ id, data, selected }: NodeProps<EntityNode>) {
       className={clsx('relative min-w-40 max-w-60 rounded-xl border bg-panel/95 px-3 py-2.5 backdrop-blur transition', selected ? 'shadow-glow' : 'shadow-[0_0_18px_var(--ft-shadow)]')}
       style={{ borderColor: selected ? color : withAlpha(color, 33) }}
     >
-      <Handle type="target" position={Position.Top} className="!size-2.5" />
+      <Handle id="top" type="target" position={Position.Top} className="!size-2.5" />
       {hasMenu && (
         <button
           type="button"
@@ -175,7 +192,10 @@ function EntityNodeView({ id, data, selected }: NodeProps<EntityNode>) {
           )}
         </div>
       )}
-      <Handle type="source" position={Position.Bottom} className="!size-2.5" />
+      <Handle id="bottom" type="source" position={Position.Bottom} className="!size-2.5" />
+      {/* Боковые точки — для горизонтальных связей; соединяются только друг с другом (validConnection). */}
+      <Handle id="left" type="source" position={Position.Left} className="!size-2.5" />
+      <Handle id="right" type="source" position={Position.Right} className="!size-2.5" />
     </div>
   );
 }
@@ -321,7 +341,12 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   };
 
   const onConnect = useCallback(
-    (c: Connection) => {
+    (raw: Connection) => {
+      if (!validConnection(raw)) return;
+      // Обычную связь могли протянуть от верхней точки к нижней — источник тот, у кого нижняя.
+      const c = raw.sourceHandle === 'top'
+        ? { source: raw.target, target: raw.source, sourceHandle: 'bottom', targetHandle: 'top' }
+        : raw;
       const id = newId();
       // Тип по умолчанию — на языке интерфейса: это текст пользователя, он уходит в экспорт и PDF.
       const relation = t('связь');
@@ -334,6 +359,10 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   );
 
   const [selected, setSelected] = useState<{ kind: 'node' | 'edge'; id: string } | null>(null);
+  // Режим выделения рамкой: левая кнопка мыши на пустом месте рисует рамку, а не двигает граф (граф тогда двигают
+  // средней или правой кнопкой и колесом). Вне режима рамка рисуется с зажатым Shift — это умеет сам React Flow.
+  // Выделенные блоки тащатся все вместе за любой из них или за рамку.
+  const [boxSelect, setBoxSelect] = useState(false);
   const selNode = selected?.kind === 'node' ? nodes.find((n) => n.id === selected.id) : undefined;
   const selEdge = selected?.kind === 'edge' ? edges.find((e) => e.id === selected.id) : undefined;
 
@@ -503,6 +532,13 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         onMoveStart={() => setMenu(null)}
         onBeforeDelete={onBeforeDelete}
         onNodeDoubleClick={(_, n) => n.data.dossierId && navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId } })}
+        // Loose: боковые точки одного вида (source) соединяются между собой; что с чем можно — validConnection.
+        connectionMode={ConnectionMode.Loose}
+        isValidConnection={validConnection}
+        selectionOnDrag={boxSelect}
+        panOnDrag={boxSelect ? [1, 2] : true}
+        // В рамку достаточно попасть частью блока.
+        selectionMode={SelectionMode.Partial}
         nodesDraggable={editable}
         nodesConnectable={editable}
         deleteKeyCode={editable ? ['Delete'] : null}
@@ -634,6 +670,18 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
             );
           })}
         {editable && <span className="mx-1 h-5 w-px bg-line" />}
+        {editable && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setBoxSelect((v) => !v)}
+            aria-pressed={boxSelect}
+            title={t('Выделение рамкой: обведите блоки мышью и тащите всю группу. Без этого режима — то же с зажатым Shift')}
+            className={boxSelect ? '!border-line !bg-mint/15 !text-mint' : undefined}
+          >
+            <SquareDashedMousePointer size={14} />
+          </Button>
+        )}
         {editable && <Button size="sm" variant="ghost" onClick={autoLayout} title={t('Авторасстановка (ELK)')}><LayoutGrid size={14} /></Button>}
         <Button size="sm" variant="ghost" onClick={() => rf.fitView({ duration: 300 })} title={t('Показать всё')}><Maximize size={14} /></Button>
       </div>

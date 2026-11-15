@@ -249,7 +249,7 @@ function EmailResult({ job, loading, error, pagesEnabled }: { job: Job | undefin
           <span className="text-mint">{report.email}</span>
           {job.finishedAt && <span className="ml-2">· {ago(job.finishedAt)}</span>}
         </div>
-        <Button variant="primary" size="sm" onClick={() => setAdding(links)} disabled={!links.length} title={links.length ? t('Найденные ссылки — в «Соцсети и ссылки» досье') : t('Ссылок для досье нет')}>
+        <Button variant="primary" size="sm" onClick={() => setAdding(links)} disabled={!links.length} title={links.length ? t('Найденные ссылки — в «Соцсети» досье') : t('Ссылок для досье нет')}>
           <FolderPlus size={15} /> {t('Ссылки в досье')}
         </Button>
       </div>

@@ -5,6 +5,7 @@ import {
   type Dossier, type DossierItem, type ExportDossier, type ExportDossierItem, type ExportImage, type ExportInvestigation,
   type ExportMeta, type ExportRelation, type ExportRequest, type ExportSearch, type Investigation, type Source,
 } from '@ft/shared';
+import { withEdgeSides } from '@ft/shared';
 import { can } from '../authz.ts';
 import type { Deps } from '../ports.ts';
 import { archivePassword } from './password.ts';
@@ -121,7 +122,11 @@ class Builder {
       case 'attribute':
         return { ...base, type: i.type, key: i.key, label: i.label, value: i.value };
       case 'link':
-        return { ...base, type: i.type, url: i.url, title: i.title, platform: i.platform };
+        return {
+          ...base, type: i.type, url: i.url, title: i.title, platform: i.platform,
+          ...(i.kind ? { kind: i.kind } : {}),
+          ...(i.shots?.length ? { shots: i.shots.map((s) => ({ image: this.image(s.url), at: s.at })) } : {}),
+        };
       case 'media':
         return {
           ...base, type: i.type, image: this.image(i.url), thumb: i.thumbUrl ? this.image(i.thumbUrl) : undefined,
@@ -176,7 +181,7 @@ class Builder {
         const source = nodes.get(e.source);
         const target = nodes.get(e.target);
         if (!source || !target) return [];
-        return [{ key: `e${n + 1}`, source, target, relation: e.relation, label: e.label, credibility: e.credibility, facts: pick(facts, e.factIds) }];
+        return [withEdgeSides({ key: `e${n + 1}`, source, target, relation: e.relation, label: e.label, sourceSide: e.sourceSide, targetSide: e.targetSide, credibility: e.credibility, facts: pick(facts, e.factIds) })];
       }),
       facts: inv.facts.map((f) => ({
         key: facts.get(f.id)!, textMd: this.markdown(f.textMd), occurredAt: f.occurredAt, sources: f.sources.map((s) => this.source(s)),

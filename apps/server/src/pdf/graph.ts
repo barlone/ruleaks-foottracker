@@ -46,8 +46,11 @@ export function graphSvg(nodes: GraphNode[], edges: GraphEdge[]): { svg: string;
     const b = center.get(e.target);
     if (!a || !b) continue;
     const s = edgeStyle(e.credibility);
-    const p = border(a.x, a.y, b.x, b.y);
-    const q = border(b.x, b.y, a.x, a.y);
+    // Боковая связь идёт от середины боковой стороны одного блока к середине боковой стороны другого.
+    const side = (c: { x: number; y: number }, which: 'left' | 'right') => ({ x: c.x + (which === 'left' ? -1 : 1) * (W / 2 + 4), y: c.y });
+    const sides = e.sourceSide && e.targetSide;
+    const p = sides ? side(a, e.sourceSide!) : border(a.x, a.y, b.x, b.y);
+    const q = sides ? side(b, e.targetSide!) : border(b.x, b.y, a.x, a.y);
     parts.push(`<line x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}" stroke="${s.stroke}" stroke-width="1.4"${s.dash ? ` stroke-dasharray="${s.dash}"` : ''}/>`);
     // Стрелка к цели.
     const ang = Math.atan2(q.y - p.y, q.x - p.x);

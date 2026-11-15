@@ -3,6 +3,7 @@ import {
   TagColor, TagText, newId, normalizeRelationText,
   type ExportDossier, type ExportDossierItem, type ExportImage, type ExportInvestigation, type Source,
 } from '@ft/shared';
+import { withEdgeSides } from '@ft/shared';
 import { sameLevelEdges } from '@ft/shared';
 import type { z } from 'zod';
 import { Conflict, type Deps, type DossierContent, type InvestigationContent } from '../ports.ts';
@@ -232,6 +233,11 @@ class Converter {
         value = { ...rest, ...base, searchId: (search && this.searchIds.get(search)) || 'none' };
         break;
       }
+      case 'link': {
+        const { shots, source: _s, createdAt: _c, ...rest } = i;
+        value = { ...rest, ...base, ...(shots?.length ? { shots: shots.map((s) => ({ url: this.image(s.image), at: s.at })) } : {}) };
+        break;
+      }
       case 'note':
         value = { ...i, ...base, markdown: this.markdown(i.markdown) };
         break;
@@ -286,6 +292,7 @@ class Converter {
         if (!source || !target) return [];
         return [this.parse(GraphEdge, {
           id: newId(), source, target, relation: e.relation, label: e.label, credibility: e.credibility, factIds: pick(facts, e.facts),
+          ...withEdgeSides({ sourceSide: e.sourceSide, targetSide: e.targetSide }),
         }, where)];
       })),
       facts: inv.facts.map((f) => this.parse(Fact, {

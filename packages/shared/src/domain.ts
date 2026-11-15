@@ -188,12 +188,28 @@ export const HttpUrl = z.string().max(2048).refine((s) => {
   }
 }, 'Нужна ссылка вида https://…');
 
+/**
+ * Снимок страницы по ссылке: встроенная картинка (data URL, в лимитах media.ts) и календарная дата, на которую
+ * страница так выглядела (ГГГГ-ММ-ДД, «по состоянию на …»).
+ */
+export const LinkShot = z.object({
+  url: z.string().max(1_500_000).regex(/^data:image\/(png|jpeg|webp);base64,/),
+  at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 export const LinkItem = z.object({
   ...itemBase,
   type: z.literal('link'),
   url: HttpUrl,
   title: z.string().max(256).optional(),
   platform: Platform.default('web'),
+  /**
+   * Раздел досье: social (и без значения) — «Соцсети», страница самой персоны; web — «Ссылки», внешний сайт
+   * (статья, реестр, упоминание).
+   */
+  kind: z.enum(['social', 'web']).optional(),
+  /** Снимки страницы — у ссылок раздела «Ссылки». */
+  shots: z.array(LinkShot).max(30).optional(),
 });
 
 /**
@@ -327,10 +343,19 @@ export const GraphNode = z.object({
   position: z.object({ x: z.number(), y: z.number() }),
 });
 
+/** Боковая точка соединения блока. */
+export const EdgeSide = z.enum(['left', 'right']);
+
 export const GraphEdge = z.object({
   id: Id,
   source: Id,
   target: Id,
+  /**
+   * Боковая (горизонтальная) связь: из какой боковой точки источника выходит и в какую боковую точку цели входит.
+   * Заданы обе — связь боковая; ни одной — обычная, из нижней точки в верхнюю. Одна без другой не бывает (graph.ts).
+   */
+  sourceSide: EdgeSide.optional(),
+  targetSide: EdgeSide.optional(),
   /** Тип связи: родство, работа, владение, участие, контакт… */
   relation: z.string().max(64),
   /** Пояснение (многострочное); в графе показываются первые три слова, целиком — при наведении. */

@@ -127,7 +127,7 @@ export function AddPagesDialog({
             <Input value={title} placeholder={username} onChange={(e) => setTitle(e.target.value)} />
           </Field>
         )}
-        <p className="text-xs text-mute">{t('Ссылки попадут в раздел «Соцсети и ссылки».')}</p>
+        <p className="text-xs text-mute">{t('Ссылки попадут в раздел «Соцсети».')}</p>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Отмена')}</Button>
           <Button variant="primary" onClick={() => void submit()} disabled={busy || target.loading || nothingNew || !pages.length || (mode === 'existing' && !dossierId)}>{t('Добавить')}</Button>

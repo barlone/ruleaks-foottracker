@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  DossierKind, GraphNode, HypothesisStatus, InfoCredibility, NodeType, Platform, PostKind, SearchJobState, SearchSectionSchema, Source,
+  DossierKind, EdgeSide, GraphNode, HypothesisStatus, InfoCredibility, NodeType, Platform, PostKind, SearchJobState, SearchSectionSchema, Source,
 } from './domain.ts';
 
 // Файл экспорта досье/расследования (формат v1). Технически ZIP:
@@ -49,7 +49,16 @@ const itemBase = {
 
 export const ExportDossierItem = z.discriminatedUnion('type', [
   z.object({ ...itemBase, type: z.literal('attribute'), key: z.string(), label: z.string(), value: z.string() }),
-  z.object({ ...itemBase, type: z.literal('link'), url: z.string(), title: z.string().optional(), platform: Platform }),
+  z.object({
+    ...itemBase,
+    type: z.literal('link'),
+    url: z.string(),
+    title: z.string().optional(),
+    platform: Platform,
+    /** Необязательные дополнения v1: раздел досье (web — «Ссылки») и снимки страницы. */
+    kind: z.enum(['social', 'web']).optional(),
+    shots: z.array(z.object({ image: ExportImage, at: z.string() })).optional(),
+  }),
   z.object({
     ...itemBase,
     type: z.literal('media'),
@@ -138,6 +147,9 @@ export const ExportInvestigation = z.object({
     target: Key,
     relation: z.string(),
     label: z.string().optional(),
+    /** Боковая связь (необязательное дополнение v1, как parent у узла): стороны точек соединения, только парой. */
+    sourceSide: EdgeSide.optional(),
+    targetSide: EdgeSide.optional(),
     credibility: InfoCredibility,
     facts: z.array(Key),
   })),

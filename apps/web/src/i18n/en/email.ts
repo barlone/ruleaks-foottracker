@@ -153,7 +153,7 @@ const en: Record<string, string> = {
   'Идёт поиск: {email}': 'Searching: {email}',
   'Поиск не удался': 'Search failed',
   'Поиск остановлен.': 'Search stopped.',
-  'Найденные ссылки — в «Соцсети и ссылки» досье': 'Add the found links to the dossier’s “Social networks and links”',
+  'Найденные ссылки — в «Соцсети» досье': 'Add the found links to the dossier’s “Social networks”',
   'Ссылок для досье нет': 'No links for a dossier',
   'Ссылки в досье': 'Links to dossier',
 };

@@ -18,10 +18,19 @@ export function mediaBytes(url: string): number {
   return Math.floor((body.length * 3) / 4) - pad;
 }
 
-/** Сколько байт медиа уже лежит в досье (только встроенные изображения). */
-export function dossierMediaBytes(items: readonly { type: string; url?: string }[]): number {
+type WithImages = { type: string; url?: string; shots?: readonly { url: string }[] };
+
+/** Встроенные изображения элемента досье: сам медиафайл или снимки страницы у ссылки. */
+export function itemImages(i: WithImages): string[] {
+  if (i.type === 'media') return i.url ? [i.url] : [];
+  if (i.type === 'link') return (i.shots ?? []).map((s) => s.url);
+  return [];
+}
+
+/** Сколько байт медиа уже лежит в досье (только встроенные изображения: медиафайлы и снимки страниц у ссылок). */
+export function dossierMediaBytes(items: readonly WithImages[]): number {
   let total = 0;
-  for (const i of items) if (i.type === 'media' && i.url) total += mediaBytes(i.url);
+  for (const i of items) for (const url of itemImages(i)) total += mediaBytes(url);
   return total;
 }
 

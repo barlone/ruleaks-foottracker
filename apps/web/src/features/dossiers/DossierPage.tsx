@@ -26,6 +26,7 @@ import { TagsBar } from '../../components/Tags.tsx';
 import { Button, Card, ConfirmDeleteBtn, CopyButton, DELETE_GAP, Dialog, Empty, Field, FilePicker, Input, Segmented, Select, Spinner, Tag, Textarea, WarnNote } from '../../components/ui.tsx';
 import { driveImageUrl, drivePreviewUrl, googleDriveId } from '../../lib/driveLinks.ts';
 import { DriveHelpButton } from '../../components/DriveHelp.tsx';
+import { WebLinksCard } from './WebLinks.tsx';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate, fmtBytes } from '../../lib/format.ts';
@@ -104,7 +105,8 @@ export function DossierPage() {
 
   const [editSummary, setEditSummary] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string | null>(null);
-  const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'media' | 'note' | 'post'>(null);
+  // weblink — ссылка на внешний сайт (раздел «Ссылки»): тот же элемент link, но kind = 'web'.
+  const [adding, setAdding] = useState<null | 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'>(null);
   const [editingMedia, setEditingMedia] = useState<Of<'media'> | null>(null);
   const [editingLink, setEditingLink] = useState<Of<'link'> | null>(null);
   const [editingAttr, setEditingAttr] = useState<Of<'attribute'> | null>(null);
@@ -257,6 +259,16 @@ export function DossierPage() {
             )}
           </Card>
 
+          <WebLinksCard
+            links={items('link').filter((l) => l.kind === 'web')}
+            items={d.items}
+            editable={editable}
+            onAdd={() => setAdding('weblink')}
+            onEdit={setEditingLink}
+            onRemove={(itemId) => removeItem.mutate({ id, itemId })}
+            onUpdate={(item) => updateItem.mutateAsync({ id, item }).then(() => undefined)}
+          />
+
           {d.kind === 'person' && (
             <PostsCard
               posts={items('post')}
@@ -303,12 +315,13 @@ export function DossierPage() {
           {d.kind === 'person' && <RelationsCard dossierId={d.id} editable={editable} />}
 
           <Card compact
-            title={<><Link2 size={13} /> {t('Соцсети и ссылки')}</>}
+            title={<><Link2 size={13} /> {t('Соцсети')}</>}
             actions={editable && <Button size="sm" variant="ghost" onClick={() => setAdding('link')}><Plus size={13} /> {t('Добавить')}</Button>}
           >
-            {items('link').length === 0 && <Empty>{t('Пусто')}</Empty>}
+            {/* Только страницы самой персоны; ссылки на внешние сайты (kind = web) — в разделе «Ссылки». */}
+            {items('link').filter((l) => l.kind !== 'web').length === 0 && <Empty>{t('Пусто')}</Empty>}
             <div className="space-y-1.5">
-              {items('link').map((l) => (
+              {items('link').filter((l) => l.kind !== 'web').map((l) => (
                 <div key={l.id} className="group flex items-center gap-2.5 rounded-lg border border-line-soft px-3 py-2">
                   <Tag tone="dim" className="w-20 justify-center">{platformLabel(l.platform)}</Tag>
                   <div className="min-w-0 flex-1">
@@ -1058,7 +1071,7 @@ function EditAttrForm({ attr, existing, onSave }: { attr: Of<'attribute'>; exist
 
 function EditLinkDialog({ link, existing, onClose, onSave }: { link: Of<'link'> | null; existing: DossierItem[]; onClose: () => void; onSave: (item: Of<'link'>) => Promise<void> }) {
   return (
-    <Dialog open={!!link} onOpenChange={(v) => !v && onClose()} title={t('Ссылка на профиль')}>
+    <Dialog open={!!link} onOpenChange={(v) => !v && onClose()} title={link?.kind === 'web' ? t('Ссылка') : t('Ссылка на профиль')}>
       {link && <EditLinkForm key={link.id} link={link} existing={existing} onSave={onSave} />}
     </Dialog>
   );
@@ -1081,7 +1094,8 @@ function EditLinkForm({ link, existing, onSave }: { link: Of<'link'>; existing: 
     setError(null);
     try {
       const src = finishSource(source);
-      await onSave({ ...link, url, title: title.trim() || undefined, platform: guessPlatform(url), source: capturedAt ? { ...src, capturedAt } : src });
+      // У ссылки на внешний сайт платформы нет; снимки страницы и раздел остаются как были ({ ...link }).
+      await onSave({ ...link, url, title: title.trim() || undefined, platform: link.kind === 'web' ? 'web' : guessPlatform(url), source: capturedAt ? { ...src, capturedAt } : src });
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -1097,10 +1111,16 @@ function EditLinkForm({ link, existing, onSave }: { link: Of<'link'>; existing: 
         void submit();
       }}
     >
-      <Field label={t('URL профиля')} hint={url ? t('Платформа: {name}', { name: platformLabel(guessPlatform(url)) }) : undefined}>
-        <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://vk.com/id…" />
-      </Field>
-      <Field label={t('Подпись')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+      {link.kind === 'web' ? (
+        <Field label={t('Адрес страницы')}>
+          <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…" />
+        </Field>
+      ) : (
+        <Field label={t('URL профиля')} hint={url ? t('Платформа: {name}', { name: platformLabel(guessPlatform(url)) }) : undefined}>
+          <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://vk.com/id…" />
+        </Field>
+      )}
+      <Field label={link.kind === 'web' ? t('Название') : t('Подпись')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
       <SourceFields value={source} onChange={setSource} />
       {duplicate && <WarnNote>{t('Уже есть в досье: {item}', { item: duplicate.type === 'link' ? duplicate.url : '' })}</WarnNote>}
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
@@ -1111,8 +1131,8 @@ function EditLinkForm({ link, existing, onSave }: { link: Of<'link'>; existing: 
   );
 }
 
-function AddItemDialog({ kind, existing, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'media' | 'note' | 'post'; existing: DossierItem[]; onClose: () => void; onAdd: (i: NewItem) => Promise<void> }) {
-  const titles = { attribute: t('Новый атрибут'), link: t('Ссылка на профиль'), media: t('Медиафайл'), note: t('Заметка'), post: t('Пост или реакция') };
+function AddItemDialog({ kind, existing, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; onClose: () => void; onAdd: (i: NewItem) => Promise<void> }) {
+  const titles = { attribute: t('Новый атрибут'), link: t('Ссылка на профиль'), weblink: t('Ссылка'), media: t('Медиафайл'), note: t('Заметка'), post: t('Пост или реакция') };
   return (
     <Dialog open={!!kind} onOpenChange={(v) => !v && onClose()} title={kind ? titles[kind] : ''} wide={kind === 'note'}>
       {kind && <AddItemForm key={kind} kind={kind} existing={existing} onAdd={onAdd} />}
@@ -1120,7 +1140,7 @@ function AddItemDialog({ kind, existing, onClose, onAdd }: { kind: null | 'attri
   );
 }
 
-function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | 'media' | 'note' | 'post'; existing: DossierItem[]; onAdd: (i: NewItem) => Promise<void> }) {
+function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; onAdd: (i: NewItem) => Promise<void> }) {
   const [key, setKey] = useState<string>('phones');
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
@@ -1142,7 +1162,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   // Предупреждение сразу при вводе; окончательно дубликат не пропустит сервер (досье мог изменить другой пользователь).
   const duplicate = kind === 'attribute'
     ? findDuplicate(existing, { type: 'attribute', key, label: attrLabel, value })
-    : kind === 'link' && value.trim() ? findDuplicate(existing, { type: 'link', url: value }) : undefined;
+    : (kind === 'link' || kind === 'weblink') && value.trim() ? findDuplicate(existing, { type: 'link', url: value }) : undefined;
 
   async function submit() {
     setError(null);
@@ -1153,6 +1173,9 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
       } else if (kind === 'link') {
         const url = /^https?:\/\//.test(value) ? value : `https://${value}`;
         await onAdd({ type: 'link', url, title: title || undefined, platform: guessPlatform(url), source: src });
+      } else if (kind === 'weblink') {
+        const url = /^https?:\/\//.test(value) ? value : `https://${value}`;
+        await onAdd({ type: 'link', kind: 'web', url, title: title || undefined, platform: 'web', source: src });
       } else if (kind === 'media') {
         // Ссылка Диска хранится как миниатюра (картинка, кадр видео) и, для видео, адрес плеера.
         const url = driveId ? driveImageUrl(driveId) : value;
@@ -1179,7 +1202,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   function onFile(f: File | undefined) {
     if (!f) return;
     if (f.size > MEDIA_FILE_MAX_BYTES) {
-      setError(t('Файл {size} — больше {max}. Большие файлы держите на своём Гугл-диске и добавьте в досье ссылку («Соцсети и ссылки»)', { size: fmtBytes(f.size), max: fmtBytes(MEDIA_FILE_MAX_BYTES) }));
+      setError(t('Файл {size} — больше {max}. Большие файлы держите на своём Гугл-диске и добавьте в досье ссылку (раздел «Ссылки»)', { size: fmtBytes(f.size), max: fmtBytes(MEDIA_FILE_MAX_BYTES) }));
       return;
     }
     setError(null);
@@ -1209,6 +1232,15 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
           <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://vk.com/id…" />
         </Field>
         <Field label={t('Подпись')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+      </>
+    );
+  } else if (kind === 'weblink') {
+    body = (
+      <>
+        <Field label={t('Адрес страницы')} hint={t('Внешний сайт: статья, реестр, упоминание. Снимок страницы добавляется к ссылке после сохранения.')}>
+          <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…" />
+        </Field>
+        <Field label={t('Название')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
       </>
     );
   } else if (kind === 'media') {

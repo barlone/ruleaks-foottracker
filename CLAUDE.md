@@ -485,6 +485,13 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 - An `emails` attribute row has an «Исследовать» icon (`ResearchEmailLink`, left of the mailmeteor check; only when the
   value parses as an address and the Email section is on) → `/search/email?q=…&from=<dossier id>`. `?from=` on `/search`
   and `/search/email` shows the way back (`features/search/BackToDossier.tsx`) and survives a new search on the page.
+- Dossier links are two sections over one item type: «Соцсети» (pages of the person, `link` with no `kind` or `social`)
+  and «Ссылки» (`kind: 'web'`, external sites — `features/dossiers/WebLinks.tsx`, above «Посты и реакции»). A web link
+  carries `shots`: page screenshots as data URLs with a calendar date (`LinkShot`, «по состоянию на …»), pasted with
+  Ctrl+V into the shot dialog or picked as a file and squeezed by `lib/shotImage.ts` (`fitShot`) under the media
+  limits — `itemImages` / `dossierMediaBytes` count shots together with media files. Export carries `kind` and
+  `shots` as optional keys (additive to v1); the PDF lists the shot dates only. Found pages (`AddPagesDialog`) go to
+  «Соцсети». Site archives are planned for this section.
 - Group members (`MembersEditor`): «Новое досье» creates a person dossier, adds it to the group and opens it with
   `?from=<group id>`; member links carry the same `from`. `/dossiers/$id?from=` shows «← в группу …» right of the
   title (`BackToGroup`), like `/search?from=` shows the way back to the dossier.
@@ -507,6 +514,15 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 - Block menu («⋯» in a node's top-right corner, rendered in the editor root, not inside the node): enter, open dossier,
   add / remove image, delete. Image and node deletion are only there, not in the side panel. A node with an inner
   graph is deleted by a second click in the menu; the Delete key refuses it (`onBeforeDelete`).
+- Graph side links: every block has four connection points (`top`, `bottom`, `left`, `right` handle ids). A side point
+  connects only to a side point (`validConnection`; React Flow runs in `ConnectionMode.Loose` so two `source` handles
+  can meet), bottom only to top. A side link stores `GraphEdge.sourceSide` / `targetSide` (`left` | `right`, always as
+  a pair — `withEdgeSides`; columns `graph_edges.source_side` / `target_side`); no sides = an ordinary bottom → top
+  link. Export carries them as optional keys (additive to v1); the PDF graph draws a side link between side midpoints.
+- Graph group selection: the toolbar toggle (`boxSelect`) makes a left drag on the pane draw a selection box
+  (`selectionOnDrag`, pan moves to the middle / right button; `SelectionMode.Partial`); without it React Flow's own
+  Shift + drag does the same. Selected blocks move together by any of them or by the box, and the move is saved like
+  a single drag. The side panel still describes one clicked block.
 - Graph full screen: `?full=true` on `/investigations/$id` (button right of the editor toolbar, «вернуться в расследование»
   to leave; entering pushes history, leaving replaces). `AppShell` drops the sidebar and banners, `InvestigationPage`
   hides its header with `hidden` — nothing above the editor is unmounted, so the editor keeps its state and level.

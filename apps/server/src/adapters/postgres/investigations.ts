@@ -69,8 +69,8 @@ export class PgInvestigations implements InvestigationRepo {
          WHERE n.investigation_id = $1 ORDER BY n.created_at, n.id`,
         [id],
       ),
-      this.db.query<{ id: string; source: string; target: string; relation: string; label: string | null; credibility: GraphEdge['credibility']; fact_ids: string[] }>(
-        `SELECT e.id, e.source_node_id AS source, e.target_node_id AS target, e.relation, e.label, e.credibility,
+      this.db.query<{ id: string; source: string; target: string; relation: string; label: string | null; credibility: GraphEdge['credibility']; source_side: GraphEdge['sourceSide'] | null; target_side: GraphEdge['targetSide'] | null; fact_ids: string[] }>(
+        `SELECT e.id, e.source_node_id AS source, e.target_node_id AS target, e.relation, e.label, e.credibility, e.source_side, e.target_side,
                 coalesce(array_agg(ef.fact_id ORDER BY ef.fact_id) FILTER (WHERE ef.fact_id IS NOT NULL), '{}') AS fact_ids
          FROM graph_edges e LEFT JOIN edge_facts ef ON ef.edge_id = e.id
          WHERE e.investigation_id = $1 GROUP BY e.id ORDER BY e.created_at, e.id`,
@@ -107,6 +107,7 @@ export class PgInvestigations implements InvestigationRepo {
       })),
       edges: edges.rows.map((e) => ({
         id: e.id, source: e.source, target: e.target, relation: e.relation, ...(e.label ? { label: e.label } : {}),
+        ...(e.source_side && e.target_side ? { sourceSide: e.source_side, targetSide: e.target_side } : {}),
         credibility: e.credibility, factIds: e.fact_ids,
       })),
       facts: facts.rows.map((f) => ({
@@ -277,18 +278,22 @@ async function writeGraph(c: Tx, id: string, nodes: GraphNode[], edges: GraphEdg
   const edgeRows = edges.map((e) => ({
     id: newObjectId(e.id), source: e.source, target: e.target, relation: e.relation, label: e.label ?? null,
     credibility: e.credibility ?? '6',
+    // Стороны боковой связи — только парой.
+    source_side: e.sourceSide && e.targetSide ? e.sourceSide : null,
+    target_side: e.sourceSide && e.targetSide ? e.targetSide : null,
   }));
   // Связь — только между узлами этого расследования.
   await c.query(
-    `INSERT INTO graph_edges (id, investigation_id, source_node_id, target_node_id, relation, label, credibility)
-     SELECT e.id, $1, e.source, e.target, e.relation, e.label, e.credibility
-     FROM jsonb_to_recordset($2::jsonb) AS e(id uuid, source uuid, target uuid, relation text, label text, credibility text)
+    `INSERT INTO graph_edges (id, investigation_id, source_node_id, target_node_id, relation, label, credibility, source_side, target_side)
+     SELECT e.id, $1, e.source, e.target, e.relation, e.label, e.credibility, e.source_side, e.target_side
+     FROM jsonb_to_recordset($2::jsonb) AS e(id uuid, source uuid, target uuid, relation text, label text, credibility text, source_side text, target_side text)
      WHERE e.source <> e.target
        AND EXISTS (SELECT 1 FROM graph_nodes n WHERE n.id = e.source AND n.investigation_id = $1)
        AND EXISTS (SELECT 1 FROM graph_nodes n WHERE n.id = e.target AND n.investigation_id = $1)
      ON CONFLICT (id) DO UPDATE
        SET source_node_id = EXCLUDED.source_node_id, target_node_id = EXCLUDED.target_node_id,
-           relation = EXCLUDED.relation, label = EXCLUDED.label, credibility = EXCLUDED.credibility
+           relation = EXCLUDED.relation, label = EXCLUDED.label, credibility = EXCLUDED.credibility,
+           source_side = EXCLUDED.source_side, target_side = EXCLUDED.target_side
        WHERE graph_edges.investigation_id = EXCLUDED.investigation_id`,
     [id, json(edgeRows.filter((e) => isUuid(e.source) && isUuid(e.target)))],
   );

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ExportRequest, Fact, PdfRequest, GraphEdge, GraphNode, Hypothesis, InvestigationVisibility, ShareRole, newId, type Investigation,
 } from '@ft/shared';
+import { withEdgeSides } from '@ft/shared';
 import { badParentNodes, sameLevelEdges } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
 import { exportInvestigation } from '../export/build.ts';
@@ -83,7 +84,7 @@ export const investigationsRouter = router({
       });
       // Два уровня: контейнер внутреннего графа — существующий узел верхнего уровня. Связи — в пределах уровня.
       if (badParentNodes(nodes).length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'BAD_GRAPH_LEVEL' });
-      const edges = sameLevelEdges(nodes, input.edges);
+      const edges = sameLevelEdges(nodes, input.edges).map(withEdgeSides);
       return present(ctx, await ctx.deps.investigations.saveGraph(input.id, input.version, nodes, edges));
     }),
 

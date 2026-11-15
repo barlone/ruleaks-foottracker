@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   AttributeItem, DossierItem, DossierKind, DossierVisibility, ExportRequest, LinkItem, PdfRequest, MediaItem, NoteItem, PostItem, ShareRole,
-  SnapshotItem, DOSSIER_MEDIA_MAX_BYTES, MEDIA_FILE_MAX_BYTES, dossierMediaBytes, findDuplicate, itemIdentity, markDuplicates, mediaBytes, newId,
+  SnapshotItem, DOSSIER_MEDIA_MAX_BYTES, MEDIA_FILE_MAX_BYTES, dossierMediaBytes, findDuplicate, itemIdentity, itemImages, markDuplicates, mediaBytes, newId,
   pairAllowed, type Dossier,
 } from '@ft/shared';
 import { can, roleOf, type Action } from '../authz.ts';
@@ -55,11 +55,12 @@ function prepareItems(d: Dossier, inputs: z.infer<typeof NewItem>[]): { items: D
  * replacedId — элемент, который заменяется (updateItem): его прежний размер в сумму не входит.
  */
 function checkMediaLimits(d: Dossier, added: readonly DossierItem[], replacedId?: string) {
-  const fresh = added.filter((i) => i.type === 'media');
+  // Встроенные изображения есть у медиафайлов и у ссылок со снимками страницы.
+  const fresh = added.filter((i) => itemImages(i).length);
   if (!fresh.length) return;
-  for (const i of fresh) {
-    if (i.type === 'media' && mediaBytes(i.url) > MEDIA_FILE_MAX_BYTES) {
-      throw new TRPCError({ code: 'BAD_REQUEST', message: `MEDIA_TOO_LARGE: ${Math.ceil(mediaBytes(i.url) / 1024)} КБ` });
+  for (const url of fresh.flatMap(itemImages)) {
+    if (mediaBytes(url) > MEDIA_FILE_MAX_BYTES) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: `MEDIA_TOO_LARGE: ${Math.ceil(mediaBytes(url) / 1024)} КБ` });
     }
   }
   const used = dossierMediaBytes(d.items.filter((i) => i.id !== replacedId));

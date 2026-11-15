@@ -300,7 +300,7 @@ function GoogleResult({ job, loading, error }: { job: Job | undefined; loading: 
             <span className="text-mint">{text}</span>
             {report.demo && <span className="ml-2 text-warn">· {t('имитация')}</span>}
           </div>
-          <Button variant="primary" size="sm" onClick={() => setAdding(links)} disabled={!links.length} title={links.length ? t('Найденные ссылки — в «Соцсети и ссылки» досье') : t('Ссылок для досье нет')}>
+          <Button variant="primary" size="sm" onClick={() => setAdding(links)} disabled={!links.length} title={links.length ? t('Найденные ссылки — в «Соцсети» досье') : t('Ссылок для досье нет')}>
             <FolderPlus size={15} /> {t('Ссылки в досье')}
           </Button>
         </div>

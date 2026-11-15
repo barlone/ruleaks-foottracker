@@ -17,6 +17,13 @@ export function sameLevelEdges<E extends Pick<GraphEdge, 'source' | 'target'>>(n
   return edges.filter((e) => level.has(e.source) && level.has(e.target) && level.get(e.source) === level.get(e.target));
 }
 
+/** Стороны боковой связи — только парой: одна без другой отбрасывается, связь становится обычной. */
+export function withEdgeSides<E extends Pick<GraphEdge, 'sourceSide' | 'targetSide'>>(e: E): E {
+  if (e.sourceSide && e.targetSide) return e;
+  const { sourceSide: _s, targetSide: _t, ...rest } = e;
+  return rest as E;
+}
+
 /** Название узла для списков вне графа: вложенный — «Контейнер › Узел». */
 export function nodeTitles(nodes: Pick<GraphNode, 'id' | 'parentId' | 'label' | 'type'>[]): Map<string, string> {
   const own = new Map(nodes.map((n) => [n.id, n.label || NODE_TYPE_LABELS[n.type]]));

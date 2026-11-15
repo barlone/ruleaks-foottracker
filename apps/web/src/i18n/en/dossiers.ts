@@ -92,6 +92,8 @@ const en: Record<string, string> = {
   'Атрибуты': 'Attributes',
   'Пусто': 'Empty',
   'Соцсети': 'Social networks',
+  'Из буфера обмена': 'From clipboard',
+  'Вставить изображение из буфера обмена (или Ctrl+V в этом окне)': 'Paste an image from the clipboard (or press Ctrl+V in this window)',
   'Ссылки': 'Links',
   'Ссылка': 'Link',
   'Адрес страницы': 'Page address',

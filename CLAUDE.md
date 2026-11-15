@@ -492,6 +492,9 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   limits — `itemImages` / `dossierMediaBytes` count shots together with media files. Export carries `kind` and
   `shots` as optional keys (additive to v1); the PDF lists the shot dates only. Found pages (`AddPagesDialog`) go to
   «Соцсети». Site archives are planned for this section.
+- Add-media dialog: «Из буфера обмена» (`clipboardImage`, Clipboard API) and Ctrl+V anywhere in the open dialog
+  (`pastedImage`) take an image from the clipboard; `imageDataUrl` keeps it as is under the file limit and squeezes a
+  bigger one (`fitShot`) instead of refusing — a screenshot has no file to put on Google Drive. Helpers: `lib/shotImage.ts`.
 - Group members (`MembersEditor`): «Новое досье» creates a person dossier, adds it to the group and opens it with
   `?from=<group id>`; member links carry the same `from`. `/dossiers/$id?from=` shows «← в группу …» right of the
   title (`BackToGroup`), like `/search?from=` shows the way back to the dossier.

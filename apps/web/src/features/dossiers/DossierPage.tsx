@@ -5,7 +5,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from '@dnd-kit/utilities';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
-  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, MailSearch, Maximize2, NotebookPen, Pencil, Plus, Trash2, X,
+  ArrowLeft, Camera, ChevronDown, ChevronUp, ExternalLink, FileSearch, Link2, MailSearch, Maximize2, NotebookPen, Pencil, Plus, Trash2, X, ClipboardPaste,
 } from 'lucide-react';
 import {
   ATTR_PAIRS, ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, pairAllowed, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND,
@@ -27,6 +27,7 @@ import { Button, Card, ConfirmDeleteBtn, CopyButton, DELETE_GAP, Dialog, Empty, 
 import { driveImageUrl, drivePreviewUrl, googleDriveId } from '../../lib/driveLinks.ts';
 import { DriveHelpButton } from '../../components/DriveHelp.tsx';
 import { WebLinksCard } from './WebLinks.tsx';
+import { clipboardImage, imageDataUrl, pastedImage } from '../../lib/shotImage.ts';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { fmtDate, fmtBytes } from '../../lib/format.ts';
@@ -1212,6 +1213,29 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
     if (!title) setTitle(f.name);
   }
 
+  // Изображение из буфера обмена (снимок экрана): кнопкой или Ctrl+V. Большое ужимается до лимита, а не отвергается —
+  // у снимка экрана нет файла, который можно было бы положить на Гугл-диск.
+  async function fromClipboard(blob: Blob | null) {
+    if (!blob) return setError(t('В буфере обмена нет изображения'));
+    setError(null);
+    try {
+      setValue(await imageDataUrl(blob, MEDIA_FILE_MAX_BYTES));
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
+  useEffect(() => {
+    if (kind !== 'media') return;
+    const onPaste = (e: ClipboardEvent) => {
+      const file = pastedImage(e);
+      if (!file) return; // текст (ссылка) вставляется в поле как обычно
+      e.preventDefault();
+      void fromClipboard(file);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [kind]); // eslint-disable-line react-hooks/exhaustive-deps
+
   let body: ReactNode;
   if (kind === 'attribute') {
     body = (
@@ -1252,7 +1276,18 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
             file: fmtBytes(MEDIA_FILE_MAX_BYTES), total: fmtBytes(DOSSIER_MEDIA_MAX_BYTES), used: fmtBytes(dossierMediaBytes(existing)),
           })}
         >
-          <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
+          <div className="flex flex-wrap items-center gap-2">
+            <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              title={t('Вставить изображение из буфера обмена (или Ctrl+V в этом окне)')}
+              onClick={() => void clipboardImage().then(fromClipboard, () => setError(t('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне')))}
+            >
+              <ClipboardPaste size={13} /> {t('Из буфера обмена')}
+            </Button>
+          </div>
         </Field>
         <Field
           label={t('…или URL изображения')}

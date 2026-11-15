@@ -54,3 +54,30 @@ export function todayIso(): string {
 
 /** ГГГГ-ММ-ДД → ДД.ММ.ГГГГ (дата снимка — календарная, без часового пояса). */
 export const shotDate = (iso: string) => iso.split('-').reverse().join('.');
+
+/** Изображение из события вставки (Ctrl+V); null — в буфере не картинка. */
+export const pastedImage = (e: ClipboardEvent): File | null =>
+  [...(e.clipboardData?.items ?? [])].find((i) => i.kind === 'file' && i.type.startsWith('image/'))?.getAsFile() ?? null;
+
+/**
+ * Изображение из буфера обмена по кнопке (Clipboard API: только HTTPS или localhost, браузер может спросить
+ * разрешение). null — в буфере не картинка; исключение — браузер буфер не отдал.
+ */
+export async function clipboardImage(): Promise<Blob | null> {
+  for (const item of await navigator.clipboard.read()) {
+    const type = item.types.find((x) => x.startsWith('image/'));
+    if (type) return item.getType(type);
+  }
+  return null;
+}
+
+/** Изображение → data URL: что укладывается в maxBytes — как есть (без потери качества), остальное ужимается. */
+export function imageDataUrl(blob: Blob, maxBytes: number): Promise<string> {
+  if (blob.size > maxBytes) return fitShot(blob, maxBytes);
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error(t('Не удалось прочитать изображение')));
+    r.readAsDataURL(blob);
+  });
+}

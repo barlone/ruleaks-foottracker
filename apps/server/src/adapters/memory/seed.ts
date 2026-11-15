@@ -158,8 +158,8 @@ export const seedInvestigations: SeedInvestigation[] = [
       { id: 'f-4', textMd: 'Источник «Ворон»: Петров лично согласовывает контракты свыше 5 млн ₽.', occurredAt: null, sources: [src('humint', 'Источник «Ворон»', 'C', '3', '2026-10-01')], nodeIds: ['n-petrov', 'n-adm'], createdAt: t('2026-10-01') },
     ],
     hypotheses: [
-      { id: 'h-1', title: 'ИП Соколова — номинальный подрядчик Петрова', textMd: 'Петров, используя связи в администрации, обеспечивает победу ИП Соколовой в тендерах.', status: 'supported', evidence: [{ factId: 'f-2', stance: 'supports' }, { factId: 'f-3', stance: 'supports' }, { factId: 'f-4', stance: 'supports' }], createdAt: t('2026-10-01') },
-      { id: 'h-2', title: 'Совпадение случайно', textMd: 'Знакомство не связано с результатами тендеров.', status: 'open', evidence: [], createdAt: t('2026-10-02') },
+      { id: 'h-1', title: 'ИП Соколова — номинальный подрядчик Петрова', textMd: 'Петров, используя связи в администрации, обеспечивает победу ИП Соколовой в тендерах.', status: 'supported', evidence: [{ factId: 'f-2', stance: 'supports' }, { factId: 'f-3', stance: 'supports' }, { factId: 'f-4', stance: 'supports' }], args: [], createdAt: t('2026-10-01') },
+      { id: 'h-2', title: 'Совпадение случайно', textMd: 'Знакомство не связано с результатами тендеров.', status: 'open', evidence: [], args: [], createdAt: t('2026-10-02') },
     ],
   },
   {

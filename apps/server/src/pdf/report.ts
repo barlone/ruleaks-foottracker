@@ -334,6 +334,15 @@ export class Report {
         stack: [
           { text: [{ text: clean(h.title || 'Без названия'), bold: true }, { text: ` · ${HYPOTHESIS_STATUS[h.status]}`, color: '#555' }], fontSize: 10 },
           ...this.md(h.textMd),
+          // Доводы — двумя списками, как в редакторе гипотезы.
+          ...(['supports', 'contradicts'] as const).flatMap((stance) => {
+            const list = h.args.filter((a) => a.stance === stance);
+            if (!list.length) return [];
+            return [
+              { text: stance === 'supports' ? `За (${list.length})` : `Против (${list.length})`, bold: true, fontSize: 9, margin: [0, 4, 0, 2] } as Content,
+              { ul: list.map((a) => ({ stack: this.md(a.textMd) })), margin: [0, 0, 0, 2] } as Content,
+            ];
+          }),
           ...(sup ? [{ text: [{ text: 'Подкрепляют факты: ', bold: true }, sup], style: 'small' } as Content] : []),
           ...(con ? [{ text: [{ text: 'Противоречат факты: ', bold: true }, con], style: 'small' } as Content] : []),
         ],

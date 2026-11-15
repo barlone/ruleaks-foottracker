@@ -383,14 +383,34 @@ export const Fact = z.object({
 
 export const HypothesisStatus = z.enum(['open', 'supported', 'confirmed', 'refuted']);
 
+export const HypothesisStance = z.enum(['supports', 'contradicts']);
+
+/** Довод гипотезы — запись «за» или «против» с текстом в Markdown (как заметка досье). */
+export const HypothesisArgument = z.object({
+  id: Id,
+  stance: HypothesisStance,
+  textMd: z.string().min(1).max(20_000),
+  createdAt: z.string(),
+});
+
 export const Hypothesis = z.object({
   id: Id,
   title: z.string().max(256),
+  /** Общее обоснование (осталось от прежнего редактора; новые гипотезы аргументируются доводами). */
   textMd: z.string().max(20_000),
   status: HypothesisStatus,
-  evidence: z.array(z.object({ factId: Id, stance: z.enum(['supports', 'contradicts']) })),
+  /** Факты расследования, отмеченные как подкрепляющие или противоречащие. */
+  evidence: z.array(z.object({ factId: Id, stance: HypothesisStance })),
+  /** Доводы «за» и «против» — два списка в редакторе гипотезы. */
+  args: z.array(HypothesisArgument).max(200).default([]),
   createdAt: z.string(),
 });
+
+/** Сколько у гипотезы «за» и «против»: доводы вместе с отмеченными фактами. */
+export function hypothesisScore(h: { evidence: { stance: string }[]; args?: { stance: string }[] }): { pro: number; con: number } {
+  const all = [...h.evidence, ...(h.args ?? [])];
+  return { pro: all.filter((x) => x.stance === 'supports').length, con: all.filter((x) => x.stance === 'contradicts').length };
+}
 
 export const Investigation = z.object({
   id: Id,

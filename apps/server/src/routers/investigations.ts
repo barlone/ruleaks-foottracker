@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  ExportRequest, Fact, PdfRequest, GraphEdge, GraphNode, Hypothesis, InvestigationVisibility, ShareRole, newId, type Investigation,
+  ExportRequest, Fact, PdfRequest, GraphEdge, GraphNode, Hypothesis, HypothesisArgument, InvestigationVisibility, ShareRole, newId, type Investigation,
 } from '@ft/shared';
 import { withEdgeSides } from '@ft/shared';
 import { badParentNodes, sameLevelEdges } from '@ft/shared';
@@ -103,11 +103,25 @@ export const investigationsRouter = router({
   }),
 
   upsertHypothesis: activeProcedure
-    .input(z.object({ id: z.string(), hypothesis: Hypothesis.omit({ id: true, createdAt: true }).extend({ id: z.string().optional() }) }))
+    .input(z.object({
+      id: z.string(),
+      hypothesis: Hypothesis.omit({ id: true, createdAt: true, args: true }).extend({
+        id: z.string().optional(),
+        // Доводы: новому id и время создания даёт сервер; без поля (прежний клиент) доводы остаются как были.
+        args: z.array(HypothesisArgument.omit({ id: true, createdAt: true }).extend({ id: z.string().optional() })).max(200).optional(),
+      }),
+    }))
     .mutation(async ({ ctx, input }) => {
       const inv = await load(ctx, input.id, 'edit');
       const prev = inv.hypotheses.find((h) => h.id === input.hypothesis.id);
-      const h = { ...input.hypothesis, id: prev?.id ?? newId(), createdAt: prev?.createdAt ?? now() };
+      const old = new Map((prev?.args ?? []).map((a) => [a.id, a]));
+      const args = input.hypothesis.args
+        ? input.hypothesis.args.map((a) => {
+            const was = a.id ? old.get(a.id) : undefined;
+            return { id: was?.id ?? newId(), stance: a.stance, textMd: a.textMd, createdAt: was?.createdAt ?? now() };
+          })
+        : prev?.args ?? [];
+      const h = { ...input.hypothesis, args, id: prev?.id ?? newId(), createdAt: prev?.createdAt ?? now() };
       return present(ctx, await ctx.deps.investigations.upsertHypothesis(input.id, h, ctx.user.id));
     }),
 

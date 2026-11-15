@@ -302,6 +302,7 @@ class Converter {
       hypotheses: inv.hypotheses.map((h) => this.parse(Hypothesis, {
         id: newId(), title: h.title, textMd: this.markdown(h.textMd), status: h.status,
         evidence: h.evidence.flatMap((e) => (facts.has(e.fact) ? [{ factId: facts.get(e.fact)!, stance: e.stance }] : [])),
+        args: (h.args ?? []).map((a) => ({ id: newId(), stance: a.stance, textMd: this.markdown(a.textMd), createdAt: a.createdAt })),
         createdAt: h.createdAt,
       }, where)),
     };

@@ -167,6 +167,8 @@ export const ExportInvestigation = z.object({
     textMd: z.string(),
     status: HypothesisStatus,
     evidence: z.array(z.object({ fact: Key, stance: z.enum(['supports', 'contradicts']) })),
+    /** Доводы «за» и «против» (необязательное дополнение v1). */
+    args: z.array(z.object({ stance: z.enum(['supports', 'contradicts']), textMd: z.string(), createdAt: z.string() })).optional(),
     createdAt: z.string(),
   })),
   updatedAt: z.string(),

@@ -190,6 +190,7 @@ class Builder {
       hypotheses: inv.hypotheses.map((h, n) => ({
         key: `h${n + 1}`, title: h.title, textMd: this.markdown(h.textMd), status: h.status,
         evidence: h.evidence.flatMap((e) => (facts.has(e.factId) ? [{ fact: facts.get(e.factId)!, stance: e.stance }] : [])),
+        ...(h.args.length ? { args: h.args.map((a) => ({ stance: a.stance, textMd: this.markdown(a.textMd), createdAt: a.createdAt })) } : {}),
         createdAt: h.createdAt,
       })),
       updatedAt: inv.updatedAt,

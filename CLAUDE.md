@@ -537,6 +537,12 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 - Graph full screen: `?full=true` on `/investigations/$id` (button right of the editor toolbar, «вернуться в расследование»
   to leave; entering pushes history, leaving replaces). `AppShell` drops the sidebar and banners, `InvestigationPage`
   hides its header with `hidden` — nothing above the editor is unmounted, so the editor keeps its state and level.
+- Hypotheses (`investigations/HypothesesPanel.tsx`): a hypothesis has two lists of arguments — «за» / «против» —
+  edited in its dialog as note-like Markdown entries (`Hypothesis.args`: `{ id, stance, textMd, createdAt }`, jsonb
+  column `hypotheses.arguments`; the server assigns ids and creation times in `upsertHypothesis`, and a request without
+  `args` keeps the stored ones). Marking investigation facts as supporting / contradicting (`evidence`) stays;
+  `hypothesisScore` counts both for the «за: N / против: N» bar. `textMd` («Общее обоснование») is shown and editable
+  only where it was already written. Export carries `args` as an optional key; the PDF prints both lists.
 - Graph node images: a node linked to a dossier shows the dossier cover, fetched separately by `dossiers.covers`
   (readable ones only; not part of the graph payload, which is re-sent on every save) through `CoversContext`; any
   other node may carry its own `props.image` — a 128×128 WebP data URL made by `lib/squareImage.ts`, non-square

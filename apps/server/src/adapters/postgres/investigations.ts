@@ -83,8 +83,8 @@ export class PgInvestigations implements InvestigationRepo {
          WHERE f.investigation_id = $1 GROUP BY f.id ORDER BY f.created_at, f.id`,
         [id],
       ),
-      this.db.query<{ id: string; title: string; text_md: string; status: Hypothesis['status']; created_at: Date; evidence: Hypothesis['evidence'] | null }>(
-        `SELECT h.id, h.title, h.text_md, h.status, h.created_at,
+      this.db.query<{ id: string; title: string; text_md: string; status: Hypothesis['status']; created_at: Date; arguments: Hypothesis['args'] | null; evidence: Hypothesis['evidence'] | null }>(
+        `SELECT h.id, h.title, h.text_md, h.status, h.created_at, h.arguments,
                 jsonb_agg(jsonb_build_object('factId', ev.fact_id, 'stance', ev.stance) ORDER BY ev.fact_id)
                   FILTER (WHERE ev.fact_id IS NOT NULL) AS evidence
          FROM hypotheses h LEFT JOIN hypothesis_evidence ev ON ev.hypothesis_id = h.id
@@ -115,7 +115,7 @@ export class PgInvestigations implements InvestigationRepo {
         createdAt: f.created_at.toISOString(),
       })),
       hypotheses: hyps.rows.map((h) => ({
-        id: h.id, title: h.title, textMd: h.text_md, status: h.status, evidence: h.evidence ?? [], createdAt: h.created_at.toISOString(),
+        id: h.id, title: h.title, textMd: h.text_md, status: h.status, evidence: h.evidence ?? [], args: h.arguments ?? [], createdAt: h.created_at.toISOString(),
       })),
       version: inv.version,
       updatedAt: inv.updated_at.toISOString(),
@@ -328,11 +328,12 @@ async function writeFact(c: Tx, id: string, fact: Fact, actorId: string) {
 
 async function writeHypothesis(c: Tx, id: string, h: Hypothesis, actorId: string) {
   const r = await c.query(
-    `INSERT INTO hypotheses (id, investigation_id, title, text_md, status, created_by, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, text_md = EXCLUDED.text_md, status = EXCLUDED.status
+    `INSERT INTO hypotheses (id, investigation_id, title, text_md, status, created_by, created_at, arguments)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+     ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, text_md = EXCLUDED.text_md, status = EXCLUDED.status,
+                                    arguments = EXCLUDED.arguments
        WHERE hypotheses.investigation_id = EXCLUDED.investigation_id`,
-    [newObjectId(h.id), id, h.title, h.textMd, h.status, actorId, h.createdAt],
+    [newObjectId(h.id), id, h.title, h.textMd, h.status, actorId, h.createdAt, json(h.args ?? [])],
   );
   if (!r.rowCount) notFound();
   await c.query(`DELETE FROM hypothesis_evidence WHERE hypothesis_id = $1`, [h.id]);

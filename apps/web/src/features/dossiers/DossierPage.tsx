@@ -862,6 +862,21 @@ function MembersEditor({
   );
 }
 
+/** «Из буфера обмена»: читает картинку из буфера (Clipboard API); onDenied — браузер буфер не отдал. */
+function PasteImageButton({ onImage, onDenied }: { onImage: (blob: Blob | null) => void; onDenied: () => void }) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      title={t('Вставить изображение из буфера обмена (или Ctrl+V в этом окне)')}
+      onClick={() => void clipboardImage().then(onImage, onDenied)}
+    >
+      <ClipboardPaste size={13} /> {t('Из буфера обмена')}
+    </Button>
+  );
+}
+
 /** Правка медиа: подпись, альбом, источник и само изображение — новым файлом или ссылкой (в том числе Гугл-диска). */
 function EditMediaDialog({ media, onClose, onSave }: { media: Of<'media'> | null; onClose: () => void; onSave: (item: Of<'media'>) => Promise<void> }) {
   return (
@@ -898,6 +913,29 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
     r.onload = () => setValue(String(r.result));
     r.readAsDataURL(f);
   }
+
+  // Новое изображение из буфера обмена — кнопкой или Ctrl+V в любом месте окна (блок замены при этом раскрывается).
+  // Большое ужимается до лимита, как при добавлении.
+  async function fromClipboard(blob: Blob | null) {
+    if (!blob) return setError(t('В буфере обмена нет изображения'));
+    setError(null);
+    try {
+      setValue(await imageDataUrl(blob, MEDIA_FILE_MAX_BYTES));
+      setReplacing(true);
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const file = pastedImage(e);
+      if (!file) return; // текст вставляется в поля как обычно
+      e.preventDefault();
+      void fromClipboard(file);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit() {
     setSaving(true);
@@ -936,7 +974,10 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
       {replacing && (
         <div className="space-y-3 rounded-xl border border-line-soft p-3">
           <Field label={t('Новый файл')} hint={t('До {max}. Что больше — на свой Гугл-диск, сюда ссылку.', { max: fmtBytes(MEDIA_FILE_MAX_BYTES) })}>
-            <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
+            <div className="flex flex-wrap items-center gap-2">
+              <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
+              <PasteImageButton onImage={fromClipboard} onDenied={() => setError(t('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне'))} />
+            </div>
           </Field>
           <Field
             label={t('…или URL изображения')}
@@ -1278,15 +1319,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
         >
           <div className="flex flex-wrap items-center gap-2">
             <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              title={t('Вставить изображение из буфера обмена (или Ctrl+V в этом окне)')}
-              onClick={() => void clipboardImage().then(fromClipboard, () => setError(t('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне')))}
-            >
-              <ClipboardPaste size={13} /> {t('Из буфера обмена')}
-            </Button>
+            <PasteImageButton onImage={fromClipboard} onDenied={() => setError(t('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне'))} />
           </div>
         </Field>
         <Field

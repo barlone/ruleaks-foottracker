@@ -21,7 +21,7 @@ const APP = 'RuLeaks.Следопыт';
 
 const EXT: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg',
-  'image/bmp': 'bmp', 'image/heic': 'heic', 'image/avif': 'avif',
+  'image/bmp': 'bmp', 'image/heic': 'heic', 'image/avif': 'avif', 'application/pdf': 'pdf',
 };
 /** Уже сжатое не пережимаем. */
 const STORED = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/avif']);

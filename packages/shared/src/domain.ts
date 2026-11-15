@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MEDIA_DATA_URL_RE } from './media.ts';
 
 // Общие Zod-схемы предметной области. Источник истины для tRPC-ввода на сервере,
 // типов на фронте и (в будущем) для проверки JSONB-колонок перед записью в БД.
@@ -222,13 +223,18 @@ export const MediaItem = z.object({
   ...itemBase,
   type: z.literal('media'),
   mediaId: Id,
-  /** Временный URL превью (presigned), выдаётся сервером при чтении. */
-  url: z.string(),
+  /**
+   * Изображение или документ: внешний адрес либо встроенный файл (data URL — только картинка или PDF, media.ts).
+   * У видео и PDF с Гугл-диска здесь миниатюра.
+   */
+  url: z.string().refine((u) => !u.startsWith('data:') || MEDIA_DATA_URL_RE.test(u), 'Встроить можно только изображение или PDF'),
   thumbUrl: z.string().optional(),
   caption: z.string().max(1000).optional(),
   album: z.string().max(128).optional(),
   /** Видео: адрес встраиваемого плеера для iframe (Гугл-диск …/preview); url тогда — кадр или миниатюра. */
   embedUrl: z.string().max(2048).regex(DRIVE_EMBED_RE, 'Встроить можно только плеер Гугл-диска').optional(),
+  /** Документ PDF (встроенный файл или файл Гугл-диска с плеером в embedUrl) — в сетке плитка документа, а не картинка. */
+  format: z.literal('pdf').optional(),
 });
 
 export const NoteItem = z.object({

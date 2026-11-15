@@ -167,6 +167,13 @@ obvious from the schema:
   Drive `…/preview` player, opened in an iframe dialog from the gallery (lightbox is images only); the schema accepts
   only that player (`DRIVE_EMBED_RE`) — any other URL would frame a foreign page in a shared dossier. `embedUrl` is not
   in the export v1 format: an exported video comes back as its thumbnail image.
+  PDF in media: an embedded file is `data:application/pdf` in `url` (same limits), a Drive PDF is the thumbnail plus
+  `embedUrl` like a video; `format: 'pdf'` marks both (`isPdfMedia`; an embedded one is recognised by the URL alone,
+  so it survives export, which does not carry `format`). `MediaItem.url` accepts a data URL only if it is an image or
+  a PDF (`MEDIA_DATA_URL_RE`). The gallery shows a document tile (`components/PdfPreview.tsx` `PdfThumb`) and opens
+  `PdfFrame`: the data URL becomes a `blob:` of type `application/pdf` after a `%PDF-` signature check and goes to an
+  iframe (browser viewer) — hence `frame-src blob:` in the nginx CSP. A PDF cannot be the cover, is not in the image
+  lightbox, and the PDF report only lists it by caption.
 - Dossiers/investigations are soft-deleted (`deleted_at`); search history "clear" sets `hidden_at`, and a search that
   was attached to a dossier as a snapshot is `pinned`.
 - Repos that write `created_by`/`granted_by` take an `actorId` argument (memory adapters ignore it).

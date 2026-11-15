@@ -3,6 +3,7 @@ import {
   CREDIBILITY_LABELS, attrDisplayValue, NODE_TYPE_LABELS, POST_KIND_LABELS,
   type Dossier, type DossierItem, type Investigation, type PdfRequest, type Source,
 } from '@ft/shared';
+import { isPdfMedia } from '@ft/shared';
 import { nodeTitles } from '@ft/shared';
 import { can } from '../authz.ts';
 import { exportFileName } from '../export/build.ts';
@@ -240,7 +241,12 @@ export class Report {
           const caption = [m.album && m.album !== PHOTO_ALBUM ? m.album : '', m.caption ?? ''].filter(Boolean).join(' · ');
           return [{ stack: [img, ...(caption ? [{ text: clean(caption), style: 'small' } as Content] : []), ...this.sourceLine(m.source)], margin: [0, 0, 0, 8] } as Content];
         });
-        if (!cells.length) continue;
+        // PDF в отчёт не встраивается — только перечисляется.
+        const docs = list.filter(isPdfMedia).map((m) => clean(m.caption || 'без подписи'));
+        if (!cells.length) {
+          if (docs.length) out.push(h2(title), { text: [{ text: 'Документы PDF: ', bold: true }, docs.join('; ')], style: 'small' });
+          continue;
+        }
         const rows: Content[] = [];
         for (let i = 0; i < cells.length; i += 3) {
           const row = cells.slice(i, i + 3);
@@ -249,6 +255,7 @@ export class Report {
         }
         // Ряд картинок не делится, поэтому заголовок держится с первым рядом явно.
         out.push({ stack: [h2(title), rows[0]!], unbreakable: true }, ...rows.slice(1));
+        if (docs.length) out.push({ text: [{ text: 'Документы PDF: ', bold: true }, docs.join('; ')], style: 'small', margin: [0, 0, 0, 6] });
       }
     }
 

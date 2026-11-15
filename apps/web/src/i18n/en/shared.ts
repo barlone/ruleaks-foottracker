@@ -49,6 +49,7 @@ const en: Record<string, string> = {
   'Маловероятно': 'Improbable',
   'Нужна ссылка вида https://…': 'A link like https://… is required',
   'Встроить можно только плеер Гугл-диска': 'Only the Google Drive player can be embedded',
+  'Встроить можно только изображение или PDF': 'Only an image or a PDF can be embedded',
   // POST_KIND_LABELS
   'Пост': 'Post',
   'Комментарий': 'Comment',

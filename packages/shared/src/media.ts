@@ -7,6 +7,18 @@ export const MEDIA_FILE_MAX_BYTES = 1024 * 1024;
 /** Все медиафайлы одного досье. */
 export const DOSSIER_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
 
+/** Что принимает выбор файла в медиа досье: изображения и PDF. */
+export const MEDIA_ACCEPT = 'image/*,application/pdf';
+
+/** Встроенный файл медиа — только изображение или PDF (не HTML, не скрипт: файл открывается в интерфейсе сайта). */
+export const MEDIA_DATA_URL_RE = /^data:(image\/[\w.+-]+|application\/pdf)[;,]/i;
+
+/** Встроенный файл PDF (data URL). */
+export const isPdfUrl = (url: string) => /^data:application\/pdf[;,]/i.test(url);
+
+/** Медиафайл — документ PDF: встроенный или на Гугл-диске (format = pdf, открывается плеером Диска). */
+export const isPdfMedia = (m: { url: string; format?: string }) => m.format === 'pdf' || isPdfUrl(m.url);
+
 /** Размер встроенного изображения (data URL) в байтах; внешняя ссылка — 0. */
 export function mediaBytes(url: string): number {
   if (!url.startsWith('data:')) return 0;

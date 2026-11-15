@@ -6,11 +6,12 @@ import Lightbox from 'yet-another-react-lightbox';
 import Captions from 'yet-another-react-lightbox/plugins/captions';
 import 'yet-another-react-lightbox/styles.css';
 import 'yet-another-react-lightbox/plugins/captions.css';
-import { GripVertical, Pencil, Play, Star, Trash2 } from 'lucide-react';
+import { FileText, GripVertical, Pencil, Play, Star, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
-import { DRIVE_EMBED_RE, type DossierItem } from '@ft/shared';
+import { DRIVE_EMBED_RE, isPdfMedia, isPdfUrl, type DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
 import { DELETE_GAP, Dialog } from '../../components/ui.tsx';
+import { PdfFrame, PdfThumb } from '../../components/PdfPreview.tsx';
 import { t } from '../../lib/i18n.ts';
 import { albumLabel } from './labels.ts';
 
@@ -35,11 +36,14 @@ export function MediaGallery({
   const [order, setOrder] = useState<string[] | null>(null);
   const [open, setOpen] = useState(-1);
   const [video, setVideo] = useState<Media | null>(null);
+  const [pdf, setPdf] = useState<Media | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const byId = new Map(items.map((m) => [m.id, m]));
   const ids = order?.filter((id) => byId.has(id)) ?? items.map((m) => m.id);
   const sorted = ids.map((id) => byId.get(id)!);
+  // В просмотр картинок (Lightbox) идут только картинки: у видео и PDF свои окна.
+  const images = sorted.filter((m) => !m.embedUrl && !isPdfMedia(m));
 
   function onDragEnd(e: DragEndEvent) {
     if (!e.over || e.active.id === e.over.id) return;
@@ -53,13 +57,13 @@ export function MediaGallery({
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={rectSortingStrategy}>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            {sorted.map((m, i) => (
+            {sorted.map((m) => (
               <Tile
                 key={m.id}
                 m={m}
                 editable={editable}
                 isCover={m.url === coverUrl}
-                onOpen={() => (m.embedUrl ? setVideo(m) : setOpen(i))}
+                onOpen={() => (m.embedUrl ? setVideo(m) : isPdfUrl(m.url) ? setPdf(m) : setOpen(images.indexOf(m)))}
                 onRemove={() => onRemove(m.id)}
                 onCover={() => onCover(m.url)}
                 onEdit={() => onEdit(m)}
@@ -73,13 +77,17 @@ export function MediaGallery({
         index={open}
         close={() => setOpen(-1)}
         plugins={[Captions]}
-        slides={sorted.map((m) => ({ src: m.url, title: m.caption, description: m.album && albumLabel(m.album) }))}
+        slides={images.map((m) => ({ src: m.url, title: m.caption, description: m.album && albumLabel(m.album) }))}
         styles={{ container: { backgroundColor: 'rgba(0,0,0,.92)' } }}
       />
       {/* Видео: встраиваемый плеер (Гугл-диск) — iframe в окне, Lightbox работает только с картинками и прямыми файлами. */}
-      <Dialog open={!!video} onOpenChange={(v) => !v && setVideo(null)} title={video?.caption || t('Видео')} wide>
+      <Dialog open={!!video} onOpenChange={(v) => !v && setVideo(null)} title={video?.caption || (video && isPdfMedia(video) ? 'PDF' : t('Видео'))} wide>
         {/* Адрес проверен схемой при сохранении; здесь — ещё раз, на случай старых или пришедших в обход данных. */}
         {video?.embedUrl && DRIVE_EMBED_RE.test(video.embedUrl) && <iframe src={video.embedUrl} title={video.caption ?? t('Видео')} allow="autoplay; fullscreen" allowFullScreen className="aspect-video w-full rounded-lg border border-line bg-bg" />}
+      </Dialog>
+      {/* Встроенный PDF — просмотрщиком браузера. */}
+      <Dialog open={!!pdf} onOpenChange={(v) => !v && setPdf(null)} title={pdf?.caption || 'PDF'} wide>
+        {pdf && <PdfFrame url={pdf.url} title={pdf.caption ?? 'PDF'} />}
       </Dialog>
     </>
   );
@@ -89,6 +97,9 @@ function Tile({
   m, editable, isCover, onOpen, onRemove, onCover, onEdit,
 }: { m: Media; editable: boolean; isCover: boolean; onOpen: () => void; onRemove: () => void; onCover: () => void; onEdit: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: m.id, disabled: !editable });
+  const doc = isPdfMedia(m);
+  // Встроенный PDF картинкой не показать; у PDF с Гугл-диска есть миниатюра первой страницы.
+  const embedded = isPdfUrl(m.url);
   return (
     <figure
       ref={setNodeRef}
@@ -98,11 +109,17 @@ function Tile({
         isDragging && 'z-10 border-mint shadow-glow',
       )}
     >
-      <button onClick={onOpen} className={clsx('relative block aspect-[4/3] w-full', m.embedUrl ? 'cursor-pointer' : 'cursor-zoom-in')} title={m.embedUrl ? t('Воспроизвести') : undefined}>
-        <img src={m.url} alt={m.caption ?? ''} className="size-full object-cover" draggable={false} />
+      <button
+        onClick={onOpen}
+        className={clsx('relative block aspect-[4/3] w-full', m.embedUrl || doc ? 'cursor-pointer' : 'cursor-zoom-in')}
+        title={doc ? t('Открыть документ') : m.embedUrl ? t('Воспроизвести') : undefined}
+      >
+        {embedded ? <PdfThumb className="size-full" /> : <img src={m.url} alt={m.caption ?? ''} className="size-full object-cover" draggable={false} />}
         {m.embedUrl && (
           <span className="absolute inset-0 grid place-items-center">
-            <span className="grid size-10 place-items-center rounded-full border border-mint/60 bg-bg/70 text-mint"><Play size={18} fill="currentColor" /></span>
+            <span className="grid size-10 place-items-center rounded-full border border-mint/60 bg-bg/70 text-mint">
+              {doc ? <FileText size={18} /> : <Play size={18} fill="currentColor" />}
+            </span>
           </span>
         )}
       </button>
@@ -113,9 +130,12 @@ function Tile({
       {m.album && <span className="absolute left-2 top-2 rounded bg-bg/70 px-1.5 font-mono text-[10px] text-mint">{albumLabel(m.album)}</span>}
       {editable && (
         <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
-          <button onClick={onCover} title={t('Сделать обложкой')} className={clsx('grid size-7 cursor-pointer place-items-center rounded bg-bg/70', isCover ? 'text-mint' : 'text-dim hover:text-mint')}>
-            <Star size={13} fill={isCover ? 'currentColor' : 'none'} />
-          </button>
+          {/* Обложкой может быть только картинка. */}
+          {!embedded && (
+            <button onClick={onCover} title={t('Сделать обложкой')} className={clsx('grid size-7 cursor-pointer place-items-center rounded bg-bg/70', isCover ? 'text-mint' : 'text-dim hover:text-mint')}>
+              <Star size={13} fill={isCover ? 'currentColor' : 'none'} />
+            </button>
+          )}
           <button onClick={onEdit} title={t('Править')} className="grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-mint">
             <Pencil size={13} />
           </button>

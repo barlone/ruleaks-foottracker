@@ -10,7 +10,7 @@ import {
 import {
   ATTR_PAIRS, ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, pairAllowed, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND,
   POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection,
-  parseEmail, stripHighlight,
+  MEDIA_ACCEPT, isPdfUrl, parseEmail, stripHighlight,
 } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
@@ -27,6 +27,7 @@ import { Button, Card, ConfirmDeleteBtn, CopyButton, DELETE_GAP, Dialog, Empty, 
 import { driveImageUrl, drivePreviewUrl, googleDriveId } from '../../lib/driveLinks.ts';
 import { DriveHelpButton } from '../../components/DriveHelp.tsx';
 import { WebLinksCard } from './WebLinks.tsx';
+import { PdfThumb } from '../../components/PdfPreview.tsx';
 import { clipboardImage, imageDataUrl, pastedImage } from '../../lib/shotImage.ts';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
@@ -235,7 +236,7 @@ export function DossierPage() {
           )}
 
           <Card compact
-            title={<><Camera size={13} /> {t('Медиа')}</>}
+            title={<><Camera size={13} /> {t('Медиа (изображения, видео, PDF)')}</>}
             actions={(
               <span className="flex items-center gap-2">
                 {media.length > 0 && (
@@ -372,7 +373,7 @@ export function DossierPage() {
           const before = d.items.find((i) => i.id === item.id);
           const saved = await updateItem.mutateAsync({ id, item });
           // Заменили картинку, которая была обложкой: обложка привязана к прежнему файлу — переносим её на новый.
-          if (before?.type === 'media' && before.url !== item.url && d.coverMediaUrl === before.url) {
+          if (before?.type === 'media' && before.url !== item.url && !isPdfUrl(item.url) && d.coverMediaUrl === before.url) {
             await update.mutateAsync({ id, version: saved.version, patch: { coverMediaUrl: item.url } });
           }
           setEditingMedia(null);
@@ -897,7 +898,7 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
   // Замена изображения: пусто — остаётся прежнее; data URL (выбран файл) или введённая ссылка.
   const [replacing, setReplacing] = useState(false);
   const [value, setValue] = useState('');
-  const [mediaKind, setMediaKind] = useState<'image' | 'video'>(media.embedUrl ? 'video' : 'image');
+  const [mediaKind, setMediaKind] = useState<'image' | 'video' | 'pdf'>(media.format === 'pdf' ? 'pdf' : media.embedUrl ? 'video' : 'image');
   const next = value.trim();
   const driveId = next && !next.startsWith('data:') ? googleDriveId(next) : null;
   const preview = !next ? media.url : driveId ? driveImageUrl(driveId) : next;
@@ -945,7 +946,12 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
       const src = finishSource(source);
       // Новое изображение: ссылка Диска — миниатюра и, для видео, адрес плеера; у остального плеера нет.
       const image = next
-        ? { url: preview, embedUrl: driveId && mediaKind === 'video' ? drivePreviewUrl(driveId) : undefined }
+        ? {
+            url: preview,
+            // Видео и PDF с Диска открываются его плеером; встроенный PDF — просмотрщиком браузера.
+            embedUrl: driveId && mediaKind !== 'image' ? drivePreviewUrl(driveId) : undefined,
+            format: isPdfUrl(next) || (driveId && mediaKind === 'pdf') ? ('pdf' as const) : undefined,
+          }
         : {};
       await onSave({ ...media, ...image, caption: caption.trim() || undefined, album: album.trim() || undefined, source: capturedAt ? { ...src, capturedAt } : src });
     } catch (e) {
@@ -964,7 +970,7 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
       }}
     >
       <div className="flex items-end gap-3">
-        <img src={preview} alt="" className="max-h-48 min-w-0 rounded-lg border border-line" />
+        {isPdfUrl(preview) ? <PdfThumb className="h-32 w-44 shrink-0 rounded-lg border border-line" /> : <img src={preview} alt="" className="max-h-48 min-w-0 rounded-lg border border-line" />}
         {!replacing && (
           <button type="button" onClick={() => setReplacing(true)} className="shrink-0 cursor-pointer font-mono text-xs text-mute transition hover:text-mint">
             {t('заменить изображение')}
@@ -973,9 +979,9 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
       </div>
       {replacing && (
         <div className="space-y-3 rounded-xl border border-line-soft p-3">
-          <Field label={t('Новый файл')} hint={t('До {max}. Что больше — на свой Гугл-диск, сюда ссылку.', { max: fmtBytes(MEDIA_FILE_MAX_BYTES) })}>
+          <Field label={t('Новый файл (изображение или PDF)')} hint={t('До {max}. Что больше — на свой Гугл-диск, сюда ссылку.', { max: fmtBytes(MEDIA_FILE_MAX_BYTES) })}>
             <div className="flex flex-wrap items-center gap-2">
-              <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
+              <FilePicker accept={MEDIA_ACCEPT} onFiles={(fs) => onFile(fs[0])} />
               <PasteImageButton onImage={fromClipboard} onDenied={() => setError(t('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне'))} />
             </div>
           </Field>
@@ -983,7 +989,7 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
             label={t('…или URL изображения')}
             hint={(
               <>
-                {driveId ? t('Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»') : t('Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)')}
+                {driveId ? t('Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»') : t('Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка, видео или PDF)')}
                 {' '}
                 <DriveHelpButton />
               </>
@@ -992,7 +998,7 @@ function EditMediaForm({ media, onSave }: { media: Of<'media'>; onSave: (item: O
             <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder={t('https://… или https://drive.google.com/file/d/…')} />
           </Field>
           {driveId && (
-            <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: t('Изображение') }, { value: 'video', label: t('Видео') }]} />
+            <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: t('Изображение') }, { value: 'video', label: t('Видео') }, { value: 'pdf', label: 'PDF' }]} />
           )}
           <button
             type="button"
@@ -1189,7 +1195,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
   const [title, setTitle] = useState('');
   const [album, setAlbum] = useState('');
   // Для ссылки Гугл-диска: по самой ссылке не понять, картинка это или видео — спрашиваем.
-  const [mediaKind, setMediaKind] = useState<'image' | 'video'>('image');
+  const [mediaKind, setMediaKind] = useState<'image' | 'video' | 'pdf'>('image');
   const driveId = kind === 'media' && !value.startsWith('data:') ? googleDriveId(value) : null;
   // Пост: вид, площадка, где опубликовано, ссылка, время (UTC), эмодзи реакции, на что ответ.
   const [postKind, setPostKind] = useState<Of<'post'>['kind']>('comment');
@@ -1221,8 +1227,10 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
       } else if (kind === 'media') {
         // Ссылка Диска хранится как миниатюра (картинка, кадр видео) и, для видео, адрес плеера.
         const url = driveId ? driveImageUrl(driveId) : value;
-        const embedUrl = driveId && mediaKind === 'video' ? drivePreviewUrl(driveId) : undefined;
-        await onAdd({ type: 'media', mediaId: newId(), url, embedUrl, caption: title || undefined, album: album || undefined, source: src });
+        // Видео и PDF с Диска открываются его плеером; встроенный PDF — просмотрщиком браузера.
+        const embedUrl = driveId && mediaKind !== 'image' ? drivePreviewUrl(driveId) : undefined;
+        const format = isPdfUrl(value) || (driveId && mediaKind === 'pdf') ? ('pdf' as const) : undefined;
+        await onAdd({ type: 'media', mediaId: newId(), url, embedUrl, format, caption: title || undefined, album: album || undefined, source: src });
       } else if (kind === 'post') {
         await onAdd({
           type: 'post', kind: postKind, platform, text: value, place: place.trim() || undefined, url: title.trim() || undefined,
@@ -1312,13 +1320,13 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
     body = (
       <>
         <Field
-          label={t('Файл')}
+          label={t('Файл (изображение или PDF)')}
           hint={t('До {file} на файл и {total} на досье (занято {used}). Что больше — на свой Гугл-диск, в досье ссылку.', {
             file: fmtBytes(MEDIA_FILE_MAX_BYTES), total: fmtBytes(DOSSIER_MEDIA_MAX_BYTES), used: fmtBytes(dossierMediaBytes(existing)),
           })}
         >
           <div className="flex flex-wrap items-center gap-2">
-            <FilePicker accept="image/*" onFiles={(fs) => onFile(fs[0])} />
+            <FilePicker accept={MEDIA_ACCEPT} onFiles={(fs) => onFile(fs[0])} />
             <PasteImageButton onImage={fromClipboard} onDenied={() => setError(t('Браузер не дал прочитать буфер обмена — нажмите Ctrl+V в этом окне'))} />
           </div>
         </Field>
@@ -1326,7 +1334,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
           label={t('…или URL изображения')}
           hint={(
             <>
-              {driveId ? t('Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»') : t('Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка или видео)')}
+              {driveId ? t('Ссылка Гугл-диска: файл должен быть открыт «всем, у кого есть ссылка»') : t('Подойдёт и ссылка «Поделиться» с Гугл-диска (картинка, видео или PDF)')}
               {' '}
               <DriveHelpButton />
             </>
@@ -1335,9 +1343,11 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
           <Input value={value.startsWith('data:') ? '' : value} onChange={(e) => setValue(e.target.value)} placeholder={t('https://… или https://drive.google.com/file/d/…')} />
         </Field>
         {driveId && (
-          <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: t('Изображение') }, { value: 'video', label: t('Видео') }]} />
+          <Segmented value={mediaKind} onChange={setMediaKind} options={[{ value: 'image', label: t('Изображение') }, { value: 'video', label: t('Видео') }, { value: 'pdf', label: 'PDF' }]} />
         )}
-        {value && <img src={driveId ? driveImageUrl(driveId) : value} alt="" className="max-h-48 rounded-lg border border-line" />}
+        {value && (isPdfUrl(value)
+          ? <PdfThumb className="h-32 w-44 rounded-lg border border-line" />
+          : <img src={driveId ? driveImageUrl(driveId) : value} alt="" className="max-h-48 rounded-lg border border-line" />)}
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('Подпись')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
           <Field label={t('Альбом')}><Input value={album} onChange={(e) => setAlbum(e.target.value)} placeholder={t('Соцсети, Наблюдение…')} /></Field>

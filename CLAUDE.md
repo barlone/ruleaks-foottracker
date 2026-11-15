@@ -506,7 +506,8 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   `?from=<group id>`; member links carry the same `from`. `/dossiers/$id?from=` shows «← в группу …» right of the
   title (`BackToGroup`), like `/search?from=` shows the way back to the dossier.
 - Dossier notes (`NotesList` in `DossierPage.tsx`, dnd-kit): a collapsed note shows a four-dot handle; while one is
-  dragged every note is force-collapsed (`forceCollapsed`, own state kept) and the order goes to `reorderItems`.
+  dragged every note is force-collapsed (`forceCollapsed`, own state kept) and the order goes to `reorderItems`. The collapsed state is stored in the note itself (`NoteItem.collapsed`, saved by `updateItem` on
+  every toggle when the user may edit; UI-only — not exported, not in PDF), so it survives reopening the dossier.
 - Graph notes (`investigations/GraphEditor.tsx`): a node's «Пояснение» is `props.note` (so it travels with `props`
   in export), an edge's is `GraphEdge.label` (≤ 2000); both are 3-row textareas in the side panel. The graph shows an
   edge as «relation · first three words…» (`edgeLabel`), and hovering a node or edge shows the full note in a tooltip

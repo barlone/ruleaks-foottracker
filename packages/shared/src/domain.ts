@@ -241,6 +241,8 @@ export const NoteItem = z.object({
   ...itemBase,
   type: z.literal('note'),
   markdown: z.string().max(100_000),
+  /** Заметка свёрнута до первой строки. Только вид в интерфейсе: в экспорт и PDF не попадает. */
+  collapsed: z.boolean().optional(),
 });
 
 export const SnapshotItem = z.object({

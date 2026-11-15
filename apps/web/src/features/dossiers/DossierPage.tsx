@@ -291,6 +291,7 @@ export function DossierPage() {
                 editable={editable}
                 onReorder={(ids) => reorder.mutate({ id, orderedIds: ids })}
                 onSave={(n, markdown) => updateItem.mutateAsync({ id, item: { ...n, markdown } }).then(() => undefined)}
+                onCollapse={(n, collapsed) => updateItem.mutate({ id, item: { ...n, collapsed: collapsed || undefined } })}
                 onRemove={(itemId) => removeItem.mutate({ id, itemId })}
               />
             </div>
@@ -642,11 +643,13 @@ function RepeatSearchLink({ section, kind, query, deep }: { section: SearchSecti
  * Заметки с перестановкой мышью: ручка с четырьмя точками есть только у свёрнутой заметки. Пока одну тянут,
  * остальные временно свёрнуты (иначе целиться между длинными текстами невозможно); после сброса возвращаются.
  */
-function NotesList({ notes, editable, onReorder, onSave, onRemove }: {
+function NotesList({ notes, editable, onReorder, onSave, onCollapse, onRemove }: {
   notes: Of<'note'>[];
   editable: boolean;
   onReorder: (orderedIds: string[]) => void;
   onSave: (note: Of<'note'>, markdown: string) => Promise<void>;
+  /** Запомнить в заметке, что она свёрнута или развёрнута. */
+  onCollapse: (note: Of<'note'>, collapsed: boolean) => void;
   onRemove: (itemId: string) => void;
 }) {
   const [order, setOrder] = useState<string[] | null>(null);
@@ -669,22 +672,32 @@ function NotesList({ notes, editable, onReorder, onSave, onRemove }: {
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         {ids.map((x) => {
           const n = byId.get(x)!;
-          return <NoteCard key={n.id} note={n} editable={editable} forceCollapsed={dragging} onSave={(md) => onSave(n, md)} onRemove={() => onRemove(n.id)} />;
+          return <NoteCard key={n.id} note={n} editable={editable} forceCollapsed={dragging} onSave={(md) => onSave(n, md)} onCollapse={(v) => onCollapse(n, v)} onRemove={() => onRemove(n.id)} />;
         })}
       </SortableContext>
     </DndContext>
   );
 }
 
-function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
+function NoteCard({ note, editable, forceCollapsed, onSave, onCollapse, onRemove }: {
   note: Of<'note'>;
   editable: boolean;
   /** Временно свёрнута, пока переставляют другую заметку; своё состояние сохраняется. */
   forceCollapsed: boolean;
   onSave: (markdown: string) => Promise<void>;
+  onCollapse: (collapsed: boolean) => void;
   onRemove: () => void;
 }) {
-  const [ownCollapsed, setCollapsed] = useState(false);
+  // Состояние хранится в самой заметке (note.collapsed) и возвращается при следующем входе в досье. Без права правки
+  // оно только местное: сохранить его нечем.
+  const [ownCollapsed, setOwnCollapsed] = useState(!!note.collapsed);
+  // Изменилось на сервере (другая вкладка, другой редактор) — принимаем.
+  useEffect(() => setOwnCollapsed(!!note.collapsed), [note.collapsed]);
+  const setCollapsed = (next: boolean) => {
+    setOwnCollapsed(next);
+    // Сохраняем каждое переключение, не сверяясь с note.collapsed: при быстром двойном нажатии оно ещё прежнее.
+    if (editable) onCollapse(next);
+  };
   const collapsed = ownCollapsed || forceCollapsed;
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: note.id, disabled: !editable || !ownCollapsed });
   const [draft, setDraft] = useState<string | null>(null);
@@ -723,7 +736,7 @@ function NoteCard({ note, editable, forceCollapsed, onSave, onRemove }: {
           <SourceBadge source={note.source} />
           <button
             type="button"
-            onClick={() => setCollapsed((v) => !v)}
+            onClick={() => setCollapsed(!ownCollapsed)}
             title={ownCollapsed ? t('Развернуть') : t('Свернуть')}
             className="cursor-pointer text-mute hover:text-mint"
           >

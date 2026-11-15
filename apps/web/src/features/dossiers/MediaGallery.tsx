@@ -6,11 +6,11 @@ import Lightbox from 'yet-another-react-lightbox';
 import Captions from 'yet-another-react-lightbox/plugins/captions';
 import 'yet-another-react-lightbox/styles.css';
 import 'yet-another-react-lightbox/plugins/captions.css';
-import { FileText, GripVertical, Pencil, Play, Star, Trash2 } from 'lucide-react';
+import { FileText, GripVertical, Pencil, Play, Star } from 'lucide-react';
 import clsx from 'clsx';
 import { DRIVE_EMBED_RE, isPdfMedia, isPdfUrl, type DossierItem } from '@ft/shared';
 import { SourceBadge } from '../../components/SourceBadge.tsx';
-import { DELETE_GAP, Dialog } from '../../components/ui.tsx';
+import { ConfirmDeleteBtn, Dialog } from '../../components/ui.tsx';
 import { PdfFrame, PdfThumb } from '../../components/PdfPreview.tsx';
 import { t } from '../../lib/i18n.ts';
 import { albumLabel } from './labels.ts';
@@ -129,7 +129,8 @@ function Tile({
       </figcaption>
       {m.album && <span className="absolute left-2 top-2 rounded bg-bg/70 px-1.5 font-mono text-[10px] text-mint">{albumLabel(m.album)}</span>}
       {editable && (
-        <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
+        // Пока удаление ждёт второго нажатия (data-armed), кнопки видны и без наведения.
+        <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100 has-[[data-armed]]:opacity-100">
           {/* Обложкой может быть только картинка. */}
           {!embedded && (
             <button onClick={onCover} title={t('Сделать обложкой')} className={clsx('grid size-7 cursor-pointer place-items-center rounded bg-bg/70', isCover ? 'text-mint' : 'text-dim hover:text-mint')}>
@@ -142,9 +143,8 @@ function Tile({
           <span {...attributes} {...listeners} title={t('Перетащить')} className="grid size-7 cursor-grab place-items-center rounded bg-bg/70 text-dim hover:text-mint">
             <GripVertical size={13} />
           </span>
-          <button onClick={onRemove} title={t('Удалить')} className={`${DELETE_GAP} grid size-7 cursor-pointer place-items-center rounded bg-bg/70 text-dim hover:text-danger`}>
-            <Trash2 size={13} />
-          </button>
+          {/* Удаление в два нажатия, как у атрибутов: корзина → «?» → удаление. Видимостью управляет ряд кнопок. */}
+          <ConfirmDeleteBtn onConfirm={onRemove} className="!size-7 rounded bg-bg/70 !text-dim !opacity-100 hover:!text-danger" />
         </div>
       )}
     </figure>

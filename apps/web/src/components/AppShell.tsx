@@ -1,7 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Fragment, useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowUp, Asterisk, FolderSearch, LogOut, Mail, MapPin, Moon, Network, RefreshCw, ScanSearch, Search, Send, ShieldAlert, Sun, UserSearch } from 'lucide-react';
+import { ArrowUp, Asterisk, FolderSearch, LogOut, Mail, MapPin, Moon, Network, PanelLeftClose, PanelLeftOpen, RefreshCw, ScanSearch, Search, Send, ShieldAlert, Sun, UserSearch } from 'lucide-react';
 import type { Lang, Theme } from '@ft/shared';
 import { trpc } from '../lib/trpc.ts';
 import { toasts } from '../lib/toast.ts';
@@ -173,8 +173,46 @@ function TopBar() {
 /** Открыто ли окно пользователя — вне компонента: окно не закрывается, когда смена языка в нём перемонтирует дерево. */
 const userDialog = create(false);
 
+/**
+ * Боковая панель свёрнута до иконок (кнопка в её нижнем левом углу). Вне компонента и в localStorage: выбор
+ * переживает перезагрузку и смену языка, которая перемонтирует дерево.
+ */
+const SIDEBAR_KEY = 'ft.sidebar.collapsed';
+const sidebarCollapsed = create((() => {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === '1';
+  } catch {
+    return false;
+  }
+})());
+function setSidebarCollapsed(v: boolean) {
+  sidebarCollapsed.set(v);
+  try {
+    localStorage.setItem(SIDEBAR_KEY, v ? '1' : '0');
+  } catch {
+    // приватный режим: выбор живёт до перезагрузки
+  }
+}
+
+/** Узкое окно (меньше lg): панель всегда в виде иконок, развернуть её негде. */
+function useNarrowScreen() {
+  const query = '(max-width: 1023px)';
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setNarrow(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
 function Sidebar() {
   const me = trpc.auth.me.useQuery();
+  const narrow = useNarrowScreen();
+  const collapsed = useStore(sidebarCollapsed);
+  // Только иконки: пользователь свернул панель или окно узкое.
+  const compact = collapsed || narrow;
   const utils = trpc.useUtils();
   const logout = trpc.auth.logout.useMutation({ onSuccess: () => utils.invalidate() });
   // Без бота (auth = none | password-sha256) пользователь один и подписки нет.
@@ -192,41 +230,59 @@ function Sidebar() {
   const setUserOpen = userDialog.set;
 
   return (
-    <aside className="relative z-10 flex w-64 shrink-0 flex-col border-r border-line bg-panel/80 backdrop-blur max-lg:w-16">
-      {/* Шапка: логотип с отступом 6 px по бокам (как между глифом и текстом), остаток ширины — кнопка окна пользователя. */}
+    <aside className={clsx('relative z-10 flex shrink-0 flex-col border-r border-line bg-panel/80 backdrop-blur', compact ? 'w-16' : 'w-64')}>
+      {/* Шапка: логотип с отступом 6 px по бокам (как между глифом и текстом), остаток ширины — кнопка окна пользователя.
+          В свёрнутой панели от шапки остаётся только эта кнопка (шестерня). */}
       <div className="flex h-16 shrink-0 items-stretch border-b border-line">
-        <div className="flex shrink-0 items-center px-1.5 max-lg:flex-1 max-lg:justify-center max-lg:px-0">
-          <div className="max-lg:hidden"><Brand /></div>
-          <div className="lg:hidden"><Brand compact /></div>
-        </div>
-        <UserButton onClick={() => setUserOpen(true)} className="min-w-0 flex-1 border-l border-line max-lg:hidden" />
+        {!compact && (
+          <div className="flex shrink-0 items-center px-1.5">
+            <Brand />
+          </div>
+        )}
+        <UserButton onClick={() => setUserOpen(true)} className={clsx('min-w-0 flex-1', !compact && 'border-l border-line')} />
       </div>
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+      <nav className={clsx('min-h-0 flex-1 space-y-1 overflow-y-auto', compact ? 'p-2' : 'p-3')}>
         {nav.map((item) => {
           const { to, icon: Icon } = item;
           const label = t(item.label);
           const hint = t(item.hint);
           return (
             <Fragment key={to}>
-              {'divider' in item && item.divider && <div className="-mx-3 !my-2 border-t border-line" />}
+              {'divider' in item && item.divider && <div className={clsx('!my-2 border-t border-line', compact ? '-mx-2' : '-mx-3')} />}
               <Link
-            to={to}
-            className="group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-dim transition hover:bg-mint/5 hover:text-text max-lg:justify-center"
-            activeOptions={{ exact: true, includeSearch: false }}
-            activeProps={{ className: '!border-line !bg-mint/10 !text-mint' }}
-          >
-            <Icon size={18} className="shrink-0" />
-            <span className="max-lg:hidden">
-              <span className="block text-sm font-semibold">{label}</span>
-              <span className="block font-mono text-[10px] uppercase tracking-wider text-mute group-hover:text-dim">{hint}</span>
-            </span>
+                to={to}
+                // В свёрнутой панели подписи нет — название раздела во всплывающей подсказке.
+                title={compact ? label : undefined}
+                className={clsx('group flex items-center gap-3 rounded-lg border border-transparent py-2.5 text-dim transition hover:bg-mint/5 hover:text-text', compact ? 'justify-center px-0' : 'px-3')}
+                activeOptions={{ exact: true, includeSearch: false }}
+                activeProps={{ className: '!border-line !bg-mint/10 !text-mint' }}
+              >
+                <Icon size={18} className="shrink-0" />
+                {!compact && (
+                  <span>
+                    <span className="block text-sm font-semibold">{label}</span>
+                    <span className="block font-mono text-[10px] uppercase tracking-wider text-mute group-hover:text-dim">{hint}</span>
+                  </span>
+                )}
               </Link>
             </Fragment>
           );
         })}
       </nav>
-      {/* В узком сайдбаре шапка занята логотипом — кнопка окна пользователя внизу. */}
-      <UserButton onClick={() => setUserOpen(true)} className="h-14 shrink-0 border-t border-line lg:hidden" />
+      {/* Свернуть / развернуть — в нижнем левом углу. В узком окне панель и так свёрнута, кнопки нет. */}
+      {!narrow && (
+        <div className={clsx('flex shrink-0 border-t border-line p-2', collapsed && 'justify-center')}>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(!collapsed)}
+            title={collapsed ? t('Развернуть панель') : t('Свернуть панель')}
+            aria-label={collapsed ? t('Развернуть панель') : t('Свернуть панель')}
+            className="grid size-9 cursor-pointer place-items-center rounded-lg text-mute transition hover:bg-mint/5 hover:text-mint"
+          >
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
+        </div>
+      )}
       <Dialog open={userOpen} onOpenChange={setUserOpen} title={t('Пользователь')}>
         <div className="mb-4 flex items-center gap-3">
           <div className="grid size-10 place-items-center rounded-full border border-line bg-mint/10 font-mono text-base text-mint">

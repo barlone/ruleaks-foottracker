@@ -23,6 +23,8 @@ const en: Record<string, string> = {
   'Расследования': 'Investigations',
   'связи · факты · гипотезы': 'links · facts · hypotheses',
   'Пользователь': 'User',
+  'Свернуть панель': 'Collapse the panel',
+  'Развернуть панель': 'Expand the panel',
   'Войти через Telegram': 'Log in with Telegram',
   'Войти': 'Log in',
   '● персональный режим': '● personal mode',

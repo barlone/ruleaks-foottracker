@@ -528,6 +528,10 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 - User settings: `users.settings` jsonb holds only non-default keys, `@ft/shared` holds the schema and defaults (a new
   setting needs no migration), they arrive with `auth.me`, `useUserSettings()` updates them optimistically via
   `settings.update` (`authedProcedure`: works without a subscription). UI: the user dialog in `AppShell`. ARCHITECTURE.md §9.1.
+- Sidebar (`Sidebar` in `AppShell.tsx`): the button in its bottom-left corner collapses it to icons (`w-16`; the header
+  row shrinks to the user/settings gear, nav items keep only the icon with the label as `title`). The choice is the
+  module-level `sidebarCollapsed` store + localStorage `ft.sidebar.collapsed`. Below `lg` (`useNarrowScreen`) the panel
+  is always compact and the button is hidden.
 - Page containers are full-width with `pt-2.5 pl-6 pr-[30px]` (no centered max-width); the 10 px top padding puts the
   first line of the page title level with the visible top of the sidebar logo — keep it when adding a page.
 - List filters («Все / Мои / Доступные мне») live in `?scope=` and the last choice is remembered in localStorage

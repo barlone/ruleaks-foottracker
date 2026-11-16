@@ -195,6 +195,17 @@ const SECTIONS = {
     'emailrep-key': str(),
     'hunter-key': str(),
   }),
+  /**
+   * Алертинг: ошибки сервера уходят через бот blind-postman. Ключи названы как в API-шлюзе (у него та же секция),
+   * поэтому с подчёркиванием. Секции нет — ничего не отправляется; секция с неверным значением останавливает запуск.
+   */
+  alerting: z.object({
+    type: str(),
+    api_url: str(),
+    api_token: str(),
+    send_to_user_alias: str(),
+    send_to_group_alias: str(),
+  }),
 };
 
 const Schema = z.object({
@@ -209,6 +220,7 @@ const Schema = z.object({
   'pages-search': SECTIONS['pages-search'].prefault({}),
   'google-search': SECTIONS['google-search'].prefault({}),
   'email-search': SECTIONS['email-search'].prefault({}),
+  alerting: SECTIONS.alerting.prefault({}),
 });
 
 type Raw = z.infer<typeof Schema>;
@@ -298,6 +310,8 @@ export interface AppConfig {
     keys: { hibp: string; breachDirectory: string; intelx: string; emailrep: string; hunter: string };
     intelxUrl: string;
   };
+  /** Алертинг через бот blind-postman; enabled — секция [alerting] задана. Токен в браузер и в журнал не уходит. */
+  alerting: { enabled: boolean; apiUrl: string; apiToken: string; userAlias: string; groupAlias: string };
   /** Предупреждения загрузки: неизвестные ключи, отсутствие файла. */
   warnings: string[];
 }
@@ -369,6 +383,24 @@ export function loadConfig(): AppConfig {
   const c: Raw = parsed.data;
 
   const loopback = ['127.0.0.1', '::1', 'localhost'].includes(c.server.host);
+
+  // [alerting]: секция (или её переменные окружения) есть — значит, алерты ждут; канал, который только выглядит
+  // настроенным, выяснился бы при первой аварии, когда он и был нужен. Поэтому любая ошибка в ней — отказ запуска.
+  const al = c.alerting;
+  const alerting = { enabled: !!raw.alerting, apiUrl: al.api_url.trim().replace(/\/+$/, ''), apiToken: al.api_token.trim(), userAlias: al.send_to_user_alias.trim(), groupAlias: al.send_to_group_alias.trim() };
+  if (alerting.enabled) {
+    const bad = (why: string) => new ConfigError(`Ошибка в конфигурации${file ? ` (${file})` : ''}: [alerting] ${why}`);
+    if (al.type.trim() !== 'blindpostman') throw bad(`type: «${al.type}», ожидается blindpostman`);
+    let url: URL | null = null;
+    try {
+      url = new URL(alerting.apiUrl);
+    } catch {
+      // ниже
+    }
+    if (!url || !['http:', 'https:'].includes(url.protocol)) throw bad(`api_url: «${al.api_url}» — не адрес http(s)`);
+    if (!alerting.apiToken) throw bad('api_token: пусто');
+    if (!alerting.userAlias && !alerting.groupAlias) throw bad('не задан ни send_to_user_alias, ни send_to_group_alias');
+  }
   const cfg: AppConfig = {
     file,
     auth: {
@@ -455,6 +487,7 @@ export function loadConfig(): AppConfig {
       },
       intelxUrl: c['email-search']['intelx-url'].replace(/\/+$/, ''),
     },
+    alerting,
     warnings,
   };
 
@@ -576,6 +609,7 @@ export function describeConfig(cfg: AppConfig): string[] {
     `страницы:  ${cfg.pages.enabled ? `поиск личных страниц (таймаут ${cfg.pages.timeoutMs / 1000} с, параллельно ${cfg.pages.concurrency})` : 'выключен'}`,
     `Google:    ${!cfg.google.enabled ? 'выключен' : `${cfg.google.masterToken ? 'поиск по Google' : 'Gaia ID, Drive — имитация (нет мастер-токена); Wi-Fi и Asset Links — настоящие'} (таймаут ${cfg.google.timeoutMs / 1000} с, пауза ${cfg.google.minIntervalMs / 1000} с, адрес Wi-Fi: ${cfg.google.reverseGeocodeUrl || 'не определяется'})`}`,
     `Email:     ${cfg.email.enabled ? describeEmail(cfg) : 'выключен'}`,
+    `алертинг:  ${cfg.alerting.enabled ? `${cfg.alerting.apiUrl} → ${[cfg.alerting.userAlias && `пользователь ${cfg.alerting.userAlias}`, cfg.alerting.groupAlias && `группа ${cfg.alerting.groupAlias}`].filter(Boolean).join(', ')}` : 'выключен (нет секции [alerting])'}`,
   ];
 }
 

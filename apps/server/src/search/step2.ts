@@ -2,6 +2,7 @@ import {
   LEAK_FIELDS, SCANS_FIELD, STEP2_SOURCES, findKind, normalizeQuery, searchParams, step2Queries,
   type LeakCard, type LeakField, type Step2Info, type Step2Query,
 } from '@ft/shared';
+import { alert, errorLine } from '../alerting.ts';
 import { appConfig } from '../config.ts';
 import type { Deps } from '../ports.ts';
 import { waitDone } from './wait.ts';
@@ -77,6 +78,7 @@ export function step2Run(deps: Deps, id: string, userId: string, token: string) 
   void run(deps, id, userId, token)
     .catch(async (e: Error) => {
       console.error(`search step2 ${id}: ${e.stack ?? e.message}`);
+      alert('search:step2', `Второй шаг поиска прервался: ${errorLine(e)}`);
       await deps.searches.update(id, { state: 'failed', error: 'Второй шаг поиска прервался из-за ошибки на сервере' }).catch(() => {});
     })
     .finally(() => running.delete(id));

@@ -1,4 +1,5 @@
 import type { AppConfig } from '@ft/config';
+import { alert } from './alerting.ts';
 import type { Deps } from './ports.ts';
 import { MemoryBotBridge } from './adapters/memory/bot.ts';
 import { MemoryGateway } from './adapters/memory/gateway.ts';
@@ -42,7 +43,10 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
     const { pool, tls } = await openPool(d, { readOnly: true }).catch((e: Error) => {
       throw new Error(`[bot-db] не удалось подключиться к ${d.user}@${d.host}:${d.port}/${d.database}: ${e.message}`);
     });
-    pool.on('error', (e) => log(`[bot-db] ошибка соединения: ${e.message}`));
+    pool.on('error', (e) => {
+      log(`[bot-db] ошибка соединения: ${e.message}`);
+      alert('db:bot', `БД бота: ошибка соединения: ${e.message}`);
+    });
     log(`[bot-db] подключено${tls ? ' (TLS)' : ' (без TLS)'}, только чтение`);
     bot = new BotDbBridge(pool, { devLogin, log });
   }
@@ -73,7 +77,10 @@ async function openProjectStore(cfg: AppConfig, log: (msg: string) => void): Pro
   const { pool, tls } = await openPool(d, { readOnly: false }).catch((e: Error) => {
     throw new Error(`[project-db] не удалось подключиться к ${d.user}@${d.host}:${d.port}/${d.database}: ${e.message}`);
   });
-  pool.on('error', (e) => log(`[project-db] ошибка соединения: ${e.message}`));
+  pool.on('error', (e) => {
+    log(`[project-db] ошибка соединения: ${e.message}`);
+    alert('db:project', `БД сайта: ошибка соединения: ${e.message}`);
+  });
   // Схема должна соответствовать коду: все миграции из packages/db/migrations применены.
   const st = await migrationStatus(pool);
   if (st.pending.length) {

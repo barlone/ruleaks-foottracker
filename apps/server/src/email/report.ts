@@ -4,7 +4,7 @@ import {
 } from '@ft/shared';
 import type { AppConfig } from '@ft/config';
 import { googleSlot, SlotCancelled } from '../google/account.ts';
-import { googleErrorText, huntGoogleEmail } from '../google/hunter.ts';
+import { alertGoogleAccount, googleErrorText, huntGoogleEmail } from '../google/hunter.ts';
 import type { GoogleSession } from '../google/session.ts';
 import { checkEmailSite } from '../pages/check.ts';
 import { allEmailSites } from '../pages/email-sites.ts';
@@ -94,6 +94,7 @@ export async function huntEmail(report: EmailReport, opts: HuntOptions, signal: 
     } catch (err) {
       if (signal.aborted) throw err;
       opts.log(`email: ${id} — ${(err as Error)?.message ?? String(err)}`);
+      alertGoogleAccount(err);
       (report[id] as EmailSection<unknown>) = { status: 'error', error: errorText(err) };
     }
     progress.set(id, 'done');

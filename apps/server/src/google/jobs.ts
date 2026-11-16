@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { GOOGLE_STEPS, type GoogleModeId, type GoogleReport, type GoogleStepId } from '@ft/shared';
 import { googleSlot } from './account.ts';
-import { googleErrorText, type GoogleHunter } from './hunter.ts';
+import { alertGoogleAccount, googleErrorText, type GoogleHunter } from './hunter.ts';
 
 // Задания «Поиска по Google» — в памяти сервера, как у поиска личных страниц: результат нужен тому, кто искал,
 // перезапуск сервера всё забывает. Все запросы идут от одного служебного аккаунта Google, поэтому поиски
@@ -101,6 +101,7 @@ async function run(job: Job, hunter: GoogleHunter, opts: GoogleJobsOptions) {
   } catch (e) {
     if (signal.aborted) return finish(job, 'cancelled');
     opts.log(`google: поиск не удался — ${(e as Error)?.message ?? String(e)}`);
+    alertGoogleAccount(e);
     job.error = googleErrorText(e);
     finish(job, 'failed');
   }

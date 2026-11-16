@@ -1,4 +1,5 @@
 import { TG_BYNIK_PATH } from '@ft/shared';
+import { alert } from '../../alerting.ts';
 import type { AppConfig } from '@ft/config';
 import type { GatewayAnswer, SearchGateway } from '../../ports.ts';
 
@@ -96,14 +97,22 @@ export class HttpGateway implements SearchGateway {
       res = await fetch(url, { headers: { Authorization: token, Accept: 'application/json' }, signal: AbortSignal.timeout(this.api.timeoutMs) });
     } catch (e) {
       const err = e as Error;
-      throw new GatewayError(err.name === 'TimeoutError' ? 'API-сервер не ответил вовремя' : `API-сервер недоступен: ${err.message}`);
+      const timeout = err.name === 'TimeoutError';
+      // В алерт — путь метода шлюза, без параметров: в них то, что искал пользователь.
+      alert(timeout ? 'gateway:timeout' : 'gateway:down', timeout ? `API-шлюз не ответил вовремя (${path})` : `API-шлюз недоступен (${path}): ${err.message}`);
+      throw new GatewayError(timeout ? 'API-сервер не ответил вовремя' : `API-сервер недоступен: ${err.message}`);
     }
     if (res.status === 401) throw new GatewayError('API-сервер не принял токен пользователя (401)', '401');
-    if (res.status === 503) throw new GatewayError('API-сервер не может проверить токен, повторите позже (503)', '503');
+    if (res.status === 503) {
+      alert('gateway:503', `API-шлюз не может проверить токен: его БД токенов недоступна (503, ${path})`);
+      throw new GatewayError('API-сервер не может проверить токен, повторите позже (503)', '503');
+    }
     const text = await res.text();
     try {
       return JSON.parse(text) as Body;
     } catch {
+      // Тело ответа в алерт не идёт: в нём может быть что угодно, в том числе найденные данные.
+      alert('gateway:bad-answer', `API-шлюз ответил не JSON: HTTP ${res.status} (${path})`);
       throw new GatewayError(`API-сервер вернул ${res.status}: ${text.slice(0, 200)}`);
     }
   }

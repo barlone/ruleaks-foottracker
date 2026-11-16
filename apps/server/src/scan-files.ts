@@ -5,6 +5,7 @@ import { isUuid } from '@ft/shared';
 import { config } from './config.ts';
 import { ScanStoreError, type Deps } from './ports.ts';
 import { sessionOf } from './trpc.ts';
+import { alert } from './alerting.ts';
 
 // Картинки сканов документов ([scanstore-api]): браузер берёт их по /scans/<uuid>, сервер проксирует запрос
 // в scanstore со своим токеном. Только вошедшим пользователям — как и сохранённые результаты поиска, откуда
@@ -46,6 +47,7 @@ export function registerScanFiles(app: FastifyInstance, deps: Deps) {
     } catch (e) {
       if (!(e instanceof ScanStoreError)) throw e;
       log('warn', `502: ${e.message}`);
+      alert('scanstore', `Хранилище сканов недоступно: ${e.message}`);
       return reply.code(502).send();
     }
     // Скан неизменяем: браузер держит его в кэше сутки и потом перепроверяет по ETag (sha256).

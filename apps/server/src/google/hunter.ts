@@ -13,6 +13,7 @@ import { GoogleError, type Ctx } from './net.ts';
 import { lookupByEmail, lookupByGaia } from './people.ts';
 import { playerByEmail } from './playgames.ts';
 import type { GoogleSession } from './session.ts';
+import { alert } from '../alerting.ts';
 
 // Исполнитель «Поиска по Google»: виды поиска — модули GHunt (modules/gaia.py, drive.py, geolocate.py, spiderdal.py).
 // Основа каждого вида — один запрос (профиль, файл, координаты, обход связей): его ошибка проваливает поиск.
@@ -43,6 +44,17 @@ export function googleErrorText(e: unknown): string {
   }
 }
 
+/**
+ * Отказ служебного аккаунта — вход не принят (AUTH) или Google отвечает капчей (BLOCKED) — дело тех, кто обслуживает
+ * сайт: пользователь тут ничего не исправит. Текст алерта постоянный: ответ Google в него не идёт (в нём бывает адрес,
+ * который искали).
+ */
+export function alertGoogleAccount(e: unknown): void {
+  if (!(e instanceof GoogleError)) return;
+  if (e.code === 'AUTH') alert('google:auth', 'Служебный аккаунт Google: вход не принят — нужен новый мастер-токен (npm run google-login)');
+  if (e.code === 'BLOCKED') alert('google:blocked', 'Служебный аккаунт Google: Google отвечает капчей или блокировкой');
+}
+
 /** Часть отчёта своим запросом: сбой — текст ошибки в части (подробности — в журнал), отмена — дальше. */
 async function googleSection<T>(what: string, ctx: Ctx, log: (msg: string) => void, run: () => Promise<T>): Promise<GoogleSection<T>> {
   try {
@@ -50,6 +62,7 @@ async function googleSection<T>(what: string, ctx: Ctx, log: (msg: string) => vo
   } catch (e) {
     if (ctx.signal.aborted) throw e;
     log(`google: ${what} — ${(e as Error)?.message ?? String(e)}`);
+    alertGoogleAccount(e);
     return { status: 'error', error: googleErrorText(e) };
   }
 }

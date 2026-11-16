@@ -95,6 +95,21 @@ the page: `deploy/nginx/` (snippet + example `server { }` + README). The CSP is 
 inline scripts (the pre-render theme switch is `public/theme-init.js`) — keep it that way; a new external origin
 (images, frames, fetch) needs a matching CSP source there.
 
+`[alerting]` (optional; keys as in the gateway's section, hence underscores: `type = blindpostman`, `api_url`,
+`api_token`, `send_to_user_alias`, `send_to_group_alias`) sends the server's errors through the REST API of the
+blind-postman bot (`D:\GoProjslind-postman`, `POST /api/v1/messages`, Bearer token). No section — nothing is sent; a
+section with a bad value stops the start. `apps/server/src/alerting.ts` mirrors the gateway's `commons/alerting.go`:
+`alert(key, text)` never waits or throws — a bounded queue (64) with one worker, each recipient its own request, a
+network error / 5xx / 429 retried (5 s, 30 s), a 4xx not; one key goes out at most once per 5 min and the repeats
+arrive as a count; the text is prefixed with `foottracker@<host>` and the time. `finalAlert()` is the last call
+before `process.exit` and waits for the queue (≤ 3 s). Alerted: unhandled tRPC errors (`trpc:<procedure>`), 5xx of the
+other routes, `uncaughtException` / `unhandledRejection` and a failed start (the process then exits), pool errors of
+both databases, the gateway being down / timing out / answering 503 or non-JSON, a broken step-2 search, the scan
+store failing, the Google service account refused (`AUTH`) or blocked (`BLOCKED`). Not alerted: user-level refusals
+(4xx, subscription, bad input) and a normal stop by signal — `tsx watch` restarts would flood the chat. An alert goes
+to Telegram's servers, so it carries the procedure name and the error text only — never the request input, a
+searched value or dossier content; keys come from a fixed set, never from a request.
+
 `[telegram] login-secret` (shared with the bot, ≥32 chars) enables login by a signed one-time link from the bot:
 `/login?tg=…&ts=…&n=…&sig=…[&name=…][&nick=…]`, `sig = base64url(HMAC-SHA256(secret, "tg\nts\nn\nname\nnick"))`,
 valid `login-link-ttl-sec` (180 s), single use (`adapters/login-link.ts`, `auth.loginWithLink`, web `/login`).
@@ -543,6 +558,10 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   `args` keeps the stored ones). Marking investigation facts as supporting / contradicting (`evidence`) stays;
   `hypothesisScore` counts both for the «за: N / против: N» bar. `textMd` («Общее обоснование») is shown and editable
   only where it was already written. Export carries `args` as an optional key; the PDF prints both lists.
+- Graph → dossier and back: every way from a block to its dossier (block menu, double click, side-panel link) adds
+  `?inv=<investigation id>&node=<node id>[&invFull=true]` (`backSearch` in `GraphEditor`). The dossier page then shows
+  «← в расследование …» (`BackToInvestigation`) leading to `?tab=graph&focus=<node>[&full=true]`, i.e. the same
+  block, its level and the same editor view.
 - Graph node images: a node linked to a dossier shows the dossier cover, fetched separately by `dossiers.covers`
   (readable ones only; not part of the graph payload, which is re-sent on every save) through `CoversContext`; any
   other node may carry its own `props.image` — a 128×128 WebP data URL made by `lib/squareImage.ts`, non-square

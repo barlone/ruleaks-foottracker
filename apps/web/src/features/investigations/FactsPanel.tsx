@@ -90,7 +90,7 @@ export function FactsPanel({ inv, editable }: { inv: Inv; editable: boolean }) {
         </ol>
       </div>
 
-      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)} title={editing === 'new' ? t('Новый факт') : t('Факт')} wide>
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)} title={editing === 'new' ? t('Новый факт') : t('Факт')} width="max-w-[80vw]">
         {editing && (
           <FactForm
             key={editing === 'new' ? 'new' : editing.id}

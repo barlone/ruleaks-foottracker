@@ -133,6 +133,8 @@ const en: Record<string, string> = {
   'Исследовать email': 'Research email',
   'в группу «{title}»': 'to group “{title}”',
   'в группу': 'to group',
+  'в расследование «{title}»': 'to investigation “{title}”',
+  'в расследование': 'to investigation',
   'Участников нет': 'No members',
   '+ добавить участника…': '+ add member…',
   'Создать досье персоны и включить его в группу': 'Create a person dossier and add it to the group',

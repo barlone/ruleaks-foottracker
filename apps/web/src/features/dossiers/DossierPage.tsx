@@ -81,7 +81,7 @@ function groupAttributes(ids: string[], byId: Map<string, Of<'attribute'>>): str
 
 export function DossierPage() {
   const { id } = useParams({ from: '/dossiers/$id' });
-  const { from: fromGroup } = useSearch({ from: '/dossiers/$id' });
+  const { from: fromGroup, inv: fromInv, node: fromNode, invFull } = useSearch({ from: '/dossiers/$id' });
   const navigate = useNavigate();
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
@@ -178,6 +178,7 @@ export function DossierPage() {
                     )}
                   </h1>
                   {fromGroup && fromGroup !== d.id && <BackToGroup id={fromGroup} />}
+                  {fromInv && <BackToInvestigation id={fromInv} node={fromNode} full={invFull} />}
                 </div>
               )}
               <TagsBar
@@ -798,6 +799,24 @@ function ResearchEmailLink({ value, dossierId }: { value: string; dossierId: str
 }
 
 /** Возврат в группу, из которой открыли или создали досье (?from=): текст-кнопка справа от названия. */
+/**
+ * Возврат в расследование, из графа которого открыли досье (?inv=): к тому же блоку (focus) и в тот же вид
+ * редактора (во весь экран или нет).
+ */
+function BackToInvestigation({ id, node, full }: { id: string; node?: string; full?: boolean }) {
+  const inv = trpc.investigations.get.useQuery({ id }, { select: (x) => x.title, staleTime: 60_000, retry: false });
+  return (
+    <Link
+      to="/investigations/$id"
+      params={{ id }}
+      search={{ tab: 'graph', focus: node, full: full || undefined }}
+      className="inline-flex items-center gap-1.5 font-mono text-xs text-mute transition hover:text-mint"
+    >
+      <ArrowLeft size={13} /> {inv.data ? t('в расследование «{title}»', { title: inv.data }) : t('в расследование')}
+    </Link>
+  );
+}
+
 function BackToGroup({ id }: { id: string }) {
   const g = trpc.dossiers.get.useQuery({ id }, { select: (x) => x.title, staleTime: 60_000 });
   return (

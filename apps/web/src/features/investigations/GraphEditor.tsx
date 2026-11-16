@@ -375,6 +375,9 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
   const selNode = selected?.kind === 'node' ? nodes.find((n) => n.id === selected.id) : undefined;
   const selEdge = selected?.kind === 'edge' ? edges.find((e) => e.id === selected.id) : undefined;
 
+  /** Параметры перехода в досье блока: по ним досье покажет возврат в это расследование, к этому блоку. */
+  const backSearch = (nodeId: string) => ({ inv: investigationId, node: nodeId, invFull: fullscreen || undefined });
+
   /** Сменить уровень: показать узлы и связи нужного, остальное скрыть. Правкой графа это не считается. */
   function enter(next: string | null, fit = true) {
     const parent = new Map(rf.getNodes().map((n) => [n.id, n.data.parentId]));
@@ -540,7 +543,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
         onNodeDragStart={() => { setHint(null); setMenu(null); }}
         onMoveStart={() => setMenu(null)}
         onBeforeDelete={onBeforeDelete}
-        onNodeDoubleClick={(_, n) => n.data.dossierId && navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId } })}
+        onNodeDoubleClick={(_, n) => n.data.dossierId && navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId }, search: backSearch(n.id) })}
         // Loose: боковые точки одного вида (source) соединяются между собой; что с чем можно — validConnection.
         connectionMode={ConnectionMode.Loose}
         isValidConnection={validConnection}
@@ -585,7 +588,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
               </MenuItem>
             )}
             {n.data.dossierId && (
-              <MenuItem icon={<FolderOpen size={13} />} onClick={() => void navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId! } })}>{t('Открыть досье')}</MenuItem>
+              <MenuItem icon={<FolderOpen size={13} />} onClick={() => void navigate({ to: '/dossiers/$id', params: { id: n.data.dossierId! }, search: backSearch(n.id) })}>{t('Открыть досье')}</MenuItem>
             )}
             {editable && !fromDossier && (
               <MenuItem
@@ -770,7 +773,7 @@ function Editor({ investigationId, version, nodes: srcNodes, edges: srcEdges, fa
                     </Select>
                   ) : null}
                   {selNode.data.dossierId && (
-                    <Link to="/dossiers/$id" params={{ id: selNode.data.dossierId }} className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-mint hover:underline">
+                    <Link to="/dossiers/$id" params={{ id: selNode.data.dossierId }} search={backSearch(selNode.id)} className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-mint hover:underline">
                       <FolderOpen size={14} /> {t('открыть досье')}
                     </Link>
                   )}

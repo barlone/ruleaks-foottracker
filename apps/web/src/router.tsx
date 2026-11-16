@@ -95,7 +95,9 @@ export const dossierRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dossiers/$id',
   // from — id группы, из которой открыли или создали это досье: справа от названия появляется возврат в неё.
-  validateSearch: z.object({ from: text }),
+  // inv — id расследования, из графа которого открыли досье (node — блок графа, invFull — редактор был во весь
+  // экран): там же появляется возврат в это расследование, к тому же блоку.
+  validateSearch: z.object({ from: text, inv: text, node: text, invFull: z.boolean().optional().catch(undefined) }),
   component: lazyRouteComponent(() => import('./features/dossiers/DossierPage.tsx'), 'DossierPage'),
 });
 

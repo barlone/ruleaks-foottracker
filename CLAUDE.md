@@ -97,7 +97,7 @@ inline scripts (the pre-render theme switch is `public/theme-init.js`) — keep 
 
 `[alerting]` (optional; keys as in the gateway's section, hence underscores: `type = blindpostman`, `api_url`,
 `api_token`, `send_to_user_alias`, `send_to_group_alias`) sends the server's errors through the REST API of the
-blind-postman bot (`D:\GoProjslind-postman`, `POST /api/v1/messages`, Bearer token). No section — nothing is sent; a
+blind-postman bot (`D:\GoProjs\blind-postman`, `POST /api/v1/messages`, Bearer token). No section — nothing is sent; a
 section with a bad value stops the start. `apps/server/src/alerting.ts` mirrors the gateway's `commons/alerting.go`:
 `alert(key, text)` never waits or throws — a bounded queue (64) with one worker, each recipient its own request, a
 network error / 5xx / 429 retried (5 s, 30 s), a 4xx not; one key goes out at most once per 5 min and the repeats

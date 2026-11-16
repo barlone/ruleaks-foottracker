@@ -99,6 +99,8 @@ const en: Record<string, string> = {
 
   // ui.tsx
   'Закрыть': 'Close',
+  'Текст в Markdown…': 'Markdown text…',
+  'Редактор с кнопками не загрузился: вышла новая версия сайта. Текст можно ввести здесь; после обновления страницы редактор вернётся.': 'The editor with buttons did not load: a new version of the site is out. You can type the text here; the editor returns after the page is refreshed.',
   'Скопировать': 'Copy',
   'Скопировано': 'Copied',
   'Не удалось скопировать': 'Could not copy',

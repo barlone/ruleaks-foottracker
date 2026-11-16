@@ -574,6 +574,8 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
 - The TipTap editor lives in `components/MarkdownEditor.tsx` and is never imported directly: `MarkdownEditor` in
   `components/Markdown.tsx` is a `lazy` wrapper (same props), so TipTap / ProseMirror (~480 kB) stay out of the entry
   chunk, which eager pages with a create dialog would otherwise drag in. `MarkdownView` stays eager.
+  If the chunk fails to load (a tab opened before a deploy asks for the old hashed file name, nginx answers 404), the
+  wrapper falls back to `PlainEditor` — a textarea over the same Markdown with a note — instead of crashing the dialog.
 - Colour highlighting in Markdown is inline HTML `<mark data-color="yellow">…</mark>` with a colour *name* from
   `HIGHLIGHT_COLORS` (`@ft/shared` `highlight.ts`, also the tag regexes). Three places must agree: the TipTap `Highlight`
   mark in `components/MarkdownEditor.tsx` (own marked tokenizer, so Markdown inside the mark survives), the `remarkHighlight`

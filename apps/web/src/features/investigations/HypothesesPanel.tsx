@@ -131,7 +131,7 @@ export function HypothesesPanel({ inv, editable }: { inv: Inv; editable: boolean
         </div>
       </div>
 
-      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)} title={editing === 'new' ? t('Новая гипотеза') : t('Гипотеза')} width="max-w-5xl">
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)} title={editing === 'new' ? t('Новая гипотеза') : t('Гипотеза')} width="max-w-[80vw]">
         {editing && (
           <HypothesisForm
             key={editing === 'new' ? 'new' : editing.id}

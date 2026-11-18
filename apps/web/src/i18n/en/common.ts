@@ -94,6 +94,14 @@ const en: Record<string, string> = {
   '{n} мин назад': '{n} min ago',
   '{n} ч назад': '{n} h ago',
   '{n} дн назад': '{n} d ago',
+  // errors.ts — архивы страниц
+  'Архивация страниц выключена в настройках сервера': 'Page archiving is turned off in the server settings',
+  'Служба архивации занята другими страницами — повторите через несколько минут': 'The archiving service is busy with other pages — try again in a few minutes',
+  'У вас уже снимаются две страницы — дождитесь их или отмените': 'Two of your pages are already being archived — wait for them or cancel',
+  'Служба архивации не успела снять страницу': 'The archiving service did not capture the page in time',
+  'Служба архивации недоступна': 'The archiving service is unavailable',
+  'Служба архивации ответила ошибкой — подробности в журнале сервера': 'The archiving service returned an error — see the server log',
+  'Страницу снять не удалось: ни один из заказанных файлов не получился': 'The page could not be captured: none of the requested files was produced',
 };
 
 export default en;

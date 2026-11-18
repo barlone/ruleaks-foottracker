@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Camera, ExternalLink, Globe, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { DOSSIER_MEDIA_MAX_BYTES, MEDIA_FILE_MAX_BYTES, dossierMediaBytes, fmtBytes, type DossierItem } from '@ft/shared';
+import { Archive, Camera, ExternalLink, Globe, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { DOSSIER_MEDIA_MAX_BYTES, MEDIA_FILE_MAX_BYTES, dossierMediaBytes, fmtBytes, isArchiveActive, type DossierItem } from '@ft/shared';
 import { Button, Card, DELETE_GAP, Dialog, Empty, Field, FilePicker, Input, Spinner } from '../../components/ui.tsx';
 import { errorText } from '../../lib/errors.ts';
 import { t } from '../../lib/i18n.ts';
 import { fitShot, shotDate, todayIso } from '../../lib/shotImage.ts';
+import { toast } from '../../lib/toast.ts';
+import { trpc } from '../../lib/trpc.ts';
+import { ArchiveChip, ArchiveProgress, ArchiveResultDialog, ArchiveStartDialog, type ArchiveCfg } from './SiteArchive.tsx';
+import { latestFor, useDossierArchives } from './siteArchive.ts';
 
 // Раздел «Ссылки» досье: ссылки на внешние сайты (статьи, реестры, упоминания) — в отличие от «Соцсетей», где
 // страницы самой персоны. Это тот же элемент link с kind = 'web'. К ссылке прикладываются снимки страницы
@@ -13,11 +17,17 @@ import { fitShot, shotDate, todayIso } from '../../lib/shotImage.ts';
 type LinkItem = Extract<DossierItem, { type: 'link' }>;
 type Shot = NonNullable<LinkItem['shots']>[number];
 
-export function WebLinksCard({ links, items, editable, onAdd, onEdit, onRemove, onUpdate }: {
+export function WebLinksCard({ dossierId, links, items, editable, archive, watching, onWatch, onAdd, onEdit, onRemove, onUpdate }: {
+  dossierId: string;
   links: LinkItem[];
   /** Все элементы досье — для подсказки, сколько места под встроенные изображения занято. */
   items: DossierItem[];
   editable: boolean;
+  /** Служба архивации страниц ([config] site-archive); null — её нет, кнопок нет. */
+  archive: ArchiveCfg | null;
+  /** Задание архивации, чьё окно ожидания открыто (ставится и окном добавления ссылки). */
+  watching: string | null;
+  onWatch: (jobId: string | null) => void;
   onAdd: () => void;
   onEdit: (link: LinkItem) => void;
   onRemove: (itemId: string) => void;
@@ -26,6 +36,23 @@ export function WebLinksCard({ links, items, editable, onAdd, onEdit, onRemove, 
 }) {
   const [shotFor, setShotFor] = useState<LinkItem | null>(null);
   const [viewing, setViewing] = useState<{ link: LinkItem; shot: Shot } | null>(null);
+  const [archiveFor, setArchiveFor] = useState<LinkItem | null>(null);
+  const [resultId, setResultId] = useState<string | null>(null);
+  const utils = trpc.useUtils();
+  const jobs = useDossierArchives(dossierId, !!archive);
+  const refresh = () => utils.siteArchive.list.invalidate({ dossierId });
+  const start = trpc.siteArchive.start.useMutation({ onSuccess: refresh });
+  const cancel = trpc.siteArchive.cancel.useMutation({ onSettled: refresh });
+  const dismiss = trpc.siteArchive.dismiss.useMutation({ onSettled: refresh });
+  const watched = watching ? jobs.find((j) => j.id === watching) ?? null : null;
+
+  // Наблюдаемое задание закончилось — окно ожидания сменяется итогом.
+  useEffect(() => {
+    if (watched && !isArchiveActive(watched.state)) {
+      onWatch(null);
+      setResultId(watched.id);
+    }
+  }, [watched, onWatch]);
 
   return (
     <Card
@@ -47,12 +74,19 @@ export function WebLinksCard({ links, items, editable, onAdd, onEdit, onRemove, 
               </a>
               {editable && (
                 <span className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                  {archive && (
+                    <button type="button" onClick={() => setArchiveFor(l)} title={t('Снять архив страницы (PDF, веб-архив)')} className="cursor-pointer text-mute hover:text-mint"><Archive size={12} /></button>
+                  )}
                   <button type="button" onClick={() => setShotFor(l)} title={t('Добавить снимок страницы')} className="cursor-pointer text-mute hover:text-mint"><Camera size={12} /></button>
                   <button type="button" onClick={() => onEdit(l)} title={t('Править')} className="cursor-pointer text-mute hover:text-mint"><Pencil size={12} /></button>
                   <button type="button" onClick={() => onRemove(l.id)} title={t('Удалить')} className={`${DELETE_GAP} cursor-pointer text-mute hover:text-danger`}><Trash2 size={12} /></button>
                 </span>
               )}
             </div>
+            {archive && (() => {
+              const job = latestFor(jobs, l.id);
+              return job && <ArchiveChip job={job} onOpen={() => (isArchiveActive(job.state) ? onWatch(job.id) : setResultId(job.id))} />;
+            })()}
             {!!l.shots?.length && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {l.shots.map((s, i) => (
@@ -100,6 +134,44 @@ export function WebLinksCard({ links, items, editable, onAdd, onEdit, onRemove, 
           </div>
         )}
       </Dialog>
+
+      {archive && (
+        <>
+          <ArchiveStartDialog
+            key={archiveFor?.id ?? ''}
+            url={archiveFor?.url ?? null}
+            cfg={archive}
+            onClose={() => setArchiveFor(null)}
+            onStart={async (formats) => {
+              try {
+                const job = await start.mutateAsync({ dossierId, itemId: archiveFor!.id, formats });
+                setArchiveFor(null);
+                onWatch(job.id);
+              } catch (e) {
+                toast(errorText(e), 'error');
+              }
+            }}
+          />
+          <ArchiveProgress
+            job={watched}
+            onHide={() => {
+              onWatch(null);
+              toast(t('Архив снимается дальше — состояние видно у ссылки'));
+            }}
+            onCancel={() => watched && cancel.mutate({ id: watched.id })}
+            cancelling={cancel.isPending}
+          />
+          <ArchiveResultDialog
+            job={resultId ? jobs.find((j) => j.id === resultId) ?? null : null}
+            cfg={archive}
+            onClose={() => setResultId(null)}
+            onDismiss={(id) => {
+              dismiss.mutate({ id });
+              setResultId(null);
+            }}
+          />
+        </>
+      )}
     </Card>
   );
 }

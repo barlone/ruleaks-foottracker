@@ -3,7 +3,7 @@
 // actorId — кто выполняет действие (created_by / granted_by в БД).
 
 import type {
-  Access, Dossier, DossierItem, DossierSummary, Fact, GraphEdge, GraphNode, Hypothesis,
+  Access, ArchiveFormat, ArchivePartStatus, Dossier, DossierItem, DossierSummary, Fact, GraphEdge, GraphNode, Hypothesis,
   Investigation, InvestigationSummary, DossierRelation, RelationType, SearchJob, SearchSection, Share, Tag, User, UserSettings,
 } from '@ft/shared';
 
@@ -85,6 +85,40 @@ export interface ScanStore {
    * лежать чужой ответ (index.html от прокси, пока /scans не проксировался), и по дате хранилище ответило бы 304 на него.
    */
   image(id: string, cond: { ifNoneMatch?: string }): Promise<ScanImage>;
+}
+
+// ---------- Архивы страниц (служба RuLeaks.ArchiveBox) ----------
+
+/** Готовый файл архива: размер и поток чтения (с диска службы или из памяти имитации). */
+export interface ArchiveFile {
+  size: number;
+  open(): NodeJS.ReadableStream;
+}
+
+/** Состояние захвата в службе. done — служба закончила (по каждому формату — свой итог). */
+export interface ArchivePoll {
+  stage: 'queued' | 'capturing' | 'done';
+  parts: Partial<Record<ArchiveFormat, { status: ArchivePartStatus; error: string | null; file: ArchiveFile | null }>>;
+}
+
+/**
+ * Служба недоступна или ответила ошибкой. code: AUTH — токен отвергнут, HTTP — неожиданный ответ, NET — нет связи,
+ * TIMEOUT — не ответила вовремя, PARSE — ответ не по контракту (форк ArchiveBox, docs/ARCHITECTURE.md §4.1).
+ */
+export class SiteArchiveError extends Error {
+  constructor(public readonly code: 'AUTH' | 'HTTP' | 'NET' | 'TIMEOUT' | 'PARSE', message: string) {
+    super(message);
+  }
+}
+
+/** Служба снимков страниц. ref — её идентификатор захвата (crawl_id), всё удаляется одним remove. */
+export interface SiteArchiver {
+  /** Имитация: файлы вымышленные, служба не вызывается. */
+  readonly demo: boolean;
+  start(url: string, formats: ArchiveFormat[], signal: AbortSignal): Promise<string>;
+  poll(ref: string, signal: AbortSignal): Promise<ArchivePoll>;
+  /** Удалить захват со всеми файлами; уже удалённый — не ошибка. */
+  remove(ref: string): Promise<void>;
 }
 
 // ---------- Хранилище сайта ----------
@@ -245,6 +279,8 @@ export interface Deps {
   gateway: SearchGateway;
   /** [scanstore-api] enabled = false — null: сканы не показываются. */
   scans: ScanStore | null;
+  /** [config] site-archive = false — null: архивов страниц нет. */
+  siteArchive: SiteArchiver | null;
   users: UserRepo;
   sessions: SessionRepo;
   searches: SearchRepo;

@@ -10,7 +10,7 @@ import {
 import {
   ATTR_PAIRS, ATTR_TYPES, DOSSIER_MEDIA_MAX_BYTES, pairAllowed, LEAK_FIELDS, MEDIA_FILE_MAX_BYTES, attrCopyValue, attrDisplayValue, attrTypeLabel, dossierMediaBytes, FIELD_TO_KIND,
   POST_KIND_LABELS, findDuplicate, newId, type DossierItem, type LeakField, type SearchSection,
-  MEDIA_ACCEPT, isPdfUrl, parseEmail, stripHighlight,
+  MEDIA_ACCEPT, isPdfUrl, parseEmail, stripHighlight, type ArchiveFormat,
 } from '@ft/shared';
 import { kindLabel } from '../search/job.ts';
 import { ValueActions } from '../search/ValueActions.tsx';
@@ -27,6 +27,8 @@ import { Button, Card, ConfirmDeleteBtn, CopyButton, DELETE_GAP, Dialog, Empty, 
 import { driveImageUrl, drivePreviewUrl, googleDriveId } from '../../lib/driveLinks.ts';
 import { DriveHelpButton } from '../../components/DriveHelp.tsx';
 import { WebLinksCard } from './WebLinks.tsx';
+import { ArchiveFormatsField, type ArchiveCfg } from './SiteArchive.tsx';
+import { useArchiveConfig } from './siteArchive.ts';
 import { PdfThumb } from '../../components/PdfPreview.tsx';
 import { clipboardImage, imageDataUrl, pastedImage } from '../../lib/shotImage.ts';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
@@ -114,13 +116,30 @@ export function DossierPage() {
   const [editingAttr, setEditingAttr] = useState<Of<'attribute'> | null>(null);
   const [sharing, setSharing] = useState(false);
   const [exporting, setExporting] = useState<'file' | 'pdf' | null>(null);
+  const archiveCfg = useArchiveConfig();
+  const startArchive = trpc.siteArchive.start.useMutation();
+  const [watchingArchive, setWatchingArchive] = useState<string | null>(null);
 
   if (q.isLoading) return <div className="grid h-64 place-items-center"><Spinner /></div>;
   if (q.error || !q.data) return <div className="p-6"><Empty>{errorText(q.error)}</Empty></div>;
   const d = q.data;
   const editable = d.role !== 'viewer' && !!me.data?.access.active;
   const items = <T extends DossierItem['type']>(t: T) => d.items.filter((i): i is Of<T> => i.type === t);
-  const add = (item: NewItem) => addItem.mutateAsync({ id, item }).then(() => setAdding(null));
+  // archive — форматы архива новой ссылки: после сохранения ставится задание и открывается окно ожидания.
+  const add = async (item: NewItem, archive?: ArchiveFormat[]) => {
+    const saved = await addItem.mutateAsync({ id, item });
+    setAdding(null);
+    if (!archive?.length || item.type !== 'link') return;
+    const created = saved.items.find((i) => i.type === 'link' && i.url === item.url);
+    if (!created) return;
+    try {
+      const job = await startArchive.mutateAsync({ dossierId: id, itemId: created.id, formats: archive });
+      void utils.siteArchive.list.invalidate({ dossierId: id });
+      setWatchingArchive(job.id);
+    } catch (e) {
+      toast(t('Ссылка сохранена, но архив не поставлен: {error}', { error: errorText(e) }), 'error');
+    }
+  };
   // Фото персоны — отдельный альбом: правятся через бокс у названия и в «Медиа» не дублируются.
   const photos = items('media').filter((m) => m.album === PHOTO_ALBUM);
   const media = items('media').filter((m) => m.album !== PHOTO_ALBUM);
@@ -263,9 +282,13 @@ export function DossierPage() {
           </Card>
 
           <WebLinksCard
+            dossierId={id}
             links={items('link').filter((l) => l.kind === 'web')}
             items={d.items}
             editable={editable}
+            archive={archiveCfg}
+            watching={watchingArchive}
+            onWatch={setWatchingArchive}
             onAdd={() => setAdding('weblink')}
             onEdit={setEditingLink}
             onRemove={(itemId) => removeItem.mutate({ id, itemId })}
@@ -393,7 +416,7 @@ export function DossierPage() {
         onClose={() => setEditingLink(null)}
         onSave={(item) => updateItem.mutateAsync({ id, item }).then(() => setEditingLink(null))}
       />
-      <AddItemDialog kind={adding} existing={d.items} onClose={() => setAdding(null)} onAdd={add} />
+      <AddItemDialog kind={adding} existing={d.items} archive={archiveCfg} onClose={() => setAdding(null)} onAdd={add} />
 
       <ExportDialog kind="dossier" format={exporting ?? 'file'} id={id} open={!!exporting} onOpenChange={(v) => !v && setExporting(null)} />
 
@@ -1211,16 +1234,20 @@ function EditLinkForm({ link, existing, onSave }: { link: Of<'link'>; existing: 
   );
 }
 
-function AddItemDialog({ kind, existing, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; onClose: () => void; onAdd: (i: NewItem) => Promise<void> }) {
+type AddFn = (i: NewItem, archive?: ArchiveFormat[]) => Promise<void>;
+
+function AddItemDialog({ kind, existing, archive, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; archive: ArchiveCfg | null; onClose: () => void; onAdd: AddFn }) {
   const titles = { attribute: t('Новый атрибут'), link: t('Ссылка на профиль'), weblink: t('Ссылка'), media: t('Медиафайл'), note: t('Заметка'), post: t('Пост или реакция') };
   return (
     <Dialog open={!!kind} onOpenChange={(v) => !v && onClose()} title={kind ? titles[kind] : ''} wide={kind === 'note'}>
-      {kind && <AddItemForm key={kind} kind={kind} existing={existing} onAdd={onAdd} />}
+      {kind && <AddItemForm key={kind} kind={kind} existing={existing} archive={archive} onAdd={onAdd} />}
     </Dialog>
   );
 }
 
-function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; onAdd: (i: NewItem) => Promise<void> }) {
+function AddItemForm({ kind, existing, archive, onAdd }: { kind: 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; archive: ArchiveCfg | null; onAdd: AddFn }) {
+  // Архив страницы новой внешней ссылки (служба архивации): форматы; пусто — не снимать.
+  const [archiveFormats, setArchiveFormats] = useState<ArchiveFormat[]>([]);
   const [key, setKey] = useState<string>('phones');
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
@@ -1255,7 +1282,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
         await onAdd({ type: 'link', url, title: title || undefined, platform: guessPlatform(url), source: src });
       } else if (kind === 'weblink') {
         const url = /^https?:\/\//.test(value) ? value : `https://${value}`;
-        await onAdd({ type: 'link', kind: 'web', url, title: title || undefined, platform: 'web', source: src });
+        await onAdd({ type: 'link', kind: 'web', url, title: title || undefined, platform: 'web', source: src }, archive ? archiveFormats : undefined);
       } else if (kind === 'media') {
         // Ссылка Диска хранится как миниатюра (картинка, кадр видео) и, для видео, адрес плеера.
         const url = driveId ? driveImageUrl(driveId) : value;
@@ -1346,6 +1373,7 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
           <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…" />
         </Field>
         <Field label={t('Название')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+        {archive && <ArchiveFormatsField cfg={archive} value={archiveFormats} onChange={setArchiveFormats} />}
       </>
     );
   } else if (kind === 'media') {
@@ -1434,7 +1462,9 @@ function AddItemForm({ kind, existing, onAdd }: { kind: 'attribute' | 'link' | '
       )}
       {error && <div className="font-mono text-xs text-danger">{error}</div>}
       <div className="flex justify-end">
-        <Button type="submit" variant="primary" disabled={!value.trim() || !!duplicate}>{t('Добавить')}</Button>
+        <Button type="submit" variant="primary" disabled={!value.trim() || !!duplicate}>
+          {kind === 'weblink' && archive && archiveFormats.length ? t('Добавить и снять архив') : t('Добавить')}
+        </Button>
       </div>
     </form>
   );

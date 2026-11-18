@@ -88,6 +88,11 @@ const SECTIONS = {
     'google-search': bool(false),
     /** Раздел «Поиск по Email» (GHunt + MOSINT; ключи сервисов — секция [email-search]). */
     'email-search': bool(true),
+    /**
+     * Служба архивации страниц (RuLeaks.ArchiveBox — PDF и веб-архив WACZ ссылок досье; секция [site-archive]).
+     * false — службы нет: кнопок архивации в досье не видно.
+     */
+    'site-archive': bool(false),
   }),
   server: z.object({
     host: str('127.0.0.1'),
@@ -195,6 +200,20 @@ const SECTIONS = {
     'emailrep-key': str(),
     'hunter-key': str(),
   }),
+  'site-archive': z.object({
+    /** REST API службы (RuLeaks.ArchiveBox, слушает только loopback того же LXC). */
+    'api-url': str('http://127.0.0.1:5797'),
+    /** Токен API (X-ArchiveBox-API-Key). Пусто — имитация: вымышленные файлы, служба не нужна. */
+    'api-key': str(),
+    /** Сколько ждать ответа одного запроса к API. */
+    'timeout-sec': int(30, 1, 600),
+    /** Сколько ждать готовности архива; дольше — задание считается неудавшимся, crawl удаляется. */
+    'job-timeout-sec': int(900, 60, 7200),
+    /** Как часто спрашивать службу о готовности. */
+    'poll-interval-sec': int(3, 1, 60),
+    /** Сколько готовые файлы ждут скачивания; потом crawl удаляется из службы. */
+    'keep-min': int(60, 5, 1440),
+  }),
   /**
    * Алертинг: ошибки сервера уходят через бот blind-postman. Ключи названы как в API-шлюзе (у него та же секция),
    * поэтому с подчёркиванием. Секции нет — ничего не отправляется; секция с неверным значением останавливает запуск.
@@ -220,6 +239,7 @@ const Schema = z.object({
   'pages-search': SECTIONS['pages-search'].prefault({}),
   'google-search': SECTIONS['google-search'].prefault({}),
   'email-search': SECTIONS['email-search'].prefault({}),
+  'site-archive': SECTIONS['site-archive'].prefault({}),
   alerting: SECTIONS.alerting.prefault({}),
 });
 
@@ -309,6 +329,13 @@ export interface AppConfig {
     smtp: { enabled: boolean; helo: string; from: string };
     keys: { hibp: string; breachDirectory: string; intelx: string; emailrep: string; hunter: string };
     intelxUrl: string;
+  };
+  /**
+   * Архивы страниц (служба RuLeaks.ArchiveBox): enabled — [config] site-archive; apiKey пуст — имитация.
+   * Ключ в браузер не уходит.
+   */
+  siteArchive: {
+    enabled: boolean; apiUrl: string; apiKey: string; timeoutMs: number; jobTimeoutMs: number; pollIntervalMs: number; keepMs: number;
   };
   /** Алертинг через бот blind-postman; enabled — секция [alerting] задана. Токен в браузер и в журнал не уходит. */
   alerting: { enabled: boolean; apiUrl: string; apiToken: string; userAlias: string; groupAlias: string };
@@ -487,6 +514,15 @@ export function loadConfig(): AppConfig {
       },
       intelxUrl: c['email-search']['intelx-url'].replace(/\/+$/, ''),
     },
+    siteArchive: {
+      enabled: c.config['site-archive'],
+      apiUrl: c['site-archive']['api-url'].replace(/\/+$/, ''),
+      apiKey: c['site-archive']['api-key'],
+      timeoutMs: c['site-archive']['timeout-sec'] * 1000,
+      jobTimeoutMs: c['site-archive']['job-timeout-sec'] * 1000,
+      pollIntervalMs: c['site-archive']['poll-interval-sec'] * 1000,
+      keepMs: c['site-archive']['keep-min'] * 60_000,
+    },
     alerting,
     warnings,
   };
@@ -496,6 +532,9 @@ export function loadConfig(): AppConfig {
   }
   if (cfg.google.enabled && !cfg.google.masterToken) {
     warnings.push('[google-search] master-token не задан: поиск по Gaia ID и файлу Drive отвечает вымышленными данными (имитация) — получите токен: npm run google-login. Wi-Fi BSSID и Digital Asset Links работают и без него');
+  }
+  if (cfg.siteArchive.enabled && !cfg.siteArchive.apiKey) {
+    warnings.push('[site-archive] api-key не задан: архивы страниц — имитация (вымышленные PDF и WACZ, служба RuLeaks.ArchiveBox не вызывается)');
   }
   if (cfg.email.enabled && cfg.email.google && !cfg.google.masterToken) {
     warnings.push('[google-search] master-token не задан: часть «Аккаунт Google» поиска по Email — вымышленные данные (имитация); выключить её — [email-search] google = false');
@@ -549,6 +588,7 @@ function validate(cfg: AppConfig) {
   if (cfg.google.enabled && cfg.google.masterToken && !cfg.google.masterToken.startsWith('aas_et/')) {
     missing.push('[google-search] master-token (мастер-токен Android начинается с aas_et/ — npm run google-login)');
   }
+  if (cfg.siteArchive.enabled && cfg.siteArchive.apiKey && !isUrl(cfg.siteArchive.apiUrl)) missing.push('[site-archive] api-url (http://127.0.0.1:5797)');
   if (cfg.email.enabled && cfg.email.keys.intelx && !isUrl(cfg.email.intelxUrl)) missing.push('[email-search] intelx-url (https://free.intelx.io или https://2.intelx.io)');
   const { mode } = cfg.auth;
   if (mode !== 'bot-db') {
@@ -609,6 +649,7 @@ export function describeConfig(cfg: AppConfig): string[] {
     `страницы:  ${cfg.pages.enabled ? `поиск личных страниц (таймаут ${cfg.pages.timeoutMs / 1000} с, параллельно ${cfg.pages.concurrency})` : 'выключен'}`,
     `Google:    ${!cfg.google.enabled ? 'выключен' : `${cfg.google.masterToken ? 'поиск по Google' : 'Gaia ID, Drive — имитация (нет мастер-токена); Wi-Fi и Asset Links — настоящие'} (таймаут ${cfg.google.timeoutMs / 1000} с, пауза ${cfg.google.minIntervalMs / 1000} с, адрес Wi-Fi: ${cfg.google.reverseGeocodeUrl || 'не определяется'})`}`,
     `Email:     ${cfg.email.enabled ? describeEmail(cfg) : 'выключен'}`,
+    `архивы:    ${!cfg.siteArchive.enabled ? 'выключены' : cfg.siteArchive.apiKey ? `${cfg.siteArchive.apiUrl} (ожидание до ${cfg.siteArchive.jobTimeoutMs / 1000} с, файлы ${cfg.siteArchive.keepMs / 60_000} мин)` : 'имитация (нет api-key)'}`,
     `алертинг:  ${cfg.alerting.enabled ? `${cfg.alerting.apiUrl} → ${[cfg.alerting.userAlias && `пользователь ${cfg.alerting.userAlias}`, cfg.alerting.groupAlias && `группа ${cfg.alerting.groupAlias}`].filter(Boolean).join(', ')}` : 'выключен (нет секции [alerting])'}`,
   ];
 }

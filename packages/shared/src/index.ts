@@ -13,3 +13,4 @@ export * from './export.ts';
 export * from './tsquery.ts';
 export * from './stem.ts';
 export * from './version.ts';
+export * from './siteArchive.ts';

@@ -23,6 +23,6 @@ export default defineConfig({
     port: 5173,
     // Не уходить молча на 5174: вторая копия фронта работала бы с чужим API-сервером.
     strictPort: true,
-    proxy: { '/trpc': api, '/geo': api, '/scans': api },
+    proxy: { '/trpc': api, '/geo': api, '/scans': api, '/site-archive': api },
   },
 });

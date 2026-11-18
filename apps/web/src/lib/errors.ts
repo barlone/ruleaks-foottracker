@@ -46,7 +46,20 @@ const MESSAGES: Record<string, string> = {
   GOOGLE_BUSY: 'Очередь поиска по Google заполнена — повторите через минуту',
   EMAIL_DISABLED: 'Раздел «Исследовать Email» выключен в настройках сервера',
   EMAIL_BUSY: 'Сервер сейчас выполняет слишком много поисков по Email — повторите через минуту',
+  ARCHIVE_DISABLED: 'Архивация страниц выключена в настройках сервера',
+  ARCHIVE_BUSY: 'Служба архивации занята другими страницами — повторите через несколько минут',
+  ARCHIVE_USER_BUSY: 'У вас уже снимаются две страницы — дождитесь их или отмените',
+  ARCHIVE_TIMEOUT: 'Служба архивации не успела снять страницу',
+  ARCHIVE_UNAVAILABLE: 'Служба архивации недоступна',
+  ARCHIVE_FAILED: 'Служба архивации ответила ошибкой — подробности в журнале сервера',
+  ARCHIVE_NO_FILES: 'Страницу снять не удалось: ни один из заказанных файлов не получился',
 };
+
+/** Текст по коду ошибки, пришедшему не исключением, а полем (ошибка задания архивации и т.п.). */
+export function codeText(code: string): string {
+  const known = MESSAGES[code];
+  return known ? t(known) : code;
+}
 
 export function errorText(e: unknown): string {
   if (e instanceof TRPCClientError) {

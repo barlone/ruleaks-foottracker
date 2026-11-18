@@ -80,6 +80,9 @@ sets the per-site timeout and concurrency (see «Personal pages search» below).
 and the pause between searches — an empty token means fake demo answers (see «Google search» below).
 `[config] email-search` (default `true`) switches «Поиск по Email»; `[email-search]` holds per-part switches for the
 keyless checks and the API keys of the keyed ones (see «Email search» below).
+`[config] site-archive` (default `false`) says whether the page-archiving service exists; off — no archive controls in
+dossiers. `[site-archive]` holds its API URL and key (empty key — fake demo files), timeouts, poll interval and how
+long finished files stay downloadable (see «Site archives» below).
 
 `[server] secure-cookie` (default `true`) sets the cookies' Secure flag; it no longer depends on `host`, because
 production listens on 127.0.0.1 behind nginx (browsers accept Secure cookies on http://localhost, so dev works).
@@ -460,11 +463,37 @@ have not been run (no keys).
 
 `components/ProgressDialog.tsx` is the modal for long processes (gauge, status line, elapsed time, «Отмена»; Esc =
 cancel, no closing by clicking outside). Two ways to drive it: `<ProgressDialog>` with props when the state comes from a
-polled server job (pages search, Google search, Email search), or `useProcess()` + `<ProcessDialog>` for browser-side async flows — `run(title, fn)`
+polled server job (pages search, Google search, Email search, site archives — with `onHide` = «Свернуть»), or `useProcess()` + `<ProcessDialog>` for browser-side async flows — `run(title, fn)`
 shows the window for the promise, `p.set()` moves the bar, `p.signal` goes into tRPC calls via the vanilla client
 (`utils.client.x.mutate(input, { signal })` — `useMutation` has no signal), cancel rejects with `ProcessCancelled`
 (`isCancelled(e)` — don't toast it). Used by `ExportDialog` (file/PDF), `ImportDialog` (upload chunks are determinate,
 inspect/commit indeterminate; commit is not cancellable) and `TgPdfDialog`.
+
+### Site archives
+
+A dossier web link can be captured as **PDF** and/or **WACZ** (nothing else) by the separate service
+RuLeaks.ArchiveBox (ArchiveBox fork in the same LXC, `D:\PyProjs\RuLeaksArchiveBox`; the API contract is its
+`docs/ARCHITECTURE.md` §4.1 — keep `adapters/http/archivebox.ts` in step with it). Port `SiteArchiver` (`ports.ts`):
+`HttpSiteArchiver` (`POST cli/add` with an explicit plugin list — `chrome,modalcloser,istilldontcareaboutcookies,ublock`
++ `pdf` / `archivewebpage`; poll `core/snapshots?crawl_id=…&with_archiveresults=true` until `sealed`; files read from
+the service's disk: `output_dir` + `output_files` keys, never outside the snapshot folder; `DELETE crawls/crawl/{id}`)
+or `DemoSiteArchiver` (no `api-key`: ~15 s of stages, fake PDF via `renderPdf` and a minimal WACZ; a URL with `fail`
+makes the PDF fail). `deps.siteArchive = null` when `[config] site-archive` is off.
+
+`archive/jobs.ts`: in-memory jobs driven by the server itself (not by browser polls — the progress window can be
+hidden), sha256 per file when done, files kept `keep-min`, then the crawl is deleted from the service (also on cancel,
+failure, «Удалить сейчас», timeout). Only the dossier's editors start a job, only for a link of that dossier (the URL
+comes from the item); only the starter sees it and downloads. Limits: 2 running per user, 4 per process, a repeat for a
+link already capturing returns that job. `routers/siteArchive.ts` (`config` → null when off, `start`, `job`, `list`,
+`cancel`, `dismiss`); files: `GET /site-archive/<job>/<pdf|wacz>` (`archive-files.ts`; PDF `?inline=1`, WACZ download
+only — it holds foreign pages with scripts). Vite and nginx proxy `/site-archive`.
+
+UI (`features/dossiers/SiteArchive.tsx` + `siteArchive.ts`): «Архив страницы» format checkboxes in the add-web-link
+dialog (save, then start, then the progress window), an archive icon on a saved link (`ArchiveStartDialog`), the
+progress window (`ProgressDialog` with the new `onHide` = «Свернуть»), a status chip under the link (active job first,
+else the last finished one, so a cancelled retake does not hide a ready archive) and the result dialog. Error codes
+`ARCHIVE_*` are in `lib/errors.ts` (`codeText` for codes that arrive as a field). Saving to the user's Google Drive is
+the next step; ARCHITECTURE.md §6.1.
 
 ### Document scans
 
@@ -522,7 +551,7 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   Ctrl+V into the shot dialog or picked as a file and squeezed by `lib/shotImage.ts` (`fitShot`) under the media
   limits — `itemImages` / `dossierMediaBytes` count shots together with media files. Export carries `kind` and
   `shots` as optional keys (additive to v1); the PDF lists the shot dates only. Found pages (`AddPagesDialog`) go to
-  «Соцсети». Site archives are planned for this section.
+  «Соцсети». Web links can be archived to PDF / WACZ (see «Site archives»).
 - Add-media dialog: «Из буфера обмена» (`clipboardImage`, Clipboard API) and Ctrl+V anywhere in the open dialog
   (`pastedImage`) take an image from the clipboard; `imageDataUrl` keeps it as is under the file limit and squeezes a
   bigger one (`fitShot`) instead of refusing — a screenshot has no file to put on Google Drive. Helpers: `lib/shotImage.ts`.

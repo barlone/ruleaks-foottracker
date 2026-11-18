@@ -329,6 +329,8 @@ const en: Record<string, string> = {
   'Одни исключения («-слово») найдут почти всё подряд — добавьте слово, которое должно быть':
     'Exclusions alone (“-word”) will find almost everything — add a word that must be present',
   'Часть «or» состоит только из исключений — она найдёт почти все сообщения': 'An “or” part consists only of exclusions — it will find almost all messages',
+  // siteArchive.ts
+  'Веб-архив (WACZ)': 'Web archive (WACZ)',
 };
 
 export default en;

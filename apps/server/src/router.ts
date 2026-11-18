@@ -12,6 +12,7 @@ import { pagesRouter } from './routers/pages.ts';
 import { googleRouter } from './routers/google.ts';
 import { emailRouter } from './routers/email.ts';
 import { settingsRouter } from './routers/settings.ts';
+import { siteArchiveRouter } from './routers/siteArchive.ts';
 
 export const appRouter = router({
   auth: authRouter,
@@ -27,6 +28,7 @@ export const appRouter = router({
   pages: pagesRouter,
   google: googleRouter,
   email: emailRouter,
+  siteArchive: siteArchiveRouter,
 });
 
 /** Тип импортирует фронтенд (только тип — код сервера в бандл не попадает). */

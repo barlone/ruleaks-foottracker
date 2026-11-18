@@ -36,7 +36,7 @@ server {
     real_ip_header CF-Connecting-IP;
 
     # --- Заголовки безопасности (аудит, пункты 7 и 8) -----------------------------------------------------------
-    # Уровень server — для всех location без своих add_header (ниже это /trpc/, /geo/, /scans/).
+    # Уровень server — для всех location без своих add_header (ниже это /trpc/, /geo/, /scans/, /site-archive/).
     include /etc/nginx/snippets/foottracker-security.conf;
 
     # Общие настройки проксирования к приложению.
@@ -57,6 +57,13 @@ server {
 
     location /scans/ {
         proxy_pass http://127.0.0.1:3001;
+    }
+
+    # Файлы архивов страниц ([config] site-archive): PDF и WACZ, десятки МБ — потоком, без буфера на диске nginx.
+    location /site-archive/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
     }
 
     # Сборка Vite: имена файлов с хешем — кэш на год.

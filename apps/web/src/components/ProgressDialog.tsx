@@ -26,6 +26,8 @@ export interface ProgressProps {
   /** Без onCancel кнопки «Отмена» нет и окно нельзя закрыть, пока процесс идёт. */
   onCancel?: () => void;
   cancelling?: boolean;
+  /** Процесс идёт на сервере сам по себе: окно можно скрыть, не отменяя его («Свернуть»). */
+  onHide?: () => void;
 }
 
 function elapsedText(from: number, now: number): string {
@@ -45,7 +47,7 @@ function useNow(active: boolean): number {
   return now;
 }
 
-export function ProgressDialog({ open, title, value, status, detail, startedAt, onCancel, cancelling }: ProgressProps) {
+export function ProgressDialog({ open, title, value, status, detail, startedAt, onCancel, cancelling, onHide }: ProgressProps) {
   const now = useNow(open && !!startedAt);
   const pct = value === null ? null : Math.round(Math.min(1, Math.max(0, value)) * 100);
   return (
@@ -86,11 +88,14 @@ export function ProgressDialog({ open, title, value, status, detail, startedAt, 
             </div>
             {detail && <div className="mt-1 font-mono text-[11px] text-mute">{detail}</div>}
 
-            {onCancel && (
-              <div className="mt-5 flex justify-end">
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={cancelling}>
-                  {cancelling ? t('Останавливаю…') : t('Отмена')}
-                </Button>
+            {(onCancel || onHide) && (
+              <div className="mt-5 flex justify-end gap-2">
+                {onHide && <Button variant="ghost" size="sm" onClick={onHide}>{t('Свернуть')}</Button>}
+                {onCancel && (
+                  <Button variant="ghost" size="sm" onClick={onCancel} disabled={cancelling}>
+                    {cancelling ? t('Останавливаю…') : t('Отмена')}
+                  </Button>
+                )}
               </div>
             )}
           </RDialog.Content>

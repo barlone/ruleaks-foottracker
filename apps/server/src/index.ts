@@ -8,6 +8,8 @@ import { registerGeoFiles } from './geo-files.ts';
 import { appRouter, type AppRouter } from './router.ts';
 import { registerScanFiles } from './scan-files.ts';
 import { registerSameOriginGuard } from './same-origin.ts';
+import { registerArchiveFiles } from './archive-files.ts';
+import { initArchiveJobs } from './archive/jobs.ts';
 import { makeCreateContext } from './trpc.ts';
 import { appVersion, versionLine } from './version.ts';
 import { alert, errorLine, finalAlert, startAlerter } from './alerting.ts';
@@ -73,6 +75,8 @@ app.addHook('onError', async (req, _reply, error) => {
 
 await registerGeoFiles(app, deps);
 registerScanFiles(app, deps);
+initArchiveJobs(deps.siteArchive, appConfig.siteArchive);
+registerArchiveFiles(app, deps);
 
 app.get('/health', async () => ({ ok: true, ...appVersion }));
 

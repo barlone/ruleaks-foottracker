@@ -25,6 +25,8 @@ const cookieOpts = {
   signed: true,
   maxAge: config.sessionTtlMs / 1000,
 };
+/** Удаление — с теми же Secure и Path: cookie с префиксом __Host- браузер стирает только ответом с Secure. */
+const clearOpts = { path: '/', httpOnly: true, sameSite: 'lax' as const, secure: config.secureCookie };
 
 /** Процедуры входа через бота недоступны в других режимах. */
 const botProcedure = publicProcedure.use(({ next }) => {
@@ -78,12 +80,21 @@ function passwordMatches(password: string): boolean {
 }
 
 async function startSession(ctx: Ctx, userId: string) {
-  const sid = await ctx.deps.sessions.create(userId, config.sessionTtlMs);
+  setSessionCookie(ctx, await ctx.deps.sessions.create(userId, config.sessionTtlMs));
+}
+
+function setSessionCookie(ctx: Ctx, sid: string) {
   ctx.res.setCookie(config.sessionCookie, sid, cookieOpts);
+  clearLegacyCookies(ctx);
+}
+
+/** Cookie под прежними именами (до префикса __Host-) сервер уже не читает — стереть, чтобы не висели до срока. */
+function clearLegacyCookies(ctx: Ctx) {
+  for (const name of config.legacyCookies) if (ctx.req.cookies[name] !== undefined) ctx.res.clearCookie(name, clearOpts);
 }
 
 /** Cookie, привязывающая запрос входа к браузеру, который его начал: HMAC от nonce на секрете сервера. */
-const LOGIN_COOKIE = 'ft_login';
+const LOGIN_COOKIE = config.loginCookie;
 const loginCookieOpts = { ...cookieOpts, signed: false, maxAge: config.loginTtlMs / 1000 };
 const loginBinding = (nonce: string) => createHmac('sha256', config.cookieSecret).update(nonce).digest('base64url');
 
@@ -140,8 +151,8 @@ export const authRouter = router({
     await loadAccess(ctx.deps, r.tgId, true);
     const sid = await ctx.deps.sessions.create(id, config.sessionTtlMs);
     await ctx.deps.bot.consumeLoginRequest(input.nonce);
-    ctx.res.setCookie(config.sessionCookie, sid, cookieOpts);
-    ctx.res.clearCookie(LOGIN_COOKIE, { path: '/' });
+    setSessionCookie(ctx, sid);
+    ctx.res.clearCookie(LOGIN_COOKIE, clearOpts);
     return { status: 'confirmed' as const };
   }),
 
@@ -164,13 +175,14 @@ export const authRouter = router({
 
   logout: publicProcedure.mutation(async ({ ctx }) => {
     if (ctx.sid) await ctx.deps.sessions.delete(ctx.sid);
-    ctx.res.clearCookie(config.sessionCookie, { path: '/' });
+    ctx.res.clearCookie(config.sessionCookie, clearOpts);
+    clearLegacyCookies(ctx);
     return true;
   }),
 
   logoutEverywhere: authedProcedure.mutation(async ({ ctx }) => {
     await ctx.deps.sessions.deleteAllForUser(ctx.user.id);
-    ctx.res.clearCookie(config.sessionCookie, { path: '/' });
+    ctx.res.clearCookie(config.sessionCookie, clearOpts);
     return true;
   }),
 

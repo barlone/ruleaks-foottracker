@@ -19,7 +19,7 @@
 
 ```
             ┌──────────────────────── браузер (SPA) ────────────────────────┐
-            │ React · TanStack Router/Query · tRPC client · cookie ft_sid   │
+            │ React · TanStack Router/Query · tRPC · cookie __Host-ft_sid   │
             └───────────────────────────────┬───────────────────────────────┘
                                             │ /trpc  (только сюда)
                               ┌─────────────▼─────────────┐
@@ -171,7 +171,7 @@ def login_link(secret: str, site: str, tg_id: int, name: str = "", nick: str = "
   │                              SELECT site_login_requests
   │                            ◀── confirmed + tg_id
   │                            consume; upsert user; сессия
-  │ ◀── Set-Cookie ft_sid (httpOnly, Secure, SameSite=Lax, signed)
+  │ ◀── Set-Cookie __Host-ft_sid (httpOnly, Secure, SameSite=Lax, signed)
 ```
 
 Nonce виден всем, кто видит экран или ссылку (QR-код, чат с ботом), поэтому сессию получает только браузер,
@@ -746,8 +746,17 @@ relation_texts(id, text)  relation_types(id, owner_id NULL=предопреде�
 ## 11. Безопасность
 
 - `noindex, nofollow` на всём сайте; публичные расследования открываются только по ссылке.
-- Cookie: httpOnly, Secure, SameSite=Lax, подписанная (`[server] cookie-secret`). tRPC-мутации идут POST с JSON, а CORS закрыт:
-  фронт и API на одном origin.
+- Cookie сессии `__Host-ft_sid` (и привязки входа `__Host-ft_login`): httpOnly, Secure, SameSite=Lax, подписанная
+  (`[server] cookie-secret`), без `Domain`. Префикс `__Host-` не даёт поставить или перезаписать её с поддомена
+  (cookie tossing: подложить свою сессию и заставить аналитика работать в чужом аккаунте). При
+  `secure-cookie = false` префикс невозможен — прежние имена `ft_sid`/`ft_login`; cookie под прежними именами
+  стираются при входе и выходе.
+- Только свои страницы (`same-origin.ts`, хук на все маршруты, кроме `/health`): `Sec-Fetch-Site` должен быть
+  `same-origin` или `none`, иначе 403 `CROSS_SITE`; без заголовка (старый браузер) `Origin` сверяется с `Host`,
+  запрос без обоих — не из браузера и пропускается. SameSite=Lax защищает только от чужих *сайтов*, а соседний
+  поддомен того же домена — тот же site: плеер архивов WACZ на `waczplayer.<домен>` исполняет архивный JS и без этой
+  проверки мог бы отправлять мутации с cookie пользователя. Поэтому прокси (nginx, Vite в dev — `changeOrigin: false`)
+  передаёт `Host` как есть. CORS закрыт: фронт и API на одном origin.
 - Ограничения ввода — Zod-схемы (длины, количество узлов графа ≤ 2000, связей ≤ 5000).
 - (план) Rate-limit на `auth.start` и `search.start` (`@fastify/rate-limit`), поверх троттлинга шлюза.
 - Пароли БД, секрет cookie и мастер-токен Google — только в `config.ini` (вне git) или в переменных окружения `FT_*`.

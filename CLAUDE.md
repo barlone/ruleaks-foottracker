@@ -83,6 +83,15 @@ keyless checks and the API keys of the keyed ones (see «Email search» below).
 
 `[server] secure-cookie` (default `true`) sets the cookies' Secure flag; it no longer depends on `host`, because
 production listens on 127.0.0.1 behind nginx (browsers accept Secure cookies on http://localhost, so dev works).
+With it the cookies are `__Host-ft_sid` / `__Host-ft_login` (no `Domain`, so a sibling subdomain cannot set or
+overwrite them); without it the old `ft_sid` / `ft_login` — `__Host-` requires Secure. Old-name cookies are cleared on
+login/logout. Clearing a `__Host-` cookie needs the same Secure/Path (`clearOpts` in `routers/auth.ts`).
+
+`same-origin.ts` (an `onRequest` hook on every route but `/health`) refuses requests from other pages with 403
+`CROSS_SITE`: `Sec-Fetch-Site` must be `same-origin` or `none`; without it `Origin` must match `Host`; a request with
+neither is not from a browser and passes. SameSite=Lax does not cover sibling subdomains (same site) — the planned
+WACZ player on `waczplayer.<domain>` runs archived JS. So proxies must pass `Host` unchanged: nginx
+`proxy_set_header Host $host`, Vite proxy `changeOrigin: false`.
 
 `[server] trust-proxy` (default `false`) makes Fastify take the client address from `X-Forwarded-For`; production runs behind
 nginx/Cloudflare, so without it `req.ip` is the proxy and the per-IP password rate limit is shared by everyone. Values:
@@ -144,7 +153,7 @@ fake gateway), `adapters/botdb/bot.ts`, `adapters/http/gateway.ts`, `adapters/pg
 `prefer` falls back to plain TCP), `adapters/login-requests.ts` (in-memory login nonces — will move to the bot DB).
 Adding PostgreSQL storage means new repo adapters + a branch in `deps.ts`; routers and web stay unchanged.
 
-- **Procedures** (`src/trpc.ts`): `publicProcedure` → `authedProcedure` (session cookie `ft_sid`, signed) →
+- **Procedures** (`src/trpc.ts`): `publicProcedure` → `authedProcedure` (session cookie `__Host-ft_sid`, signed) →
   `activeProcedure` (subscription active). Expired subscription = read-only site: reads work, search and every
   mutation throw `FORBIDDEN SUBSCRIPTION_INACTIVE`. Machine-readable error codes travel in the error `message`
   (`NO_SESSION`, `VERSION_CONFLICT`, `NO_RIGHTS`, …) and are mapped to Russian text in `apps/web/src/lib/errors.ts`.

@@ -7,6 +7,7 @@ import { createDeps } from './deps.ts';
 import { registerGeoFiles } from './geo-files.ts';
 import { appRouter, type AppRouter } from './router.ts';
 import { registerScanFiles } from './scan-files.ts';
+import { registerSameOriginGuard } from './same-origin.ts';
 import { makeCreateContext } from './trpc.ts';
 import { appVersion, versionLine } from './version.ts';
 import { alert, errorLine, finalAlert, startAlerter } from './alerting.ts';
@@ -46,6 +47,8 @@ try {
 }
 
 await app.register(cookie, { secret: config.cookieSecret });
+// До маршрутов: запросы с чужих страниц, в т.ч. с соседних поддоменов (плеер архивов), не доходят до обработчиков.
+registerSameOriginGuard(app);
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {

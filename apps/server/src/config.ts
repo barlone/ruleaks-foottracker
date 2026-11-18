@@ -27,7 +27,13 @@ export const config = {
   devQuickLoginTgId: auth.devQuickLoginTgId,
   // При входе по паролю хеш пароля входит в секрет подписи cookie: смена пароля завершает все сессии.
   cookieSecret: auth.mode === 'password-sha256' ? `${appConfig.server.cookieSecret}:${auth.passwordSha256}` : appConfig.server.cookieSecret,
-  sessionCookie: 'ft_sid',
+  // Префикс __Host-: браузер принимает такую cookie только с Secure, Path=/ и без Domain и не даёт поставить или
+  // перезаписать её с поддомена (cookie tossing с соседнего waczplayer.<домен>). Без Secure префикс недопустим —
+  // тогда прежние имена.
+  sessionCookie: appConfig.server.secureCookie ? '__Host-ft_sid' : 'ft_sid',
+  loginCookie: appConfig.server.secureCookie ? '__Host-ft_login' : 'ft_login',
+  /** Имена до префикса: у вошедших раньше они остались в браузере, при новом входе и выходе стираются. */
+  legacyCookies: appConfig.server.secureCookie ? ['ft_sid', 'ft_login'] : [],
   sessionTtlMs: appConfig.server.sessionTtlMs,
   loginTtlMs: 5 * 60 * 1000,
   /** Сколько кэшировать ответ о подписке. */

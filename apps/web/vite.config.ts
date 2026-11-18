@@ -5,7 +5,9 @@ import { loadConfig } from '@ft/config';
 
 // Адрес API-сервера для прокси /trpc и /geo (свои тайлы карты) — из того же config.ini, что читает сервер.
 const { server } = loadConfig();
-const api = `http://${server.host}:${server.port}`;
+// Host передаётся как есть (как nginx на проде): сервер сверяет с ним Origin запросов (same-origin.ts), а строковая
+// форма прокси Vite подменила бы его на адрес API.
+const api = { target: `http://${server.host}:${server.port}`, changeOrigin: false };
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

@@ -139,6 +139,14 @@ const en: Record<string, string> = {
   'Отмеченное в досье': 'Selected to dossier',
   'Снимок в досье': 'Snapshot to dossier',
 
+  // Сохранённые для редактирования данные поиска
+  'Сохранить для редактирования': 'Save for editing',
+  'Сохранить результат у строки истории и перейти к его редактированию': 'Keep the result with its history entry and start editing it',
+  'Результат сохранён — его можно редактировать': 'The result is saved — you can edit it now',
+  'редактирование': 'editing',
+  'Удалить значение из сохранённых данных': 'Remove the value from the saved data',
+  'Сохранённые данные — откроются для редактирования': 'Saved data — opens for editing',
+
   // BackToDossier.tsx
   'в досье': 'to dossier',
 

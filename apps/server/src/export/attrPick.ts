@@ -36,12 +36,13 @@ export interface AttrPick {
   step2: string | null;
 }
 
-/** Свой завершённый поиск по атрибутам или геоданным. */
+/** Свой завершённый поиск по атрибутам или геоданным. Есть сохранённые для редактирования данные — в файл идут они, как на странице. */
 export async function loadAttrJob(deps: Deps, userId: string, jobId: string): Promise<SearchJob> {
   const job = await deps.searches.get(jobId, userId);
   if (!job || (job.section !== 'attr' && job.section !== 'geo')) throw new TRPCError({ code: 'NOT_FOUND' });
   if (job.state !== 'done') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Поиск ещё не завершён' });
-  return job;
+  const { savedResult, ...rest } = job;
+  return savedResult != null ? { ...rest, result: savedResult, saved: true } : rest;
 }
 
 export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fields'>): AttrPick {
@@ -49,6 +50,8 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
   const step2 = (job.result as { step2?: Step2Info } | null)?.step2 ?? null;
   const allLeaks = res?.leaks ?? [];
   const allRows = res?.rows ?? [];
+  // Удалённые из сохранённых данных строки в файл не идут, но остаются в byId — для «найдено через».
+  const liveRows = allRows.filter((r) => !r.removed);
   const only = req.only?.length ? new Set(req.only) : null;
   const fields = req.fields?.length ? new Set(req.fields) : null;
   const take = (f: string, v: string) => (!fields || fields.has(f)) && (!only || only.has(`${f}:${v}`));
@@ -75,7 +78,7 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
     }
     if (tuples.length) leaks.push({ leak: card.leak, trusted: card.trusted, tuples });
   }
-  const rows = job.deep ? allRows.filter((r) => take(r.prm, r.val)) : [];
+  const rows = job.deep ? liveRows.filter((r) => take(r.prm, r.val)) : [];
 
   const parts = [
     only ? `только отмеченные значения (${only.size})` : 'весь результат',
@@ -88,7 +91,7 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
     rows,
     byId: new Map(allRows.map((r) => [r.val_id, r] as const)),
     scanLeaks: !job.deep && !only && (!fields || fields.has(SCANS_FIELD)) ? allLeaks : [],
-    summary: job.deep ? `${allRows.length} связанных значений` : `${allLeaks.length} утечек`,
+    summary: job.deep ? `${liveRows.length} связанных значений` : `${allLeaks.length} утечек`,
     step2: step2 ? step2Summary(step2) : null,
     scope: parts.filter(Boolean).join('; '),
   };

@@ -213,10 +213,16 @@ export interface SearchJobInternals {
 
 export interface SearchRepo {
   create(job: Omit<SearchJob, 'id'> & SearchJobInternals): Promise<SearchJob>;
-  get(id: string, userId: string): Promise<(SearchJob & SearchJobInternals) | null>;
+  /** savedResult — сохранённые для редактирования данные (правленая копия result); null — их нет. */
+  get(id: string, userId: string): Promise<(SearchJob & SearchJobInternals & { savedResult: unknown }) | null>;
+  /** Записать (или убрать — null) сохранённые для редактирования данные своего поиска. */
+  setSaved(id: string, userId: string, data: unknown): Promise<void>;
   update(id: string, patch: Partial<SearchJob> & Partial<SearchJobInternals>): Promise<void>;
   listRecent(userId: string, section: SearchSection, limit: number): Promise<SearchJob[]>;
-  /** Очистка истории раздела. Снимки, прикреплённые к досье, в PostgreSQL-адаптере остаются (pinned). */
+  /**
+   * Очистка истории раздела. Снимки, прикреплённые к досье, в PostgreSQL-адаптере остаются (pinned);
+   * сохранённые для редактирования данные удаляются вместе со строкой истории.
+   */
   clear(userId: string, section: SearchSection): Promise<number>;
   /**
    * Снимок из файла импорта: закреплён и не виден в истории. Такой же снимок пользователя (раздел, вид, запрос,

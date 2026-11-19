@@ -74,8 +74,8 @@ export class MemorySessions implements SessionRepo {
   }
 }
 
-/** hidden — снимок из файла импорта: в истории не показывается. */
-type StoredSearch = SearchJob & SearchJobInternals & { hidden?: boolean };
+/** hidden — снимок из файла импорта: в истории не показывается; savedResult — сохранённые для редактирования данные. */
+type StoredSearch = SearchJob & SearchJobInternals & { hidden?: boolean; savedResult?: unknown };
 
 export class MemorySearches implements SearchRepo {
   private map = new Map<string, StoredSearch>();
@@ -98,7 +98,11 @@ export class MemorySearches implements SearchRepo {
   }
   async get(id: string, userId: string) {
     const s = this.map.get(id);
-    return s && s.userId === userId ? clone(s) : null;
+    return s && s.userId === userId ? clone({ ...s, savedResult: s.savedResult ?? null, saved: s.savedResult != null || undefined }) : null;
+  }
+  async setSaved(id: string, userId: string, data: unknown) {
+    const s = this.map.get(id);
+    if (s && s.userId === userId) s.savedResult = data === null || data === undefined ? undefined : clone(data);
   }
   async update(id: string, patch: Partial<StoredSearch>) {
     const s = this.map.get(id);
@@ -123,8 +127,8 @@ export class MemorySearches implements SearchRepo {
   }
 }
 
-function strip({ userId: _u, gatewayJobId: _g, gatewayService: _s, hidden: _h, ...rest }: StoredSearch): SearchJob {
-  return rest;
+function strip({ userId: _u, gatewayJobId: _g, gatewayService: _s, hidden: _h, savedResult, ...rest }: StoredSearch): SearchJob {
+  return savedResult != null ? { ...rest, saved: true } : rest;
 }
 
 /** Фильтр списка: подстрока названия без учёта регистра и все выбранные теги (по тексту). */

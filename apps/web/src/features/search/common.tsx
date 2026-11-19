@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import clsx from 'clsx';
-import { FolderPlus, History, Trash2 } from 'lucide-react';
+import { FolderPlus, History, Save, Trash2 } from 'lucide-react';
 import type { SearchSection, Step2Info } from '@ft/shared';
 import { Button, Card, Empty, Spinner } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
@@ -70,7 +70,15 @@ function HistoryCard({ section, activeId, onOpen }: { section: SearchSection; ac
             onClick={() => onOpen(s.id)}
             className={clsx('block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left transition hover:bg-mint/5', s.id === activeId && 'bg-mint/10')}
           >
-            <div className="truncate font-mono text-sm">{s.query}</div>
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate font-mono text-sm">{s.query}</span>
+              {/* К строке прикреплены сохранённые для редактирования данные: по щелчку откроются они. */}
+              {s.saved && (
+                <span className="shrink-0 text-warn" title={t('Сохранённые данные — откроются для редактирования')}>
+                  <Save size={14} />
+                </span>
+              )}
+            </div>
             <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-mute">
               <span className="truncate">{kindLabel(section, s.kind)}</span>
               {s.deep && <span className="text-mint">deep</span>}

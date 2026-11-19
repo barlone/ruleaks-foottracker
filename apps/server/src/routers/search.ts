@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, STEP2_FIELDS, STEP2_KINDS, SearchSectionSchema, TG_MODE_IDS,
   checkFulltext, checkMask, detectKind, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
-  AttrPdfRequest, AttrXlsxRequest, TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
+  AttrPdfRequest, AttrXlsxRequest, TgPdfRequest, type DeepRow, type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import { appConfig } from '../config.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
@@ -174,7 +174,22 @@ function advanceOnce(ctx: Ctx, id: string): ReturnType<typeof advance> {
   return p;
 }
 
-const publicJob = ({ userId: _u, gatewayJobId: _g, gatewayService: _s, ...job }: SearchJob & { userId: string; gatewayJobId: string | null; gatewayService: string }): SearchJob => job;
+/** Браузеру: без служебных полей; есть сохранённые для редактирования данные — в result они, а не исходный ответ. */
+const publicJob = (
+  { userId: _u, gatewayJobId: _g, gatewayService: _s, savedResult, ...job }:
+  SearchJob & { userId: string; gatewayJobId: string | null; gatewayService: string; savedResult?: unknown },
+): SearchJob => (savedResult != null && job.state === 'done' ? { ...job, result: savedResult, saved: true } : job);
+
+// Сохранённые для редактирования данные — правленая копия ответа шлюза в search_jobs.saved; исходный снимок (result)
+// не меняется: на него ссылаются досье и файлы экспорта. Пока только глубокий поиск по атрибутам.
+
+/** Свой завершённый глубокий поиск по атрибутам — только его результат сохраняется для редактирования. */
+async function loadDeepJob(ctx: Ctx, id: string) {
+  const job = await ctx.deps.searches.get(id, ctx.user!.id);
+  if (!job) throw new TRPCError({ code: 'NOT_FOUND' });
+  if (job.section !== 'attr' || !job.deep || job.state !== 'done') throw new TRPCError({ code: 'BAD_REQUEST', message: 'SAVED_NOT_DEEP' });
+  return job;
+}
 
 export const searchRouter = router({
   kinds: authedProcedure.query(() => SEARCH_KINDS),
@@ -271,6 +286,25 @@ export const searchRouter = router({
   clearHistory: authedProcedure
     .input(z.object({ section: SearchSectionSchema }))
     .mutation(({ ctx, input }) => ctx.deps.searches.clear(ctx.user.id, input.section)),
+
+  /** «Сохранить для редактирования»: копия результата прикрепляется к строке истории. Повторный вызов правки не затирает. */
+  save: activeProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const job = await loadDeepJob(ctx, input.id);
+    if (job.savedResult == null) await ctx.deps.searches.setSaved(job.id, ctx.user.id, job.result ?? {});
+  }),
+
+  /** Удалить значения из сохранённых данных глубокого поиска (по val_id строк). */
+  savedRemove: activeProcedure
+    .input(z.object({ id: z.string(), valIds: z.array(z.number().int()).min(1).max(10_000) }))
+    .mutation(async ({ ctx, input }) => {
+      const job = await loadDeepJob(ctx, input.id);
+      if (job.savedResult == null) throw new TRPCError({ code: 'BAD_REQUEST', message: 'NOT_SAVED' });
+      const saved = job.savedResult as { job?: { rows?: DeepRow[] } };
+      const ids = new Set(input.valIds);
+      // Строка не выбрасывается, а помечается: на её val_id ссылаются «найдено через …» других строк.
+      const rows = (saved.job?.rows ?? []).map((r) => (ids.has(r.val_id) ? { ...r, removed: true } : r));
+      await ctx.deps.searches.setSaved(job.id, ctx.user.id, { ...saved, job: { ...saved.job, rows } });
+    }),
 
   /** PDF-отчёт по своему завершённому поиску в Telegram (из сохранённого снимка — шлюз не вызывается). */
   exportTgPdf: authedProcedure.input(TgPdfRequest).mutation(async ({ ctx, input }) => {

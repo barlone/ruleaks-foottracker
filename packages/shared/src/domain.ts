@@ -484,6 +484,11 @@ export const SearchJob = z.object({
   /** Ответ шлюза как есть: leaks / rows / results / comments / users / years. */
   result: z.unknown().nullable(),
   startedAt: z.string(),
+  /**
+   * У поиска есть сохранённые для редактирования данные (копия result, которую правит пользователь). Тогда
+   * search.job отдаёт в result именно их, а не исходный ответ шлюза.
+   */
+  saved: z.boolean().optional(),
 });
 
 // ---------- Типы ----------

@@ -321,6 +321,11 @@ export interface DeepRow {
   val_id: number;
   link4: string;
   link4_id: number;
+  /**
+   * Значение удалено пользователем из сохранённых для редактирования данных (не от шлюза). Строка остаётся:
+   * на её val_id ссылаются «найдено через …» других строк.
+   */
+  removed?: boolean;
 }
 
 export const LEAK_FIELDS = {

@@ -265,6 +265,14 @@ Nonce виден всем, кто видит экран или ссылку (QR-
 перезапуска сервера опрос задачи продолжает второй шаг с первого невыполненного поиска. Три ошибки подряд
 останавливают его. Опросы одной задачи сериализуются (`advanceOnce`), чтобы конец первого шага не обработать дважды.
 
+**Сохранённые для редактирования данные** (пока только глубокий поиск по атрибутам). Кнопка «Сохранить для
+редактирования» (`search.save`) кладёт копию `result` в `search_jobs.saved`; исходный снимок не меняется — на него
+ссылаются досье и файлы экспорта. У такой строки истории жёлтая «дискета» (`SearchJob.saved`); `search.job` и
+выгрузка в PDF / Excel (`loadAttrJob`) отдают сохранённую копию вместо исходного ответа, страница показывает её
+в режиме редактирования (жёлтая рамка боксов, `*` перед типом атрибута, иконка удаления у значения).
+`search.savedRemove` не выбрасывает строку, а помечает `DeepRow.removed`: на её `val_id` ссылаются «найдено через»
+других строк. «Очистить историю» удаляет `saved` вместе со строкой истории.
+
 ### 5.1. Поиск по геоданным
 
 Раздел `/search/geo` включается флагом `[config] geo-search`. Если флаг выключен, `geo.config` возвращает `null`:
@@ -769,7 +777,7 @@ users(id, tg_id, display_name, username, settings jsonb)     sessions(id_hash sh
 dossiers(id, uid, owner_id, kind, title, summary_md, visibility, cover_media_id, version, deleted_at, search_tsv)
 dossier_members(group_id, member_id, role_label)             dossier_items(id, dossier_id, type, data jsonb, source jsonb, position, media_id)
 dossier_shares(dossier_id, user_id, role)                    media(id, owner_id, storage_key, sha256, exif)
-search_jobs(id, user_id, section, kind, query, params, state, result jsonb, pinned, hidden_at)
+search_jobs(id, user_id, section, kind, query, params, state, result jsonb, saved jsonb, pinned, hidden_at)
 investigations(id, uid, owner_id, title, description_md, visibility, version, deleted_at, search_tsv)
 investigation_shares(investigation_id, user_id, role)
 graph_nodes(id, investigation_id, type, label, dossier_id, props, x, y)

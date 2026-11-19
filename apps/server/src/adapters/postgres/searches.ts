@@ -5,6 +5,7 @@ import { json, type Db } from './db.ts';
 
 // История поиска и снимки ответов шлюза (таблица search_jobs).
 // «Очистить историю» скрывает записи (hidden_at), а не удаляет: снимки, прикреплённые к досье (pinned), нужны дальше.
+// Сохранённые для редактирования данные (saved — правленая копия result) при очистке удаляются.
 
 interface Row {
   id: string;
@@ -21,9 +22,13 @@ interface Row {
   gateway_service: SearchJobInternals['gatewayService'];
   gateway_job_id: string | null;
   started_at: Date;
+  has_saved: boolean;
+  /** Только в get(). */
+  saved?: unknown;
 }
 
-const COLS = `id, user_id, section, kind, query, deep, params, state, error, candidates, result, gateway_service, gateway_job_id, started_at`;
+const COLS = `id, user_id, section, kind, query, deep, params, state, error, candidates, result, gateway_service, gateway_job_id, started_at,
+  (saved IS NOT NULL) AS has_saved`;
 
 const toJob = (r: Row): SearchJob => ({
   id: r.id,
@@ -37,6 +42,7 @@ const toJob = (r: Row): SearchJob => ({
   candidates: r.candidates,
   result: r.result ?? null,
   startedAt: r.started_at.toISOString(),
+  ...(r.has_saved ? { saved: true } : {}),
 });
 
 export class PgSearches implements SearchRepo {
@@ -60,9 +66,18 @@ export class PgSearches implements SearchRepo {
 
   async get(id: string, userId: string) {
     if (!isUuid(id)) return null;
-    const r = await this.db.query<Row>(`SELECT ${COLS} FROM search_jobs WHERE id = $1 AND user_id = $2`, [id, userId]);
+    const r = await this.db.query<Row>(`SELECT ${COLS}, saved FROM search_jobs WHERE id = $1 AND user_id = $2`, [id, userId]);
     const row = r.rows[0];
-    return row ? { ...toJob(row), userId: row.user_id, gatewayJobId: row.gateway_job_id, gatewayService: row.gateway_service } : null;
+    return row
+      ? { ...toJob(row), userId: row.user_id, gatewayJobId: row.gateway_job_id, gatewayService: row.gateway_service, savedResult: row.saved ?? null }
+      : null;
+  }
+
+  async setSaved(id: string, userId: string, data: unknown) {
+    if (!isUuid(id)) return;
+    await this.db.query(`UPDATE search_jobs SET saved = $3::jsonb WHERE id = $1 AND user_id = $2`, [
+      id, userId, data === null || data === undefined ? null : json(data),
+    ]);
   }
 
   async update(id: string, patch: Partial<SearchJob> & Partial<SearchJobInternals>) {
@@ -121,7 +136,7 @@ export class PgSearches implements SearchRepo {
   }
 
   async clear(userId: string, section: SearchSection) {
-    const r = await this.db.query(`UPDATE search_jobs SET hidden_at = now() WHERE user_id = $1 AND section = $2 AND hidden_at IS NULL`, [
+    const r = await this.db.query(`UPDATE search_jobs SET hidden_at = now(), saved = NULL WHERE user_id = $1 AND section = $2 AND hidden_at IS NULL`, [
       userId, section,
     ]);
     return r.rowCount ?? 0;

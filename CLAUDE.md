@@ -268,6 +268,14 @@ the client queues requests per token and skips polls that are too early instead 
 Job progress is advanced only when the browser polls `search.job` (TanStack Query, also in background tabs); a job
 nobody polls stays `running` until `[api] job-timeout-sec`. A server-side poller is planned.
 
+Saved-for-editing data (deep attr search only, so far): «Сохранить для редактирования» on the result bar
+(`search.save`) copies `result` into `search_jobs.saved`; the original snapshot is never changed (dossiers and export
+files refer to it). A job with `saved` (`SearchJob.saved`, yellow diskette in «История») is served by `search.job` and
+by the PDF/Excel export (`loadAttrJob`) with the saved copy in `result`, and the page shows it in edit mode
+(`Card editing`: yellow border, `*` instead of the dot, a delete icon per value). `search.savedRemove` marks rows
+`DeepRow.removed` instead of dropping them — other rows' «найдено через» point at their `val_id`. «Очистить историю»
+drops `saved` together with the history row.
+
 «Дополнительный поиск вторым шагом» (attr, exclusive with deep; `params.step2` = fields to take, `params.step2by` =
 kinds to search by): after the raw search, `search/step2.ts` runs up to `STEP2_MAX_SEARCHES` raw searches (round-robin
 over kinds) by the found INN/SNILS/passport/foreign passport/birth certificate/mobile phone/email/Telegram ID/military number/link

@@ -67,17 +67,22 @@ export function Select({ className, ...rest }: SelectHTMLAttributes<HTMLSelectEl
   );
 }
 
-/** compact — отступы на 20% меньше (p-4 вместо p-5, под заголовком 0.8rem вместо 1rem). */
+/**
+ * compact — отступы на 20% меньше (p-4 вместо p-5, под заголовком 0.8rem вместо 1rem).
+ * editing — бокс с данными, которые сейчас редактируются: жёлтая рамка и «*» вместо точки перед заголовком.
+ */
 export function Card({
-  className, children, title, actions, compact,
-}: { className?: string; children: ReactNode; title?: ReactNode; actions?: ReactNode; compact?: boolean }) {
+  className, children, title, actions, compact, editing,
+}: { className?: string; children: ReactNode; title?: ReactNode; actions?: ReactNode; compact?: boolean; editing?: boolean }) {
   return (
-    <section className={clsx('rounded-2xl border border-line bg-gradient-to-b from-mint/[0.04] to-mint/[0.01]', compact ? 'p-4' : 'p-5', className)}>
+    <section className={clsx('rounded-2xl border bg-gradient-to-b from-mint/[0.04] to-mint/[0.01]', editing ? 'border-warn/70' : 'border-line', compact ? 'p-4' : 'p-5', className)}>
       {(title || actions) && (
         <header className={clsx('flex items-center justify-between gap-3', compact ? 'mb-[0.8rem]' : 'mb-4')}>
           {title && (
             <h3 className="label-mono flex items-center gap-2.5">
-              <span className="size-1.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />
+              {editing
+                ? <span className="-mr-0.5 font-mono text-base leading-none text-warn">*</span>
+                : <span className="size-1.5 rounded-full bg-mint shadow-[0_0_10px_var(--color-mint)]" />}
               {title}
             </h3>
           )}

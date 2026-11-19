@@ -28,7 +28,8 @@ import { driveImageUrl, drivePreviewUrl, googleDriveId } from '../../lib/driveLi
 import { DriveHelpButton } from '../../components/DriveHelp.tsx';
 import { WebLinksCard } from './WebLinks.tsx';
 import { ArchiveFormatsField, type ArchiveCfg } from './SiteArchive.tsx';
-import { useArchiveConfig } from './siteArchive.ts';
+import type { DriveStatusView } from '@ft/shared';
+import { useArchiveConfig, useDriveStatus } from './siteArchive.ts';
 import { PdfThumb } from '../../components/PdfPreview.tsx';
 import { clipboardImage, imageDataUrl, pastedImage } from '../../lib/shotImage.ts';
 import { trpc, type RouterInputs } from '../../lib/trpc.ts';
@@ -117,6 +118,7 @@ export function DossierPage() {
   const [sharing, setSharing] = useState(false);
   const [exporting, setExporting] = useState<'file' | 'pdf' | null>(null);
   const archiveCfg = useArchiveConfig();
+  const archiveDrive = useDriveStatus(!!archiveCfg);
   const startArchive = trpc.siteArchive.start.useMutation();
   const [watchingArchive, setWatchingArchive] = useState<string | null>(null);
 
@@ -416,7 +418,7 @@ export function DossierPage() {
         onClose={() => setEditingLink(null)}
         onSave={(item) => updateItem.mutateAsync({ id, item }).then(() => setEditingLink(null))}
       />
-      <AddItemDialog kind={adding} existing={d.items} archive={archiveCfg} onClose={() => setAdding(null)} onAdd={add} />
+      <AddItemDialog kind={adding} existing={d.items} archive={archiveCfg} drive={archiveDrive} onClose={() => setAdding(null)} onAdd={add} />
 
       <ExportDialog kind="dossier" format={exporting ?? 'file'} id={id} open={!!exporting} onOpenChange={(v) => !v && setExporting(null)} />
 
@@ -1236,16 +1238,16 @@ function EditLinkForm({ link, existing, onSave }: { link: Of<'link'>; existing: 
 
 type AddFn = (i: NewItem, archive?: ArchiveFormat[]) => Promise<void>;
 
-function AddItemDialog({ kind, existing, archive, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; archive: ArchiveCfg | null; onClose: () => void; onAdd: AddFn }) {
+function AddItemDialog({ kind, existing, archive, drive, onClose, onAdd }: { kind: null | 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; archive: ArchiveCfg | null; drive: DriveStatusView | null; onClose: () => void; onAdd: AddFn }) {
   const titles = { attribute: t('Новый атрибут'), link: t('Ссылка на профиль'), weblink: t('Ссылка'), media: t('Медиафайл'), note: t('Заметка'), post: t('Пост или реакция') };
   return (
     <Dialog open={!!kind} onOpenChange={(v) => !v && onClose()} title={kind ? titles[kind] : ''} wide={kind === 'note'}>
-      {kind && <AddItemForm key={kind} kind={kind} existing={existing} archive={archive} onAdd={onAdd} />}
+      {kind && <AddItemForm key={kind} kind={kind} existing={existing} archive={archive} drive={drive} onAdd={onAdd} />}
     </Dialog>
   );
 }
 
-function AddItemForm({ kind, existing, archive, onAdd }: { kind: 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; archive: ArchiveCfg | null; onAdd: AddFn }) {
+function AddItemForm({ kind, existing, archive, drive, onAdd }: { kind: 'attribute' | 'link' | 'weblink' | 'media' | 'note' | 'post'; existing: DossierItem[]; archive: ArchiveCfg | null; drive: DriveStatusView | null; onAdd: AddFn }) {
   // Архив страницы новой внешней ссылки (служба архивации): форматы; пусто — не снимать.
   const [archiveFormats, setArchiveFormats] = useState<ArchiveFormat[]>([]);
   const [key, setKey] = useState<string>('phones');
@@ -1373,7 +1375,7 @@ function AddItemForm({ kind, existing, archive, onAdd }: { kind: 'attribute' | '
           <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…" />
         </Field>
         <Field label={t('Название')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-        {archive && <ArchiveFormatsField cfg={archive} value={archiveFormats} onChange={setArchiveFormats} />}
+        {archive && <ArchiveFormatsField cfg={archive} drive={drive} value={archiveFormats} onChange={setArchiveFormats} />}
       </>
     );
   } else if (kind === 'media') {

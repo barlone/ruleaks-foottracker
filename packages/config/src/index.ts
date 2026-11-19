@@ -214,6 +214,23 @@ const SECTIONS = {
     /** Сколько готовые файлы ждут скачивания; потом crawl удаляется из службы. */
     'keep-min': int(60, 5, 1440),
   }),
+  'google-drive': z.object({
+    /**
+     * OAuth-клиент «Веб-приложение» проекта Google Cloud (Drive API включён, доступ drive.file). Пусто — имитация:
+     * «Диск» в памяти сервера, архивы пропадают при перезапуске.
+     */
+    'client-id': str(),
+    'client-secret': str(),
+    /** Адрес возврата из Google, тот же, что в настройках клиента: https://<сайт>/site-archive/google/callback. */
+    'redirect-url': str(),
+    /** Секрет шифрования refresh-токенов пользователей в БД (не короче 32 символов). */
+    'token-secret': str(),
+    /** Папка приложения на Диске пользователя; в ней — по папке на досье. */
+    'folder-name': str('RuLeaks.Следопыт — архивы'),
+    'timeout-sec': int(30, 1, 600),
+    /** Загрузка одного файла архива (видеозаписи страниц бывают большими). */
+    'upload-timeout-sec': int(900, 30, 7200),
+  }),
   /**
    * Алертинг: ошибки сервера уходят через бот blind-postman. Ключи названы как в API-шлюзе (у него та же секция),
    * поэтому с подчёркиванием. Секции нет — ничего не отправляется; секция с неверным значением останавливает запуск.
@@ -240,6 +257,7 @@ const Schema = z.object({
   'google-search': SECTIONS['google-search'].prefault({}),
   'email-search': SECTIONS['email-search'].prefault({}),
   'site-archive': SECTIONS['site-archive'].prefault({}),
+  'google-drive': SECTIONS['google-drive'].prefault({}),
   alerting: SECTIONS.alerting.prefault({}),
 });
 
@@ -336,6 +354,14 @@ export interface AppConfig {
    */
   siteArchive: {
     enabled: boolean; apiUrl: string; apiKey: string; timeoutMs: number; jobTimeoutMs: number; pollIntervalMs: number; keepMs: number;
+  };
+  /**
+   * Google Диск пользователей для архивов страниц (работает вместе с siteArchive). clientId пуст — имитация в памяти.
+   * Секреты в браузер не уходят.
+   */
+  drive: {
+    clientId: string; clientSecret: string; redirectUrl: string; tokenSecret: string; folderName: string;
+    timeoutMs: number; uploadTimeoutMs: number;
   };
   /** Алертинг через бот blind-postman; enabled — секция [alerting] задана. Токен в браузер и в журнал не уходит. */
   alerting: { enabled: boolean; apiUrl: string; apiToken: string; userAlias: string; groupAlias: string };
@@ -523,6 +549,15 @@ export function loadConfig(): AppConfig {
       pollIntervalMs: c['site-archive']['poll-interval-sec'] * 1000,
       keepMs: c['site-archive']['keep-min'] * 60_000,
     },
+    drive: {
+      clientId: c['google-drive']['client-id'],
+      clientSecret: c['google-drive']['client-secret'],
+      redirectUrl: c['google-drive']['redirect-url'],
+      tokenSecret: c['google-drive']['token-secret'],
+      folderName: c['google-drive']['folder-name'] || 'RuLeaks.Следопыт — архивы',
+      timeoutMs: c['google-drive']['timeout-sec'] * 1000,
+      uploadTimeoutMs: c['google-drive']['upload-timeout-sec'] * 1000,
+    },
     alerting,
     warnings,
   };
@@ -532,6 +567,9 @@ export function loadConfig(): AppConfig {
   }
   if (cfg.google.enabled && !cfg.google.masterToken) {
     warnings.push('[google-search] master-token не задан: поиск по Gaia ID и файлу Drive отвечает вымышленными данными (имитация) — получите токен: npm run google-login. Wi-Fi BSSID и Digital Asset Links работают и без него');
+  }
+  if (cfg.siteArchive.enabled && !cfg.drive.clientId) {
+    warnings.push('[google-drive] client-id не задан: Google Диск для архивов — имитация в памяти сервера (сохранённые архивы пропадают при перезапуске)');
   }
   if (cfg.siteArchive.enabled && !cfg.siteArchive.apiKey) {
     warnings.push('[site-archive] api-key не задан: архивы страниц — имитация (вымышленные PDF и WACZ, служба RuLeaks.ArchiveBox не вызывается)');
@@ -589,6 +627,13 @@ function validate(cfg: AppConfig) {
     missing.push('[google-search] master-token (мастер-токен Android начинается с aas_et/ — npm run google-login)');
   }
   if (cfg.siteArchive.enabled && cfg.siteArchive.apiKey && !isUrl(cfg.siteArchive.apiUrl)) missing.push('[site-archive] api-url (http://127.0.0.1:5797)');
+  if (cfg.siteArchive.enabled && cfg.drive.clientId) {
+    if (!cfg.drive.clientSecret) missing.push('[google-drive] client-secret');
+    if (!/\/site-archive\/google\/callback$/.test(cfg.drive.redirectUrl) || !isUrl(cfg.drive.redirectUrl)) {
+      missing.push('[google-drive] redirect-url (https://<сайт>/site-archive/google/callback — как в настройках OAuth-клиента)');
+    }
+    if (cfg.drive.tokenSecret.length < 32) missing.push('[google-drive] token-secret (не короче 32 символов)');
+  }
   if (cfg.email.enabled && cfg.email.keys.intelx && !isUrl(cfg.email.intelxUrl)) missing.push('[email-search] intelx-url (https://free.intelx.io или https://2.intelx.io)');
   const { mode } = cfg.auth;
   if (mode !== 'bot-db') {
@@ -649,7 +694,7 @@ export function describeConfig(cfg: AppConfig): string[] {
     `страницы:  ${cfg.pages.enabled ? `поиск личных страниц (таймаут ${cfg.pages.timeoutMs / 1000} с, параллельно ${cfg.pages.concurrency})` : 'выключен'}`,
     `Google:    ${!cfg.google.enabled ? 'выключен' : `${cfg.google.masterToken ? 'поиск по Google' : 'Gaia ID, Drive — имитация (нет мастер-токена); Wi-Fi и Asset Links — настоящие'} (таймаут ${cfg.google.timeoutMs / 1000} с, пауза ${cfg.google.minIntervalMs / 1000} с, адрес Wi-Fi: ${cfg.google.reverseGeocodeUrl || 'не определяется'})`}`,
     `Email:     ${cfg.email.enabled ? describeEmail(cfg) : 'выключен'}`,
-    `архивы:    ${!cfg.siteArchive.enabled ? 'выключены' : cfg.siteArchive.apiKey ? `${cfg.siteArchive.apiUrl} (ожидание до ${cfg.siteArchive.jobTimeoutMs / 1000} с, файлы ${cfg.siteArchive.keepMs / 60_000} мин)` : 'имитация (нет api-key)'}`,
+    `архивы:    ${!cfg.siteArchive.enabled ? 'выключены' : cfg.siteArchive.apiKey ? `${cfg.siteArchive.apiUrl} (ожидание до ${cfg.siteArchive.jobTimeoutMs / 1000} с, файлы ${cfg.siteArchive.keepMs / 60_000} мин)` : 'имитация (нет api-key)'}${cfg.siteArchive.enabled ? `; Google Диск: ${cfg.drive.clientId ? `OAuth, папка «${cfg.drive.folderName}»` : 'имитация в памяти'}` : ''}`,
     `алертинг:  ${cfg.alerting.enabled ? `${cfg.alerting.apiUrl} → ${[cfg.alerting.userAlias && `пользователь ${cfg.alerting.userAlias}`, cfg.alerting.groupAlias && `группа ${cfg.alerting.groupAlias}`].filter(Boolean).join(', ')}` : 'выключен (нет секции [alerting])'}`,
   ];
 }

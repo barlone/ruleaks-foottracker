@@ -28,9 +28,27 @@ export interface ArchivePartView {
  * queued — служба ещё не взяла страницу; capturing — Chrome открыл и снимает; finishing — файлы проверяются.
  * done — готово (хотя бы один формат ok); failed — ни один формат не получился или ошибка службы; cancelled — отменено.
  */
-export type ArchiveJobState = 'queued' | 'capturing' | 'finishing' | 'done' | 'failed' | 'cancelled';
+export type ArchiveJobState = 'queued' | 'capturing' | 'finishing' | 'uploading' | 'done' | 'failed' | 'cancelled';
 
-export const ARCHIVE_JOB_ACTIVE: readonly ArchiveJobState[] = ['queued', 'capturing', 'finishing'];
+export const ARCHIVE_JOB_ACTIVE: readonly ArchiveJobState[] = ['queued', 'capturing', 'finishing', 'uploading'];
+
+/**
+ * Сохранение на Google Диск: none — не сохранялось (Диск не подключён); uploading — идёт; saved — файлы на Диске и
+ * запись в досье (archiveId — LinkArchive.id); failed — не удалось (error — код).
+ */
+export interface ArchiveDriveView {
+  status: 'none' | 'uploading' | 'saved' | 'failed';
+  error: string | null;
+  archiveId: string | null;
+}
+
+/** Подключение Google Диска пользователя. demo — имитация (Диск в памяти сервера). */
+export interface DriveStatusView {
+  connected: boolean;
+  email: string | null;
+  demo: boolean;
+  folderName: string;
+}
 
 export interface ArchiveJobView {
   id: string;
@@ -46,6 +64,7 @@ export interface ArchiveJobView {
   parts: ArchivePartView[];
   /** Код ошибки задания (ARCHIVE_TIMEOUT, ARCHIVE_UNAVAILABLE, …) — текст в apps/web/src/lib/errors.ts. */
   error: string | null;
+  drive: ArchiveDriveView;
 }
 
 export const isArchiveActive = (s: ArchiveJobState) => ARCHIVE_JOB_ACTIVE.includes(s);

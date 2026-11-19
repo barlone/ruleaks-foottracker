@@ -121,6 +121,68 @@ export interface SiteArchiver {
   remove(ref: string): Promise<void>;
 }
 
+// ---------- Google Диск пользователей (архивы страниц) ----------
+
+/** Подключённый Диск: refreshToken — зашифрованный (drive/crypto.ts), folderId — папка приложения. */
+export interface DriveAccount {
+  userId: string;
+  email: string;
+  refreshToken: string;
+  folderId: string | null;
+}
+
+export interface DriveAccountRepo {
+  get(userId: string): Promise<DriveAccount | null>;
+  save(a: DriveAccount): Promise<void>;
+  remove(userId: string): Promise<void>;
+}
+
+/**
+ * Диск отказал. code: NOT_CONNECTED — у пользователя Диск не подключён; REVOKED — доступ отозван в аккаунте Google;
+ * SCOPE — при подключении не дали доступ к Диску; NOT_FOUND — файла нет (удалён на Диске); CHANGED — файл на Диске
+ * не тот (другой sha256 или не этого досье); HTTP / NET / TIMEOUT — сбой Google.
+ */
+export class DriveError extends Error {
+  constructor(public readonly code: 'NOT_CONNECTED' | 'REVOKED' | 'SCOPE' | 'NOT_FOUND' | 'CHANGED' | 'HTTP' | 'NET' | 'TIMEOUT', message: string) {
+    super(message);
+  }
+}
+
+export interface DriveUpload {
+  format: ArchiveFormat;
+  name: string;
+  mime: string;
+  size: number;
+  sha256: string;
+  open(): NodeJS.ReadableStream;
+}
+
+/** Где лежит файл и чей он: проверяется перед отдачей (appProperties файла на Диске). */
+export interface DriveFileRef {
+  dossierId: string;
+  itemId: string;
+  fileId: string;
+}
+
+export interface DriveStorage {
+  /** Имитация: «Диск» в памяти сервера. */
+  readonly demo: boolean;
+  readonly folderName: string;
+  /** Куда отправить браузер для подключения (Google OAuth или сразу обратный адрес — в имитации). */
+  connectUrl(state: string): string;
+  /** Обмен кода из обратного вызова на доступ; записывает подключение. */
+  connect(userId: string, code: string): Promise<{ email: string }>;
+  status(userId: string): Promise<{ email: string } | null>;
+  /** Отключить: отозвать доступ у Google и забыть токен. Файлы на Диске остаются. */
+  disconnect(userId: string): Promise<void>;
+  /** Загрузить файлы архива в папку досье на Диске пользователя; ответ — id файлов в порядке files. */
+  upload(userId: string, place: { dossierId: string; dossierTitle: string; itemId: string }, files: DriveUpload[], signal: AbortSignal): Promise<string[]>;
+  /** Поток файла с Диска владельца (owner — LinkArchive.by). */
+  open(owner: string, ref: DriveFileRef): Promise<{ size: number; body: NodeJS.ReadableStream }>;
+  /** Удалить файлы в корзину Диска владельца; ошибки — только в журнал. */
+  trash(owner: string, fileIds: string[]): Promise<void>;
+}
+
 // ---------- Хранилище сайта ----------
 
 /** Имя нового пользователя, если бот его не сообщил (displayName = null). */
@@ -281,6 +343,9 @@ export interface Deps {
   scans: ScanStore | null;
   /** [config] site-archive = false — null: архивов страниц нет. */
   siteArchive: SiteArchiver | null;
+  /** Google Диск для архивов: есть вместе с siteArchive; без [google-drive] client-id — имитация. */
+  drive: DriveStorage | null;
+  driveAccounts: DriveAccountRepo;
   users: UserRepo;
   sessions: SessionRepo;
   searches: SearchRepo;

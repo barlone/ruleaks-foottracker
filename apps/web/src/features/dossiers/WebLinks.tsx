@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { Archive, Camera, ExternalLink, Globe, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { DOSSIER_MEDIA_MAX_BYTES, MEDIA_FILE_MAX_BYTES, dossierMediaBytes, fmtBytes, isArchiveActive, type DossierItem } from '@ft/shared';
 import { Button, Card, DELETE_GAP, Dialog, Empty, Field, FilePicker, Input, Spinner } from '../../components/ui.tsx';
-import { errorText } from '../../lib/errors.ts';
+import { codeText, errorText } from '../../lib/errors.ts';
 import { t } from '../../lib/i18n.ts';
 import { fitShot, shotDate, todayIso } from '../../lib/shotImage.ts';
 import { toast } from '../../lib/toast.ts';
 import { trpc } from '../../lib/trpc.ts';
-import { ArchiveChip, ArchiveProgress, ArchiveResultDialog, ArchiveStartDialog, type ArchiveCfg } from './SiteArchive.tsx';
-import { latestFor, useDossierArchives } from './siteArchive.ts';
+import { ArchiveChip, ArchiveProgress, ArchiveResultDialog, ArchiveStartDialog, SavedArchives, type ArchiveCfg } from './SiteArchive.tsx';
+import { latestFor, useDossierArchives, useDriveStatus } from './siteArchive.ts';
 
 // Раздел «Ссылки» досье: ссылки на внешние сайты (статьи, реестры, упоминания) — в отличие от «Соцсетей», где
 // страницы самой персоны. Это тот же элемент link с kind = 'web'. К ссылке прикладываются снимки страницы
@@ -40,10 +40,19 @@ export function WebLinksCard({ dossierId, links, items, editable, archive, watch
   const [resultId, setResultId] = useState<string | null>(null);
   const utils = trpc.useUtils();
   const jobs = useDossierArchives(dossierId, !!archive);
+  const drive = useDriveStatus(!!archive);
+  const meId = trpc.auth.me.useQuery().data?.id ?? null;
   const refresh = () => utils.siteArchive.list.invalidate({ dossierId });
   const start = trpc.siteArchive.start.useMutation({ onSuccess: refresh });
   const cancel = trpc.siteArchive.cancel.useMutation({ onSettled: refresh });
   const dismiss = trpc.siteArchive.dismiss.useMutation({ onSettled: refresh });
+  const saveToDrive = trpc.siteArchive.saveToDrive.useMutation({ onSettled: refresh, onError: (e) => toast(errorText(e), 'error') });
+  const disconnect = trpc.siteArchive.disconnectDrive.useMutation({ onSettled: () => utils.siteArchive.drive.invalidate() });
+  const removeSaved = trpc.siteArchive.removeSaved.useMutation({
+    onSuccess: (r) => toast(r.trashed ? t('Архив удалён, файлы — в корзине Google Диска') : t('Архив убран из досье')),
+    onError: (e) => toast(errorText(e), 'error'),
+    onSettled: () => utils.dossiers.get.invalidate({ id: dossierId }),
+  });
   const watched = watching ? jobs.find((j) => j.id === watching) ?? null : null;
 
   // Наблюдаемое задание закончилось — окно ожидания сменяется итогом.
@@ -53,6 +62,21 @@ export function WebLinksCard({ dossierId, links, items, editable, archive, watch
       setResultId(watched.id);
     }
   }, [watched, onWatch]);
+
+  // Архив сохранён на Диск — в досье появилась запись (LinkArchive): перечитать досье.
+  const savedKey = jobs.filter((j) => j.drive.status === 'saved').map((j) => j.id).join(',');
+  useEffect(() => {
+    if (savedKey) void utils.dossiers.get.invalidate({ id: dossierId });
+  }, [savedKey, dossierId, utils]);
+
+  // Подключение Диска (на странице Google) не удалось — сказать один раз после возврата.
+  useEffect(() => {
+    if (drive?.lastError) toast(codeText(drive.lastError), 'error');
+  }, [drive?.lastError]);
+
+  const onDisconnect = () => {
+    if (confirm(t('Отключить Google Диск? Файлы на Диске останутся, но открыть ваши архивы в досье станет нельзя, пока Диск не подключён снова.'))) disconnect.mutate();
+  };
 
   return (
     <Card
@@ -87,6 +111,16 @@ export function WebLinksCard({ dossierId, links, items, editable, archive, watch
               const job = latestFor(jobs, l.id);
               return job && <ArchiveChip job={job} onOpen={() => (isArchiveActive(job.state) ? onWatch(job.id) : setResultId(job.id))} />;
             })()}
+            {!!l.archives?.length && (
+              <SavedArchives
+                dossierId={dossierId}
+                itemId={l.id}
+                archives={l.archives}
+                editable={editable && !!archive}
+                meId={meId}
+                onRemove={(archiveId) => removeSaved.mutate({ dossierId, itemId: l.id, archiveId })}
+              />
+            )}
             {!!l.shots?.length && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {l.shots.map((s, i) => (
@@ -141,6 +175,8 @@ export function WebLinksCard({ dossierId, links, items, editable, archive, watch
             key={archiveFor?.id ?? ''}
             url={archiveFor?.url ?? null}
             cfg={archive}
+            drive={drive}
+            onDisconnect={onDisconnect}
             onClose={() => setArchiveFor(null)}
             onStart={async (formats) => {
               try {
@@ -164,6 +200,9 @@ export function WebLinksCard({ dossierId, links, items, editable, archive, watch
           <ArchiveResultDialog
             job={resultId ? jobs.find((j) => j.id === resultId) ?? null : null}
             cfg={archive}
+            drive={drive}
+            onSave={(id) => saveToDrive.mutate({ id })}
+            saving={saveToDrive.isPending}
             onClose={() => setResultId(null)}
             onDismiss={(id) => {
               dismiss.mutate({ id });

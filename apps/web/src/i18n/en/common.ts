@@ -102,6 +102,15 @@ const en: Record<string, string> = {
   'Служба архивации недоступна': 'The archiving service is unavailable',
   'Служба архивации ответила ошибкой — подробности в журнале сервера': 'The archiving service returned an error — see the server log',
   'Страницу снять не удалось: ни один из заказанных файлов не получился': 'The page could not be captured: none of the requested files was produced',
+  // errors.ts — Google Диск
+  'Файлы архива уже удалены со службы — снимите архив заново': 'The archive files are already deleted from the service — archive the page again',
+  'Ссылку удалили из досье, пока снимался архив — он не сохранён': 'The link was deleted from the dossier while archiving — the archive is not saved',
+  'Google Диск не подключён': 'Google Drive is not connected',
+  'Доступ к Google Диску отозван — подключите Диск заново': 'Access to Google Drive was revoked — connect the Drive again',
+  'При подключении не выдан доступ к Google Диску — подключите заново и оставьте отметку «Диск»': 'Google Drive access was not granted — connect again and keep the “Drive” checkbox',
+  'Подключение Google Диска отменено': 'Connecting Google Drive was cancelled',
+  'Не удалось подключить Google Диск — подробности в журнале сервера': 'Could not connect Google Drive — see the server log',
+  'Google Диск не принял архив — подробности в журнале сервера': 'Google Drive did not accept the archive — see the server log',
 };
 
 export default en;

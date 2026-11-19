@@ -1,8 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { AppConfig } from '@ft/config';
-import { ARCHIVE_FORMATS, type ArchiveFormat, type ArchiveJobState, type ArchiveJobView, type ArchivePartView, isArchiveActive } from '@ft/shared';
+import {
+  ARCHIVE_FORMATS, type ArchiveDriveView, type ArchiveFormat, type ArchiveJobState, type ArchiveJobView, type ArchivePartView, isArchiveActive,
+} from '@ft/shared';
 import { alert, errorLine } from '../alerting.ts';
-import { SiteArchiveError, type ArchiveFile, type SiteArchiver } from '../ports.ts';
+import { SiteArchiveError, type ArchiveFile, type Deps, type SiteArchiver } from '../ports.ts';
+import { saveArchiveToDrive, saveErrorCode } from './save.ts';
 
 // Задания архивации страниц — в памяти сервера, как задания поиска личных страниц: архив нужен тому, кто его
 // заказал, пока он не скачал файлы. Задание ведёт сам сервер (опрос службы раз в poll-interval), а не опросы
@@ -25,6 +28,8 @@ interface Part {
   status: ArchivePartView['status'];
   error: string | null;
   file: ArchiveFile | null;
+  /** Размер остаётся и после того, как файл в службе удалён (архив ушёл на Диск). */
+  size: number | null;
   sha256: string | null;
 }
 
@@ -43,16 +48,19 @@ interface Job {
   error: string | null;
   ref: string | null;
   ctrl: AbortController;
+  drive: ArchiveDriveView;
 }
 
 const jobs = new Map<string, Job>();
 
 let archiver: SiteArchiver | null = null;
+let deps: Deps;
 let cfg: Cfg;
 
-/** Подключение службы (deps.siteArchive) и настроек; вызывается при старте сервера. */
-export function initArchiveJobs(a: SiteArchiver | null, c: Cfg) {
-  archiver = a;
+/** Подключение службы (deps.siteArchive), Диска (deps.drive) и настроек; вызывается при старте сервера. */
+export function initArchiveJobs(d: Deps, c: Cfg) {
+  archiver = d.siteArchive;
+  deps = d;
   cfg = c;
 }
 
@@ -136,7 +144,7 @@ async function run(j: Job) {
       j.state = p.stage === 'queued' ? 'queued' : 'capturing';
       for (const f of j.formats) {
         const got = p.parts[f];
-        if (got) Object.assign(j.parts.get(f)!, { status: got.status, error: got.error, file: got.file });
+        if (got) Object.assign(j.parts.get(f)!, { status: got.status, error: got.error, file: got.file, size: got.file?.size ?? null });
       }
       if (p.stage !== 'done') continue;
       j.state = 'finishing';
@@ -145,9 +153,19 @@ async function run(j: Job) {
         else if (part.status === 'ok') part.status = 'failed';
       }
       const anyOk = [...j.parts.values()].some((x) => x.status === 'ok');
-      finish(j, anyOk ? 'done' : 'failed', anyOk ? null : 'ARCHIVE_NO_FILES');
-      // Ни одного файла — хранить в службе нечего.
-      if (!anyOk) void dropCapture(j);
+      if (!anyOk) {
+        finish(j, 'failed', 'ARCHIVE_NO_FILES');
+        // Ни одного файла — хранить в службе нечего.
+        return void dropCapture(j);
+      }
+      // Диск подключён — архив сразу уходит туда и записывается в досье; иначе файлы ждут скачивания или
+      // ручного «Сохранить на Google Диск» (после подключения).
+      if (deps.drive && (await deps.drive.status(j.userId))) {
+        j.state = 'uploading';
+        await upload(j);
+        if (signal.aborted) return;
+      }
+      finish(j, 'done');
       return;
     }
   } catch (e) {
@@ -158,6 +176,35 @@ async function run(j: Job) {
     finish(j, 'failed', errorCode(e));
     void dropCapture(j);
   }
+}
+
+/** Загрузка готовых файлов на Диск и запись в досье; итог — в j.drive. После записи файлы в службе не нужны. */
+async function upload(j: Job) {
+  const files = [...j.parts.entries()].filter(([, p]) => p.status === 'ok' && p.file && p.sha256).map(([format, p]) => ({ format, file: p.file!, sha256: p.sha256! }));
+  j.drive = { status: 'uploading', error: null, archiveId: null };
+  try {
+    const archiveId = await saveArchiveToDrive(deps, { userId: j.userId, dossierId: j.dossierId, itemId: j.itemId, url: j.url, at: j.finishedAt ?? new Date().toISOString(), files }, j.ctrl.signal);
+    j.drive = { status: 'saved', error: null, archiveId };
+    await dropCapture(j);
+    for (const p of j.parts.values()) p.file = null;
+  } catch (e) {
+    if (j.ctrl.signal.aborted) return;
+    const code = saveErrorCode(e);
+    console.warn(`site-archive: задание ${j.id}: сохранение на Диск — ${code}: ${errorLine(e)}`);
+    if (code === 'DRIVE_FAILED') alert('drive:upload', `Google Диск: не удалось сохранить архив: ${errorLine(e)}`);
+    j.drive = { status: 'failed', error: code, archiveId: null };
+  }
+}
+
+/** «Сохранить на Google Диск» для готового задания (Диск подключили после захвата или прошлое сохранение не удалось). */
+export function saveArchiveJob(userId: string, id: string): ArchiveJobView {
+  const j = jobs.get(id);
+  if (!j || j.userId !== userId) throw new ArchiveRefused('NOT_FOUND');
+  if (j.state !== 'done' || j.drive.status === 'saved' || j.drive.status === 'uploading') return view(j);
+  if (!j.ref || ![...j.parts.values()].some((p) => p.status === 'ok' && p.file)) throw new ArchiveRefused('ARCHIVE_EXPIRED');
+  j.drive = { status: 'uploading', error: null, archiveId: null };
+  void upload(j);
+  return view(j);
 }
 
 const mine = (userId: string) => [...jobs.values()].filter((j) => j.userId === userId).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
@@ -183,10 +230,11 @@ export function startArchive(userId: string, t: { dossierId: string; itemId: str
     startedAt: new Date().toISOString(),
     finishedAt: null,
     expiresAt: null,
-    parts: new Map(formats.map((f) => [f, { status: 'pending', error: null, file: null, sha256: null }])),
+    parts: new Map(formats.map((f) => [f, { status: 'pending', error: null, file: null, size: null, sha256: null }])),
     error: null,
     ref: null,
     ctrl: new AbortController(),
+    drive: { status: 'none', error: null, archiveId: null },
   };
   jobs.set(job.id, job);
   void run(job);
@@ -243,8 +291,9 @@ function view(j: Job): ArchiveJobView {
     expiresAt: j.expiresAt === null ? null : new Date(j.expiresAt).toISOString(),
     parts: j.formats.map((f) => {
       const p = j.parts.get(f)!;
-      return { format: f, status: p.status, error: p.error, size: p.file?.size ?? null, sha256: p.sha256 };
+      return { format: f, status: p.status, error: p.error, size: p.size, sha256: p.sha256 };
     }),
     error: j.error,
+    drive: { ...j.drive },
   };
 }

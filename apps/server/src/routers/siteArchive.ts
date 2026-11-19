@@ -1,9 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { ARCHIVE_FORMATS } from '@ft/shared';
+import { ARCHIVE_FORMATS, type DriveStatusView } from '@ft/shared';
 import { can } from '../authz.ts';
 import { appConfig } from '../config.ts';
-import { ArchiveRefused, archiveJob, cancelArchive, dismissArchive, dossierArchives, startArchive } from '../archive/jobs.ts';
+import { takeConnectError } from '../archive-files.ts';
+import { ArchiveRefused, archiveJob, cancelArchive, dismissArchive, dossierArchives, saveArchiveJob, startArchive } from '../archive/jobs.ts';
 import { activeProcedure, authedProcedure, router } from '../trpc.ts';
 
 // Архивы страниц ссылок досье ([config] site-archive): PDF и/или WACZ снимает служба RuLeaks.ArchiveBox,
@@ -53,4 +54,47 @@ export const siteArchiveRouter = router({
   cancel: authedProcedure.input(z.object({ id: Id })).mutation(({ ctx, input }) => cancelArchive(ctx.user.id, input.id)),
 
   dismiss: authedProcedure.input(z.object({ id: Id })).mutation(({ ctx, input }) => dismissArchive(ctx.user.id, input.id)),
+
+  /** Подключён ли Google Диск пользователя; lastError — чем закончилась последняя попытка подключения (один раз). */
+  drive: authedProcedure.query(async ({ ctx }): Promise<(DriveStatusView & { lastError: string | null }) | null> => {
+    const drive = ctx.deps.drive;
+    if (!sa.enabled || !drive) return null;
+    const st = await drive.status(ctx.user.id);
+    return { connected: !!st, email: st?.email ?? null, demo: drive.demo, folderName: drive.folderName, lastError: takeConnectError(ctx.user.id) };
+  }),
+
+  /** Отключить Диск: доступ отзывается у Google, файлы на Диске остаются, но открыть архивы в досье станет нельзя. */
+  disconnectDrive: authedProcedure.mutation(async ({ ctx }) => {
+    await ctx.deps.drive?.disconnect(ctx.user.id);
+    return true;
+  }),
+
+  /** Сохранить готовое задание на Диск (Диск подключили после захвата или прошлая попытка не удалась). */
+  saveToDrive: activeProcedure.input(z.object({ id: Id })).mutation(({ ctx, input }) => enabled(() => {
+    try {
+      return saveArchiveJob(ctx.user.id, input.id);
+    } catch (e) {
+      if (e instanceof ArchiveRefused) throw new TRPCError({ code: e.message === 'NOT_FOUND' ? 'NOT_FOUND' : 'CONFLICT', message: e.message, cause: e });
+      throw e;
+    }
+  })),
+
+  /**
+   * Убрать сохранённый архив из ссылки. Файлы на Диске удаляются (в корзину), только если убирает их владелец —
+   * чужой Диск редактор досье не трогает.
+   */
+  removeSaved: activeProcedure
+    .input(z.object({ dossierId: Id, itemId: Id, archiveId: Id }))
+    .mutation(({ ctx, input }) => enabled(async () => {
+      const d = await ctx.deps.dossiers.get(input.dossierId);
+      if (!d || !can(ctx.user.id, 'read', d)) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (!can(ctx.user.id, 'edit', d)) throw new TRPCError({ code: 'FORBIDDEN', message: 'NO_RIGHTS' });
+      const item = d.items.find((i) => i.id === input.itemId);
+      const record = item?.type === 'link' ? item.archives?.find((a) => a.id === input.archiveId) : undefined;
+      if (!item || item.type !== 'link' || !record) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.deps.dossiers.updateItem(d.id, { ...item, archives: item.archives!.filter((a) => a.id !== record.id) });
+      const trashed = record.by === ctx.user.id && !!ctx.deps.drive;
+      if (trashed) await ctx.deps.drive!.trash(record.by, record.files.map((f) => f.driveFileId));
+      return { trashed };
+    })),
 });

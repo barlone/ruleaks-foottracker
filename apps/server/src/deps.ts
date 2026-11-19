@@ -12,6 +12,10 @@ import { HttpGateway } from './adapters/http/gateway.ts';
 import { HttpScanStore } from './adapters/http/scanstore.ts';
 import { HttpSiteArchiver } from './adapters/http/archivebox.ts';
 import { DemoSiteArchiver } from './adapters/memory/archiver.ts';
+import { HttpDriveStorage } from './adapters/http/drive.ts';
+import { DemoDriveStorage, MemoryDriveAccounts } from './adapters/memory/drive.ts';
+import { PgDriveAccounts } from './adapters/postgres/drive.ts';
+import { DRIVE_CALLBACK_PATH } from './archive/paths.ts';
 import { openPool } from './adapters/pg.ts';
 import { migrationStatus } from '@ft/db/status';
 import { PgUsers, PgSessions } from './adapters/postgres/users.ts';
@@ -37,7 +41,7 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
   if (cfg.auth.mode !== 'bot-db') {
     const { tgId, displayName } = cfg.auth.user;
     const { id } = await store.users.upsertByTgId({ tgId, displayName, username: null });
-    return { bot: new SoloBridge(soloApiToken(cfg.api)), soloUserId: id, gateway: gateway(cfg), scans: scans(cfg), siteArchive: siteArchive(cfg), ...store };
+    return { bot: new SoloBridge(soloApiToken(cfg.api)), soloUserId: id, gateway: gateway(cfg), scans: scans(cfg), siteArchive: siteArchive(cfg), drive: drive(cfg, store), ...store };
   }
 
   const devLogin = cfg.server.devLogin && cfg.server.loopback;
@@ -55,7 +59,7 @@ export async function createDeps(cfg: AppConfig, log: (msg: string) => void): Pr
     bot = new BotDbBridge(pool, { devLogin, log });
   }
 
-  return { bot, soloUserId: null, gateway: gateway(cfg), scans: scans(cfg), siteArchive: siteArchive(cfg), ...store };
+  return { bot, soloUserId: null, gateway: gateway(cfg), scans: scans(cfg), siteArchive: siteArchive(cfg), drive: drive(cfg, store), ...store };
 }
 
 const gateway = (cfg: AppConfig) => (cfg.api.enabled ? new HttpGateway(cfg.api) : new MemoryGateway());
@@ -64,7 +68,12 @@ const scans = (cfg: AppConfig) => (cfg.scanstore.enabled ? new HttpScanStore(cfg
 const siteArchive = (cfg: AppConfig) =>
   !cfg.siteArchive.enabled ? null : cfg.siteArchive.apiKey ? new HttpSiteArchiver(cfg.siteArchive) : new DemoSiteArchiver();
 
-type Store = Pick<Deps, 'users' | 'sessions' | 'searches' | 'dossiers' | 'investigations' | 'tags' | 'relations'>;
+// Google Диск для архивов — вместе со службой архивации; без [google-drive] client-id — имитация в памяти.
+const drive = (cfg: AppConfig, store: Store) =>
+  !cfg.siteArchive.enabled ? null
+    : cfg.drive.clientId ? new HttpDriveStorage(cfg.drive, store.driveAccounts) : new DemoDriveStorage(store.driveAccounts, cfg.drive.folderName, DRIVE_CALLBACK_PATH);
+
+type Store = Pick<Deps, 'users' | 'sessions' | 'searches' | 'dossiers' | 'investigations' | 'tags' | 'relations' | 'driveAccounts'>;
 
 function memoryStore(): Store {
   const tags = new MemoryTags();
@@ -76,6 +85,7 @@ function memoryStore(): Store {
     searches: new MemorySearches(),
     dossiers: new MemoryDossiers(tags),
     investigations: new MemoryInvestigations(tags),
+    driveAccounts: new MemoryDriveAccounts(),
   };
 }
 
@@ -103,5 +113,6 @@ async function openProjectStore(cfg: AppConfig, log: (msg: string) => void): Pro
     investigations: new PgInvestigations(pool),
     tags: new PgTags(pool),
     relations: new PgRelations(pool),
+    driveAccounts: new PgDriveAccounts(pool),
   };
 }

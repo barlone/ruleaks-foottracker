@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { DRIVE_CALLBACK_PATH } from './archive/paths.ts';
 
 // Запросы к серверу принимаются только со страниц самого сайта. SameSite=Lax у cookie сессии защищает от чужих
 // сайтов, но не от соседних поддоменов того же домена (waczplayer.<домен> — тот же site): архивный JS, открытый в
@@ -26,10 +27,17 @@ export function crossSiteReason(req: FastifyRequest): string | null {
   return host === req.host ? null : `Origin: ${origin.slice(0, 100)}`;
 }
 
-/** Хук на все маршруты (кроме /health): /trpc, /geo, /scans и будущие. */
+/**
+ * Адреса, куда браузер приходит с чужого сайта по задумке: возврат из Google после подключения Диска
+ * (accounts.google.com → сюда). Защищён подписанным одноразовым state, привязанным к пользователю (archive-files.ts).
+ */
+const CROSS_SITE_ENTRY = new Set([DRIVE_CALLBACK_PATH]);
+
+/** Хук на все маршруты (кроме /health и CROSS_SITE_ENTRY): /trpc, /geo, /scans, /site-archive и будущие. */
 export function registerSameOriginGuard(app: FastifyInstance) {
   app.addHook('onRequest', async (req, reply) => {
     if (req.url === '/health') return;
+    if (req.method === 'GET' && CROSS_SITE_ENTRY.has(req.url.split('?')[0]!)) return;
     const reason = crossSiteReason(req);
     if (!reason) return;
     // Адрес — без query: у запросов tRPC там вход процедуры (искомые значения).

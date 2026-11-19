@@ -82,7 +82,9 @@ and the pause between searches — an empty token means fake demo answers (see �
 keyless checks and the API keys of the keyed ones (see «Email search» below).
 `[config] site-archive` (default `false`) says whether the page-archiving service exists; off — no archive controls in
 dossiers. `[site-archive]` holds its API URL and key (empty key — fake demo files), timeouts, poll interval and how
-long finished files stay downloadable (see «Site archives» below).
+long finished files stay downloadable; `[google-drive]` — the OAuth client for saving archives to the users' own Google
+Drives (empty `client-id` — an in-memory fake Drive) and `token-secret` that encrypts their refresh tokens (see «Site
+archives» below).
 
 `[server] secure-cookie` (default `true`) sets the cookies' Secure flag; it no longer depends on `host`, because
 production listens on 127.0.0.1 behind nginx (browsers accept Secure cookies on http://localhost, so dev works).
@@ -492,8 +494,25 @@ UI (`features/dossiers/SiteArchive.tsx` + `siteArchive.ts`): «Архив стр
 dialog (save, then start, then the progress window), an archive icon on a saved link (`ArchiveStartDialog`), the
 progress window (`ProgressDialog` with the new `onHide` = «Свернуть»), a status chip under the link (active job first,
 else the last finished one, so a cancelled retake does not hide a ready archive) and the result dialog. Error codes
-`ARCHIVE_*` are in `lib/errors.ts` (`codeText` for codes that arrive as a field). Saving to the user's Google Drive is
-the next step; ARCHITECTURE.md §6.1.
+`ARCHIVE_*` / `DRIVE_*` are in `lib/errors.ts` (`codeText` for codes that arrive as a field). ARCHITECTURE.md §6.1.
+
+Permanent storage is the Google Drive of whoever captured the archive. Port `DriveStorage` (`ports.ts`):
+`HttpDriveStorage` (`adapters/http/drive.ts`: OAuth code flow with `drive.file` + `openid email`, `prompt=consent`;
+the app creates its own folder (`[google-drive] folder-name`) and a subfolder per dossier found by
+`appProperties.ftDossier`; every file carries `ftDossier` / `ftItem` / `ftSha256`; resumable upload in one PUT; no
+Picker, so the CSP is unchanged) or `DemoDriveStorage` (`adapters/memory/drive.ts`, no `client-id`). Connections:
+`drive_accounts` table (`DriveAccountRepo`, refresh token sealed with AES-256-GCM by `token-secret`). Connected →
+the job uploads right after capture (state `uploading`, `ArchiveJobView.drive`), then drops the crawl; otherwise
+«Сохранить на Google Диск» in the result dialog (`siteArchive.saveToDrive`) while the files are still in the service.
+The record is `LinkItem.archives` (`LinkArchive`, item JSONB) written only by `archive/save.ts`: the dossiers router
+strips `archives` from `addItem`/`addItems` and keeps the stored ones on `updateItem` — a client-written record could
+point at another user's file. Routes under `/site-archive/` (already proxied): `google/connect?back=` → Google →
+`google/callback` (signed one-time `state` bound to the user; the only path `same-origin.ts` lets in cross-site),
+`saved/<dossier>/<item>/<archive>/<format>` — any reader of the dossier, streamed from the owner's Drive after checking
+`appProperties` and size, sha256 verified on the fly (mismatch aborts the transfer). `siteArchive.drive` /
+`disconnectDrive` / `removeSaved` (trashes the files only when the Drive owner removes it). UI: `DriveLine` (connect /
+«Сохранится на Google Диск …» / disconnect) under the format checkboxes, `SavedArchives` under each web link.
+Archives are not in `.ftx` export or the PDF report.
 
 ### Document scans
 

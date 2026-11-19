@@ -37,6 +37,16 @@ const withRole = (ctx: Ctx, d: Dossier) => ({ ...d, role: roleOf(ctx.user!.id, d
  * самого списка пропускаются. skipped — сколько пропущено без снимков: снимок того же поиска не значение, а источник,
  * и повторный перенос из одного поиска просто не добавляет его второй раз.
  */
+/**
+ * Архивы страниц у ссылки (LinkItem.archives) ведёт только сервер (archive/save.ts): запись указывает на файл Диска
+ * её владельца, и подставленная из браузера отдала бы чужой файл. Из запросов браузера они не принимаются.
+ */
+function withoutArchives<T extends { type: string }>(item: T): T {
+  if (item.type !== 'link' || !('archives' in item)) return item;
+  const { archives: _drop, ...rest } = item as T & { archives?: unknown };
+  return rest as T;
+}
+
 function prepareItems(d: Dossier, inputs: z.infer<typeof NewItem>[]): { items: DossierItem[]; skipped: number } {
   const duplicates = markDuplicates(d.items, inputs);
   let position = Math.max(-1, ...d.items.map((i) => i.position));
@@ -44,7 +54,7 @@ function prepareItems(d: Dossier, inputs: z.infer<typeof NewItem>[]): { items: D
   const items: DossierItem[] = [];
   let skipped = 0;
   inputs.forEach((input, i) => {
-    if (!duplicates[i]) items.push(DossierItem.parse({ ...input, id: newId(), position: ++position, createdAt }));
+    if (!duplicates[i]) items.push(DossierItem.parse({ ...withoutArchives(input), id: newId(), position: ++position, createdAt }));
     else if (input.type !== 'snapshot') skipped++;
   });
   return { items, skipped };
@@ -184,7 +194,9 @@ export const dossiersRouter = router({
     }
     checkMediaLimits(d, [input.item], input.item.id);
     checkAttrParent(d, input.item, input.item.id);
-    return withRole(ctx, await ctx.deps.dossiers.updateItem(input.id, input.item));
+    // Архивы ссылки остаются те, что записал сервер.
+    const item = input.item.type === 'link' ? { ...withoutArchives(input.item), archives: before?.type === 'link' ? before.archives : undefined } : input.item;
+    return withRole(ctx, await ctx.deps.dossiers.updateItem(input.id, item));
   }),
 
   removeItem: activeProcedure.input(z.object({ id: z.string(), itemId: z.string() })).mutation(async ({ ctx, input }) => {

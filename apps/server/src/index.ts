@@ -75,7 +75,7 @@ app.addHook('onError', async (req, _reply, error) => {
 
 await registerGeoFiles(app, deps);
 registerScanFiles(app, deps);
-initArchiveJobs(deps.siteArchive, appConfig.siteArchive);
+initArchiveJobs(deps, appConfig.siteArchive);
 registerArchiveFiles(app, deps);
 
 app.get('/health', async () => ({ ok: true, ...appVersion }));

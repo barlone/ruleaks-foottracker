@@ -198,6 +198,29 @@ export const LinkShot = z.object({
   at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+/**
+ * Архив страницы, сохранённый на Google Диск того, кто его снял (by): PDF и/или WACZ (siteArchive.ts). Записи ведёт
+ * только сервер (routers/siteArchive.ts, archive/save.ts) — из правок досье в браузере они не принимаются, иначе
+ * редактор подставил бы чужой файл Диска.
+ */
+export const LinkArchiveFile = z.object({
+  format: z.enum(['pdf', 'wacz']),
+  driveFileId: z.string().regex(/^[\w-]{1,128}$/),
+  name: z.string().max(256),
+  size: z.number().int().nonnegative(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+export const LinkArchive = z.object({
+  id: Id,
+  /** Когда снят (ISO). */
+  at: z.string().max(40),
+  /** Чей Диск: пользователь, снявший архив. */
+  by: Id,
+  byName: z.string().max(256).optional(),
+  files: z.array(LinkArchiveFile).min(1).max(2),
+});
+
 export const LinkItem = z.object({
   ...itemBase,
   type: z.literal('link'),
@@ -211,6 +234,8 @@ export const LinkItem = z.object({
   kind: z.enum(['social', 'web']).optional(),
   /** Снимки страницы — у ссылок раздела «Ссылки». */
   shots: z.array(LinkShot).max(30).optional(),
+  /** Архивы страницы на Google Диске (новые — в конце). Только сервер. */
+  archives: z.array(LinkArchive).max(50).optional(),
 });
 
 /**
@@ -478,6 +503,8 @@ export type UserSettings = z.infer<typeof UserSettings>;
 export type UserSettingsPatch = z.infer<typeof UserSettingsPatch>;
 export type User = z.infer<typeof User>;
 export type DossierItem = z.infer<typeof DossierItem>;
+export type LinkArchive = z.infer<typeof LinkArchive>;
+export type LinkArchiveFile = z.infer<typeof LinkArchiveFile>;
 export type Dossier = z.infer<typeof Dossier>;
 export type DossierSummary = z.infer<typeof DossierSummary>;
 export type NodeType = z.infer<typeof NodeType>;

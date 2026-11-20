@@ -370,6 +370,52 @@ export const LEAK_FIELDS = {
 
 export type LeakField = keyof typeof LEAK_FIELDS;
 
+/**
+ * Имена атрибутов в строках глубокого поиска (DeepRow.prm, link4) → поля записи простого. Шлюз в простом поиске
+ * раскладывает те же prm по этим полям (FillLeakCards); в глубоком отдаёт как есть. fb-id поля не имеет (в простом
+ * поиске он превращается в ссылку) — остаётся со своим именем.
+ */
+export const DEEP_PRM_FIELDS: Record<string, LeakField> = {
+  name: 'names',
+  pbname: 'pbnames',
+  phone: 'phones',
+  addr: 'addrs',
+  email: 'emails',
+  'nik-name': 'niks',
+  'tg-id': 'tgids',
+  'birth-day': 'bdays',
+  'death-day': 'ddays',
+  passport: 'pasps',
+  'for-pasp': 'forpasps',
+  'b-day-svid': 'bsvids',
+  snils: 'snilss',
+  inn: 'inns',
+  ogrnip: 'ogrnips',
+  skype: 'skypes',
+  'web-link': 'weblinks',
+  info: 'infos',
+  'ip-addr': 'ips',
+  work: 'works',
+  position: 'positions',
+  org: 'orgs',
+  educ: 'educs',
+  plate: 'plates',
+  vehicle: 'vehicles',
+  'bank-card': 'bankcards',
+  'geo-loc': 'geolocs',
+  'mil-rank': 'milranks',
+  'mil-unit': 'milunits',
+  'mil-pos': 'milposs',
+  'mil-pn': 'milpns',
+  'reg-date': 'regdates',
+};
+
+/**
+ * Поле записи для атрибута глубокого поиска: по нему — подпись, действия со значением, вид поиска и тип атрибута
+ * в досье, как у простого поиска. Неизвестное имя (и уже поле записи) возвращается как есть.
+ */
+export const deepField = (prm: string): string => (Object.hasOwn(DEEP_PRM_FIELDS, prm) ? DEEP_PRM_FIELDS[prm]! : prm);
+
 // --- Сохранённые для редактирования данные поиска: правки копии ответа (общие для сервера и страницы) ---
 
 /**

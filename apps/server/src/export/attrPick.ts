@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import {
-  GEO_MODES, LEAK_FIELDS, SEARCH_KINDS, attrDisplayValue, leakLive, step2ByText, step2Summary, type Step2Info, type Step2Value,
+  GEO_MODES, LEAK_FIELDS, SEARCH_KINDS, attrDisplayValue, deepField, leakLive, step2ByText, step2Summary, type Step2Info, type Step2Value,
   type AttrPdfRequest, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type SearchJob,
 } from '@ft/shared';
 import type { Deps } from '../ports.ts';
@@ -13,7 +13,8 @@ import type { Deps } from '../ports.ts';
 export const FIELD_ORDER = Object.keys(LEAK_FIELDS) as LeakField[];
 /** Ключ сканов документов в фильтре атрибутов (как на странице). */
 export const SCANS_FIELD = 'scans';
-export const fieldLabel = (f: string) => LEAK_FIELDS[f as LeakField] ?? f;
+/** Подпись атрибута; имена глубокого поиска (name, for-pasp…) — как у полей простого. */
+export const fieldLabel = (f: string) => LEAK_FIELDS[deepField(f) as LeakField] ?? f;
 /** Подпись значения второго шага, как на странице: «ТЕЛЕФОН² (найден по паспорту)». */
 export const step2Label = (x: Step2Value) => `${fieldLabel(x.f).toUpperCase()}² (${step2ByText(x.by)})`;
 
@@ -78,7 +79,8 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
     }
     if (tuples.length) leaks.push({ leak: card.leak, trusted: card.trusted, tuples });
   }
-  const rows = job.deep ? liveRows.filter((r) => take(r.prm, r.val)) : [];
+  // Отметки и фильтр страницы — по полям записи, как в простом поиске (deepField).
+  const rows = job.deep ? liveRows.filter((r) => take(deepField(r.prm), r.val)) : [];
 
   const parts = [
     only ? `только отмеченные значения (${only.size})` : 'весь результат',
@@ -98,7 +100,7 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
 }
 
 /** Значение так, как оно показано на странице: у геолокации — с радиусом точности, остальное как есть. */
-export const shownValue = (f: string, v: string) => (f === 'geolocs' ? attrDisplayValue(f, v) : v);
+export const shownValue = (f: string, v: string) => (deepField(f) === 'geolocs' ? attrDisplayValue('geolocs', v) : v);
 
 /** Подпись вида поиска: «Адрес (часть)», «Точка и радиус»… */
 export function kindTitle(job: SearchJob): string {

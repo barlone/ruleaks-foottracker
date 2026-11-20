@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { ArrowLeft, Check, Expand, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, List, ListChecks, Network, Save, Search as SearchIcon, SearchCheck, ShieldCheck, Undo2, Zap } from 'lucide-react';
 import {
-  FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_KINDS, STEP2_MAX_SEARCHES, STEP2_SOURCES, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
+  FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_KINDS, STEP2_MAX_SEARCHES, STEP2_SOURCES, attrCopyValue, attrDisplayValue, deepField, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
   isUkrainianPhone, leakLive, removeSavedValues, restoreSavedValues, step2ByText, step2Summary, tupleLive, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type SavedValueRestore, type Step2Info,
 } from '@ft/shared';
 import { Button, Card, ConfirmDeleteBtn, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
@@ -342,7 +342,8 @@ export function JobView({
 
   // Атрибуты, которые есть в результатах, и сколько у каждого значений.
   const counts = new Map<string, number>();
-  if (job.deep) for (const r of rows) counts.set(r.prm, (counts.get(r.prm) ?? 0) + 1);
+  // Атрибуты глубокого поиска — под именами полей записи (deepField): подписи, фильтр и отметки как в простом.
+  if (job.deep) for (const r of rows) counts.set(deepField(r.prm), (counts.get(deepField(r.prm)) ?? 0) + 1);
   else for (const c of leaks) for (const t of c.tuples ?? []) for (const f of Object.keys(LEAK_FIELDS) as LeakField[]) {
     const n = (t[f]?.length ?? 0) + (t.step2?.filter((x) => x.f === f).length ?? 0);
     if (n) counts.set(f, (counts.get(f) ?? 0) + n);
@@ -455,7 +456,7 @@ export function JobView({
             className="h-[calc(100dvh-6.5rem)] min-h-[420px]"
             onRemove={(list) => {
               const next = new Map(selected);
-              for (const r of list) next.delete(`${r.prm}:${r.val}`);
+              for (const r of list) next.delete(`${deepField(r.prm)}:${r.val}`);
               if (next.size !== selected.size) setSelected(next);
               removeMove({ valIds: list.map((r) => r.val_id) });
             }}
@@ -463,13 +464,13 @@ export function JobView({
         </Suspense>
       ) : job.deep ? (
         <DeepResult
-          rows={rows.filter((r) => shown(r.prm))}
+          rows={rows.filter((r) => shown(deepField(r.prm)))}
           all={allRows}
           selected={selected}
           onToggle={toggle}
           onPivot={onPivot}
           onRemove={editing ? (r) => {
-            unselect(r.prm, r.val);
+            unselect(deepField(r.prm), r.val);
             removeMove({ valIds: [r.val_id] });
           } : undefined}
         />
@@ -860,16 +861,17 @@ export function ValueRow({
 /** Подпись «найдено через …» под строкой deep-поиска: имя и значение родительского атрибута с копированием. */
 function FoundVia({ row, parent }: { row: DeepRow; parent?: DeepRow }) {
   const via = parent?.val ?? '';
-  const label = t(LEAK_FIELDS[(parent?.prm ?? row.link4) as LeakField] ?? row.link4);
+  const field = deepField(parent?.prm ?? row.link4);
+  const label = fieldLabel(field);
   return (
     <div className="ml-8 flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[10px] text-mute">
       <CornerDownRight size={10} className="shrink-0" />
-      <span className="shrink-0">{t('найдено через {field}', { field: row.link4 })}</span>
+      <span className="shrink-0">{t('найдено через {field}', { field: label })}</span>
       {via && (
         <>
           <span className="break-all text-text/70">{via}</span>
           <CopyButton
-            value={attrCopyValue(parent?.prm ?? '', via)}
+            value={attrCopyValue(field, via)}
             title={t('Скопировать: {label}', { label })}
             className="[&>svg]:size-3"
           />
@@ -893,8 +895,10 @@ function DeepResult({
 }) {
   const groups = useMemo(() => {
     const m = new Map<string, DeepRow[]>();
-    for (const r of rows) m.set(r.prm, [...(m.get(r.prm) ?? []), r]);
-    return [...m.entries()];
+    for (const r of rows) m.set(deepField(r.prm), [...(m.get(deepField(r.prm)) ?? []), r]);
+    // Боксы — в порядке полей записи, как значения в простом поиске; незнакомые атрибуты — в конце.
+    const order = Object.keys(LEAK_FIELDS);
+    return [...m.entries()].sort((a, b) => (order.indexOf(a[0]) + 1 || 999) - (order.indexOf(b[0]) + 1 || 999));
   }, [rows]);
   // link4_id — это val_id родительской строки в том же ответе: по нему достаём значение, через которое найдена эта.
   const byId = useMemo(() => new Map(all.map((r) => [r.val_id, r] as const)), [all]);

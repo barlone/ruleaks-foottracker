@@ -99,7 +99,7 @@ function deepCards(rows: DeepRow[], byId: Map<number, DeepRow>): Content[] {
             ? [{
                 columns: [
                   { width: 7, svg: VIA, margin: [0, 0.5, 0, 0] },
-                  { width: '*', text: printable(`найдено через ${r.link4}${parent ? `  ${shownValue(parent.prm, parent.val)}` : ''}`), fontSize: 7, color: '#888' },
+                  { width: '*', text: printable(`найдено через ${fieldLabel(r.link4)}${parent ? `  ${shownValue(parent.prm, parent.val)}` : ''}`), fontSize: 7, color: '#888' },
                 ],
                 columnGap: 3,
                 margin: [8, 1, 0, 0],

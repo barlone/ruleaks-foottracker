@@ -31,7 +31,7 @@ const sep = (s: XStyle, on: boolean): XStyle => (on ? { ...s, borderTop: SEP } :
 function viaText(r: DeepRow, byId: Map<number, DeepRow>): string {
   if (r.link4_id <= 0) return '';
   const parent = byId.get(r.link4_id);
-  return `найдено через ${r.link4}${parent ? ` ${shownValue(parent.prm, parent.val)}` : ''}`;
+  return `найдено через ${fieldLabel(r.link4)}${parent ? ` ${shownValue(parent.prm, parent.val)}` : ''}`;
 }
 
 function deepGroups(rows: DeepRow[]): [string, DeepRow[]][] {

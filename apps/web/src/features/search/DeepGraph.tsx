@@ -6,7 +6,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import clsx from 'clsx';
 import { Check, LayoutGrid, Move, Trash2, X } from 'lucide-react';
-import { LEAK_FIELDS, attrCopyValue, type DeepRow, type LeakField } from '@ft/shared';
+import { LEAK_FIELDS, attrCopyValue, deepField, type DeepRow, type LeakField } from '@ft/shared';
 import { ConfirmDeleteBtn, CopyButton } from '../../components/ui.tsx';
 import { useStore } from '../../lib/store.ts';
 import { theme } from '../../lib/theme.ts';
@@ -35,19 +35,21 @@ interface GraphCtx {
 }
 const Ctx = createContext<GraphCtx>({ all: [], links: new Set(), deleting: false, selected: new Set(), collapsed: new Set(), toggleCollapsed: () => {} });
 
-const label = (prm: string) => t(LEAK_FIELDS[prm as LeakField] ?? prm);
+/** Подпись атрибута — как у поля записи простого поиска (deepField). */
+const label = (prm: string) => t(LEAK_FIELDS[deepField(prm) as LeakField] ?? prm);
 const isUrl = (v: string) => /^https?:\/\/\S+$/i.test(v);
 
 /** Отметка значения для переноса в досье — тот же набор отмеченного, что в списке («Отмеченное в досье»). */
 function Mark({ row, className }: { row: DeepRow; className?: string }) {
   const g = useContext(Ctx);
   if (!g.onToggle || row.removed) return null;
-  const checked = g.selected.has(`${row.prm}:${row.val}`);
+  const field = deepField(row.prm);
+  const checked = g.selected.has(`${field}:${row.val}`);
   return (
     <button
       type="button"
       // В досье уходит русская подпись атрибута (хранимые данные), как из списка.
-      onClick={() => g.onToggle!(row.prm, LEAK_FIELDS[row.prm as LeakField] ?? row.prm, row.val)}
+      onClick={() => g.onToggle!(field, LEAK_FIELDS[field as LeakField] ?? row.prm, row.val)}
       className={clsx('nodrag grid size-3.5 shrink-0 cursor-pointer place-items-center rounded border', checked ? 'border-mint bg-mint text-mint-ink' : 'border-line', className)}
       title={t('Отметить для досье')}
       aria-pressed={checked}
@@ -138,7 +140,7 @@ function CardView({ data }: NodeProps<CardNode>) {
               <span className={clsx('nodrag nopan min-w-0 flex-1 cursor-text select-text break-words font-mono text-xs', linked && 'font-bold', r.removed && 'line-through')}>
                 {isUrl(r.val) ? <a href={r.val} target="_blank" rel="noopener noreferrer" className="text-mint hover:underline">{r.val}</a> : r.val}
               </span>
-              <CopyButton value={attrCopyValue(r.prm, r.val)} title={t('Скопировать: {label}', { label: label(r.prm) })} className="mt-0.5 [&>svg]:size-3" />
+              <CopyButton value={attrCopyValue(deepField(r.prm), r.val)} title={t('Скопировать: {label}', { label: label(r.prm) })} className="mt-0.5 [&>svg]:size-3" />
               {/* Удаление в два нажатия, как у атрибутов досье. */}
               {canDelete && !r.removed && (
                 <ConfirmDeleteBtn onConfirm={() => g.onRemove!([r])} title={t('Удалить значение из сохранённых данных')} className="mt-0.5 !ml-0 !opacity-100" />

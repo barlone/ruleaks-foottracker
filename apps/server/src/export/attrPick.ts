@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import {
-  GEO_MODES, LEAK_FIELDS, SEARCH_KINDS, attrDisplayValue, step2ByText, step2Summary, type Step2Info, type Step2Value,
+  GEO_MODES, LEAK_FIELDS, SEARCH_KINDS, attrDisplayValue, leakLive, step2ByText, step2Summary, type Step2Info, type Step2Value,
   type AttrPdfRequest, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type SearchJob,
 } from '@ft/shared';
 import type { Deps } from '../ports.ts';
@@ -91,7 +91,7 @@ export function pickAttr(job: SearchJob, req: Pick<AttrPdfRequest, 'only' | 'fie
     rows,
     byId: new Map(allRows.map((r) => [r.val_id, r] as const)),
     scanLeaks: !job.deep && !only && (!fields || fields.has(SCANS_FIELD)) ? allLeaks : [],
-    summary: job.deep ? `${liveRows.length} связанных значений` : `${allLeaks.length} утечек`,
+    summary: job.deep ? `${liveRows.length} связанных значений` : `${allLeaks.filter(leakLive).length} утечек`,
     step2: step2 ? step2Summary(step2) : null,
     scope: parts.filter(Boolean).join('; '),
   };

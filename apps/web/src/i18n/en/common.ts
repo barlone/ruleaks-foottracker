@@ -64,7 +64,7 @@ const en: Record<string, string> = {
   'Связь возможна только между разными досье персон, доступными вам': 'A relation is only possible between different person dossiers you can access',
   'Можно выбрать только предопределённый тип связи или тип из своего словаря': 'Choose a predefined relation type or one from your own dictionary',
   'У аккаунта нет токена API — получите его в боте': 'The account has no API token — get one in the bot',
-  'Сохранять для редактирования можно только результат завершённого глубокого поиска': 'Only the result of a finished deep search can be saved for editing',
+  'Сохранять для редактирования можно только результат завершённого поиска': 'Only the result of a finished search can be saved for editing',
   'У этого поиска нет сохранённых данных — сохраните результат заново': 'This search has no saved data — save the result again',
   'Неверный пароль': 'Wrong password',
   'Ссылка входа повреждена или подписана не этим ботом — запросите в боте новую': 'The login link is damaged or was not signed by this bot — request a new one in the bot',

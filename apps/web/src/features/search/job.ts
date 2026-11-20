@@ -13,6 +13,9 @@ export function kindLabel(section: SearchSection, kind: string): string {
   return label ? t(label) : kind;
 }
 
+/** Открыт завершённый поиск с сохранёнными данными — страница показывает их в режиме редактирования. */
+export const isEditingJob = (job: { state: string; saved?: boolean } | undefined): boolean => job?.state === 'done' && !!job.saved;
+
 /** Опрос задачи, пока шлюз её считает. */
 export function useSearchJob(jobId: string | null) {
   const utils = trpc.useUtils();

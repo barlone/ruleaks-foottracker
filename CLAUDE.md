@@ -268,13 +268,32 @@ the client queues requests per token and skips polls that are too early instead 
 Job progress is advanced only when the browser polls `search.job` (TanStack Query, also in background tabs); a job
 nobody polls stays `running` until `[api] job-timeout-sec`. A server-side poller is planned.
 
-Saved-for-editing data (deep attr search only, so far): «Сохранить для редактирования» on the result bar
-(`search.save`) copies `result` into `search_jobs.saved`; the original snapshot is never changed (dossiers and export
-files refer to it). A job with `saved` (`SearchJob.saved`, yellow diskette in «История») is served by `search.job` and
-by the PDF/Excel export (`loadAttrJob`) with the saved copy in `result`, and the page shows it in edit mode
-(`Card editing`: yellow border, `*` instead of the dot, a delete icon per value). `search.savedRemove` marks rows
-`DeepRow.removed` instead of dropping them — other rows' «найдено через» point at their `val_id`. «Очистить историю»
-drops `saved` together with the history row.
+Saved-for-editing data (attr search, simple and deep, and geo search): «Сохранить для редактирования» on the result
+bar (`search.save`) copies `result` into `search_jobs.saved`; the original snapshot is never changed (dossiers and
+export files refer to it). A job with `saved` (`SearchJob.saved`, yellow diskette in «История») is served by
+`search.job` and by the PDF/Excel export (`loadAttrJob`) with the saved copy in `result`, and the page shows it in
+edit mode (`Card editing`: yellow border, `*` instead of the dot, a delete icon per value). `search.savedRemove`
+takes `valIds` (deep rows — marked `DeepRow.removed`, not dropped: other rows' «найдено через» point at their
+`val_id`) or `values` (`SavedValueRef`: leak index, tuple, field, value, `step2`); emptied tuples and leaks stay in
+place so indexes do not shift and are skipped by `tupleLive` / `leakLive`. The edit itself is `removeSavedValues` in
+`@ft/shared`, shared by the server and the page's optimistic update; edits of one job are queued (`savedTurn`) —
+each rewrites the whole copy. «Очистить историю» drops `saved` together with the history row.
+Deleting a value is two-step (`ConfirmDeleteBtn`, as in dossier attributes). «Отменить» on the result bar undoes the
+last deletions: the page keeps the last three moves in state (`UndoMove`, lost on reload or another job; a move is
+one deletion — a value or a whole graph card) and `search.savedRestore` (`restoreSavedValues`) clears `removed` on
+deep rows / puts simple values back at their index (`SavedValueRestore.at`, `by` for step-2 values).
+In edit mode «Во весь экран» puts `?full=true` on `/search` / `/search/geo` (as the graph editor does): `AppShell`
+drops the sidebar and banners, `SearchLayout full` hides the title and history, the page hides its form — nothing is
+unmounted. `?full` without an open saved result (reload, plain result) is removed from the address.
+In that full-screen view a saved deep result has a «Граф» / «Список» toggle: `features/search/DeepGraph.tsx` (lazy,
+React Flow) draws it like `/graph-view/` of the old web GUI — the queried value (`link4_id = 0`) as the root card,
+the values found via one value as a card linked to that parent row. Inside a card the values are grouped by leak
+record — `DeepRow.tuple_id` (gateway API 9; 0 on the queried value, absent in older snapshots → one group) — with a
+«запись N из M» rule between records. `deepGraph.ts` builds the cards
+(`buildDeepGraph`; a `removed` row stays as a struck-through connector while live values hang on it) and the
+left-to-right tree layout (`layoutDeepGraph`, heights estimated from the text). Cards are dragged by the header,
+long ones fold («Свернуть» keeps the first rows and every linked row), a value or a whole card with everything found
+via it (second click) is deleted through the same `search.savedRemove`. Card positions are not stored.
 
 «Дополнительный поиск вторым шагом» (attr, exclusive with deep; `params.step2` = fields to take, `params.step2by` =
 kinds to search by): after the raw search, `search/step2.ts` runs up to `STEP2_MAX_SEARCHES` raw searches (round-robin

@@ -1,20 +1,20 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, ListChecks, Save, Search as SearchIcon, SearchCheck, ShieldCheck, Trash2, Zap } from 'lucide-react';
+import { ArrowLeft, Check, Expand, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, List, ListChecks, Network, Save, Search as SearchIcon, SearchCheck, ShieldCheck, Undo2, Zap } from 'lucide-react';
 import {
   FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_KINDS, STEP2_MAX_SEARCHES, STEP2_SOURCES, attrCopyValue, attrDisplayValue, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
-  isUkrainianPhone, step2ByText, step2Summary, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type Step2Info,
+  isUkrainianPhone, leakLive, removeSavedValues, restoreSavedValues, step2ByText, step2Summary, tupleLive, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type SavedValueRestore, type Step2Info,
 } from '@ft/shared';
-import { Button, Card, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
+import { Button, Card, ConfirmDeleteBtn, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
 import { errorText } from '../../lib/errors.ts';
 import { toast } from '../../lib/toast.ts';
-import { t, tj, tn, tx } from '../../lib/i18n.ts';
+import { t, tc, tj, tn, tx } from '../../lib/i18n.ts';
 import { AddToDossierDialog, type PendingValue } from './AddToDossierDialog.tsx';
 import { AttrExportDialog } from './AttrExportDialog.tsx';
 import { JobStatus, ResultBar, SearchLayout } from './common.tsx';
-import { useRunOnMount, useSearchJob } from './job.ts';
+import { isEditingJob, useRunOnMount, useSearchJob } from './job.ts';
 import { ValueActions } from './ValueActions.tsx';
 import { BackToDossier } from './BackToDossier.tsx';
 import type { FoundGeoPoint } from './GeoPointsMap.tsx';
@@ -56,6 +56,17 @@ export function AttrSearchPage() {
   });
   const job = useSearchJob(jobId);
 
+  // Сохранённые данные во весь экран (?full): только пока открыт результат в режиме редактирования. Адрес с ?full,
+  // открытый заново (задача не выбрана) или с обычным результатом, возвращается к обычному виду.
+  const editing = !!jobId && isEditingJob(job.data);
+  const full = !!params.full && editing;
+  const fullStale = !!params.full && (!jobId || (!!job.data && !editing) || !!job.error);
+  useEffect(() => {
+    if (fullStale) void navigate({ search: (prev) => ({ ...prev, full: undefined }), replace: true });
+  }, [fullStale, navigate]);
+  // Вход добавляет запись в историю браузера («назад» выходит из режима), выход её заменяет — как в редакторе связей.
+  const setFull = (on: boolean) => void navigate({ search: (prev) => ({ ...prev, full: on || undefined }), replace: !on });
+
   function run(k = effectiveKind, v = value, d = deep) {
     if (!k || !v.trim()) return;
     void navigate({ search: { kind: k, q: v, deep: d } });
@@ -91,9 +102,10 @@ export function AttrSearchPage() {
       subtitle={t('Телефон, email, ФИО, документы, авто, Telegram ID… Найденное можно сразу перенести в досье.')}
       activeId={jobId}
       onOpen={setJobId}
+      full={full}
     >
 
-        <Card className="animate-fade-up">
+        <Card className={clsx('animate-fade-up', full && 'hidden')}>
           <form
             className="space-y-4"
             onSubmit={(e) => {
@@ -187,7 +199,9 @@ export function AttrSearchPage() {
           </form>
         </Card>
 
-      {jobId && <JobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onPivot={pivot} />}
+      {jobId && (
+        <JobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onPivot={pivot} fullscreen={full} onFullscreen={setFull} />
+      )}
       {!jobId && (
         <Empty>
           {t('Введите значение — тип определится автоматически.')}
@@ -200,16 +214,29 @@ export function AttrSearchPage() {
 }
 
 /** Результат raw/deep-поиска по утечкам: и «Поиск по атрибутам», и «Поиск по геоданным» (у шлюза ответ того же вида). */
-export function JobView({ job, loading, error, onPivot }: { job: Job | undefined; loading: boolean; error?: string | null; onPivot: (kind: string, value: string) => void }) {
+export function JobView({
+  job, loading, error, onPivot, fullscreen, onFullscreen,
+}: {
+  job: Job | undefined;
+  loading: boolean;
+  error?: string | null;
+  onPivot: (kind: string, value: string) => void;
+  /** Сохранённые данные открыты во весь экран (страница убрала всё, кроме результата). */
+  fullscreen?: boolean;
+  /** Страница умеет показывать результат во весь экран: в режиме редактирования есть кнопка. */
+  onFullscreen?: (on: boolean) => void;
+}) {
   const [selected, setSelected] = useState<Map<string, PendingValue>>(new Map());
   const [dialog, setDialog] = useState(false);
   const [exportFormat, setExportFormat] = useState<'pdf' | 'xlsx'>('pdf');
   const [exportOpen, setExportOpen] = useState(false);
+  // Сохранённый результат глубокого поиска во весь экран можно смотреть графом связей вместо списка боксов.
+  const [graph, setGraph] = useState(false);
   const exportAs = (f: 'pdf' | 'xlsx') => {
     setExportFormat(f);
     setExportOpen(true);
   };
-  // Сохранённые для редактирования данные (пока только глубокий поиск): копия результата у строки истории.
+  // Сохранённые для редактирования данные: копия результата у строки истории.
   const utils = trpc.useUtils();
   const me = trpc.auth.me.useQuery();
   const save = trpc.search.save.useMutation({
@@ -222,13 +249,21 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
   });
   const remove = trpc.search.savedRemove.useMutation({
     // Значение пропадает сразу, не дожидаясь сервера; при ошибке данные перечитываются.
-    onMutate: ({ id, valIds }) => {
-      const ids = new Set(valIds);
-      utils.search.job.setData({ id }, (prev) => {
-        const r = prev?.result as { job?: { rows?: DeepRow[] } } | null | undefined;
-        if (!prev || !r?.job?.rows) return prev;
-        return { ...prev, result: { ...r, job: { ...r.job, rows: r.job.rows.map((x) => (ids.has(x.val_id) ? { ...x, removed: true } : x)) } } };
-      });
+    onMutate: ({ id, ...del }) => {
+      utils.search.job.setData({ id }, (prev) => (prev ? { ...prev, result: removeSavedValues(prev.result, del) } : prev));
+    },
+    onError: (e, { id }) => {
+      toast(errorText(e), 'error');
+      // Что из удалений дошло до сервера, неизвестно — отменять по памяти нечего.
+      setUndo([]);
+      void utils.search.job.invalidate({ id });
+    },
+  });
+  // Отмена удаления: помнятся три последних хода (ход — одно удаление: значение или карточка графа целиком).
+  const [undo, setUndo] = useState<UndoMove[]>([]);
+  const restore = trpc.search.savedRestore.useMutation({
+    onMutate: ({ id, ...back }) => {
+      utils.search.job.setData({ id }, (prev) => (prev ? { ...prev, result: restoreSavedValues(prev.result, back) } : prev));
     },
     onError: (e, { id }) => {
       toast(errorText(e), 'error');
@@ -246,6 +281,7 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
     setSelected(new Map());
     setFields(new Set());
     setCollapsed(new Set());
+    setUndo([]);
   }, [job?.id]);
   const toggleCollapsed = (i: number) => {
     const next = new Set(collapsed);
@@ -271,16 +307,37 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
 
   const res = job.result as { job?: { leaks?: LeakCard[]; rows?: DeepRow[] } } | null;
   const leaks = res?.job?.leaks ?? [];
+  // После правок сохранённых данных утечка может опустеть: она остаётся в leaks (номера не сдвигаются), но не считается.
+  const liveLeaks = leaks.filter(leakLive).length;
   const allRows = res?.job?.rows ?? [];
   // Удалённые из сохранённых данных строки не показываются, но остаются для «найдено через».
   const rows = allRows.filter((r) => !r.removed);
-  const canSave = job.section === 'attr' && job.deep;
-  const editing = canSave && !!job.saved;
+  const editing = !!job.saved;
+  /** Удалить значения из сохранённых данных и запомнить ход для отмены. */
+  const removeMove = (move: UndoMove) => {
+    setUndo((prev) => [...prev, move].slice(-UNDO_DEPTH));
+    remove.mutate({ id: job.id, ...move });
+  };
+  const undoLast = () => {
+    const move = undo.at(-1);
+    if (!move) return;
+    setUndo(undo.slice(0, -1));
+    restore.mutate({ id: job.id, ...move });
+  };
+  const graphAllowed = editing && job.deep && !!fullscreen;
+  const asGraph = graphAllowed && graph;
+  /** Удалённое из сохранённых данных значение больше не отмечено для досье. */
+  const unselect = (f: string, v: string) => {
+    if (!selected.has(`${f}:${v}`)) return;
+    const next = new Map(selected);
+    next.delete(`${f}:${v}`);
+    setSelected(next);
+  };
   const step2 = (job.result as { step2?: Step2Info } | null)?.step2 ?? null;
   const step2Added = step2?.queries.reduce((n, q) => n + (q.added ?? 0), 0) ?? 0;
   const summary = job.deep
     ? tn(rows.length, '{n} связанное значение|{n} связанных значения|{n} связанных значений')
-    : tn(leaks.length, '{n} утечка|{n} утечки|{n} утечек') + (step2 ? t(', вторым шагом добавлено значений: {n}', { n: step2Added }) : '');
+    : tn(liveLeaks, '{n} утечка|{n} утечки|{n} утечек') + (step2 ? t(', вторым шагом добавлено значений: {n}', { n: step2Added }) : '');
 
   // Атрибуты, которые есть в результатах, и сколько у каждого значений.
   const counts = new Map<string, number>();
@@ -331,8 +388,33 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
         onAdd={() => setDialog(true)}
         extra={
           editing ? (
-            <Tag tone="warn" className="shrink-0"><Save size={12} /> {t('редактирование')}</Tag>
-          ) : canSave && me.data?.access.active ? (
+            <>
+              <Tag tone="warn" className="shrink-0"><Save size={12} /> {t('редактирование')}</Tag>
+              <Button
+                size="sm"
+                onClick={undoLast}
+                disabled={!undo.length}
+                title={undo.length ? t('Вернуть последнее удалённое (помнится ходов: {n} из {max})', { n: undo.length, max: UNDO_DEPTH }) : t('Отменять нечего: помнятся три последних удаления')}
+              >
+                <Undo2 size={14} /> {t('Отменить')}{undo.length > 0 && <span className="font-mono text-[11px] text-warn">{undo.length}</span>}
+              </Button>
+              {graphAllowed && (
+                <Button size="sm" onClick={() => setGraph(!graph)} title={graph ? t('Показать значения списком по атрибутам') : t('Показать значения графом связей: что через что найдено')}>
+                  {graph ? <><List size={14} /> {tc('вид', 'Список')}</> : <><Network size={14} /> {t('Граф')}</>}
+                </Button>
+              )}
+              {/* Во весь экран и обратно — как в редакторе связей. */}
+              {onFullscreen && (fullscreen ? (
+                <Button size="sm" onClick={() => onFullscreen(false)} className="!text-mint">
+                  <ArrowLeft size={14} /> {t('вернуться к поиску')}
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => onFullscreen(true)} title={t('Сохранённые данные во весь экран')}>
+                  <Expand size={14} /> {t('Во весь экран')}
+                </Button>
+              ))}
+            </>
+          ) : me.data?.access.active ? (
             <Button
               size="sm"
               onClick={() => save.mutate({ id: job.id })}
@@ -355,7 +437,7 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
         }
       />
 
-      {found.length > 0 && (
+      {found.length > 0 && !asGraph && (
         <FieldFilter found={found} counts={counts} active={active} onToggle={toggleField} onReset={() => setFields(new Set())} />
       )}
 
@@ -363,7 +445,20 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
 
       {scans.count > 0 && shown(SCANS_FIELD) && <ScansBox key={job.id} scans={scans} />}
 
-      {job.deep ? (
+      {asGraph ? (
+        <Suspense fallback={<Empty><Spinner /></Empty>}>
+          <DeepGraph
+            rows={allRows}
+            className="h-[calc(100dvh-6.5rem)] min-h-[420px]"
+            onRemove={(list) => {
+              const next = new Map(selected);
+              for (const r of list) next.delete(`${r.prm}:${r.val}`);
+              if (next.size !== selected.size) setSelected(next);
+              removeMove({ valIds: list.map((r) => r.val_id) });
+            }}
+          />
+        </Suspense>
+      ) : job.deep ? (
         <DeepResult
           rows={rows.filter((r) => shown(r.prm))}
           all={allRows}
@@ -371,28 +466,33 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
           onToggle={toggle}
           onPivot={onPivot}
           onRemove={editing ? (r) => {
-            if (selected.has(`${r.prm}:${r.val}`)) {
-              const next = new Map(selected);
-              next.delete(`${r.prm}:${r.val}`);
-              setSelected(next);
-            }
-            remove.mutate({ id: job.id, valIds: [r.val_id] });
+            unselect(r.prm, r.val);
+            removeMove({ valIds: [r.val_id] });
           } : undefined}
         />
       ) : (
         <div className="space-y-4">
-          {leaks.length === 0 && <Empty>{t('Ничего не найдено')}</Empty>}
+          {liveLeaks === 0 && <Empty>{t('Ничего не найдено')}</Empty>}
           {visibleLeaks.map((card) => {
             const i = leaks.indexOf(card);
             const folded = collapsed.has(i);
+            // Режим редактирования сохранённых данных: у значения — иконка удаления.
+            const remover = (tuple: LeakTuple, f: string, v: string, step2?: boolean) => (editing ? () => {
+              unselect(f, v);
+              // Место значения и (второй шаг) по чему оно найдено — чтобы отмена вернула его как было.
+              const at = step2 ? (tuple.step2 ?? []).findIndex((x) => x.f === f && x.v === v) : (tuple[f as LeakField] ?? []).indexOf(v);
+              const by = step2 ? tuple.step2?.[at]?.by : undefined;
+              removeMove({ values: [{ leak: i, tuple: tuple.tuple, f, v, at: Math.max(0, at), ...(step2 ? { step2, by } : {}) }] });
+            } : undefined);
             return (
               <Card
                 key={i}
+                editing={editing}
                 className={folded ? '[&>header]:mb-0' : undefined}
                 title={<>{card.leak} {card.trusted && <ShieldCheck size={13} className="text-mint" />}</>}
                 actions={
                   <>
-                    <Tag tone="dim">{t('{n} зап.', { n: card.tuples?.length ?? 0 })}</Tag>
+                    <Tag tone="dim">{t('{n} зап.', { n: card.tuples?.filter(tupleLive).length ?? 0 })}</Tag>
                     <button
                       type="button"
                       onClick={() => toggleCollapsed(i)}
@@ -411,7 +511,7 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
                     {card.tuples?.filter(tupleShown).map((t) => {
                       const own = (Object.keys(LEAK_FIELDS) as LeakField[]).filter(shown).flatMap((f) =>
                         (t[f] ?? []).map((v) => (
-                          <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} />
+                          <ValueRow key={f + v} field={f} value={v} checked={selected.has(`${f}:${v}`)} onToggle={toggle} onPivot={onPivot} onRemove={remover(t, f, v)} />
                         )),
                       );
                       const extra = (t.step2 ?? []).filter((x) => shown(x.f));
@@ -421,7 +521,16 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
                           {/* Найденное вторым шагом по идентификаторам этой записи — под пунктирной чертой. */}
                           {extra.length > 0 && own.length > 0 && <div className="col-span-full my-1 border-t border-dashed border-text/15" />}
                           {extra.map((x) => (
-                            <ValueRow key={`2:${x.f}${x.v}`} field={x.f} value={x.v} by={x.by} checked={selected.has(`${x.f}:${x.v}`)} onToggle={toggle} onPivot={onPivot} />
+                            <ValueRow
+                              key={`2:${x.f}${x.v}`}
+                              field={x.f}
+                              value={x.v}
+                              by={x.by}
+                              checked={selected.has(`${x.f}:${x.v}`)}
+                              onToggle={toggle}
+                              onPivot={onPivot}
+                              onRemove={remover(t, x.f, x.v, true)}
+                            />
                           ))}
                         </div>
                       );
@@ -452,6 +561,17 @@ export function JobView({ job, loading, error, onPivot }: { job: Job | undefined
     </>
   );
 }
+
+/** Сколько последних удалений из сохранённых данных можно отменить. */
+const UNDO_DEPTH = 3;
+/** Один ход удаления: строки глубокого поиска (val_id) или значения простого с местом в записи. */
+interface UndoMove {
+  valIds?: number[];
+  values?: SavedValueRestore[];
+}
+
+// React Flow — только когда сохранённый результат глубокого поиска открыли графом.
+const DeepGraph = lazy(() => import('./DeepGraph.tsx').then((m) => ({ default: m.DeepGraph })));
 
 // MapLibre тяжёлый — грузится, только когда в результатах есть геолокации.
 const GeoPointsMap = lazy(() => import('./GeoPointsMap.tsx').then((m) => ({ default: m.GeoPointsMap })));
@@ -727,11 +847,8 @@ export function ValueRow({
         )}
         <ValueActions field={field} value={value} />
         <CopyButton value={attrCopyValue(field, value)} title={t('Скопировать: {label}', { label: shownLabel })} />
-        {onRemove && (
-          <button type="button" onClick={onRemove} className="cursor-pointer text-mute transition hover:text-danger" title={t('Удалить значение из сохранённых данных')}>
-            <Trash2 size={14} />
-          </button>
-        )}
+        {/* Удаление в два нажатия, как у атрибутов досье; в режиме редактирования корзина видна и без наведения. */}
+        {onRemove && <ConfirmDeleteBtn onConfirm={onRemove} title={t('Удалить значение из сохранённых данных')} className="!opacity-100" />}
       </div>
     </div>
   );

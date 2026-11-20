@@ -13,7 +13,7 @@ import { kindLabel } from './job.ts';
 // Общее для разделов поиска: раскладка «поиск + история», состояние задачи, панель действий (хуки — в job.ts).
 
 export function SearchLayout({
-  section, title, titleExtra, subtitle, activeId, onOpen, history, children,
+  section, title, titleExtra, subtitle, activeId, onOpen, history, full, children,
 }: {
   /** Раздел истории поиска (search.recent); разделы со своей историей передают history. */
   section?: SearchSection;
@@ -25,12 +25,17 @@ export function SearchLayout({
   onOpen?: (id: string) => void;
   /** Свой блок истории вместо стандартного. */
   history?: ReactNode;
+  /**
+   * Результат во весь экран (сохранённые данные в режиме редактирования): заголовок и история скрыты, но не
+   * размонтированы; форму поиска страница прячет сама.
+   */
+  full?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="grid gap-6 pt-2.5 pb-6 pl-6 pr-[30px] xl:grid-cols-[minmax(0,1fr)_300px]">
+    <div className={clsx('grid gap-6 pt-2.5 pb-6 pl-6 pr-[30px]', !full && 'xl:grid-cols-[minmax(0,1fr)_300px]')}>
       <div className="min-w-0 space-y-6">
-        <header className="animate-fade-up">
+        <header className={clsx('animate-fade-up', full && 'hidden')}>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h1 className="text-2xl font-extrabold">{title}</h1>
             {titleExtra}
@@ -39,7 +44,7 @@ export function SearchLayout({
         </header>
         {children}
       </div>
-      <aside className="space-y-4">
+      <aside className={clsx('space-y-4', full && 'hidden')}>
         {history ?? (section && onOpen ? <HistoryCard section={section} activeId={activeId ?? null} onOpen={onOpen} /> : null)}
       </aside>
     </div>

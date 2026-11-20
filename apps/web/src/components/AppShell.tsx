@@ -65,8 +65,11 @@ export function Root() {
 function Shell() {
   const me = trpc.auth.me.useQuery();
   const path = useRouterState({ select: (s) => s.location.pathname });
-  // Редактор связей во весь экран (?full на странице расследования): боковое меню и полосы над страницей убраны.
-  const full = useRouterState({ select: (s) => /^\/investigations\/[^/]+$/.test(s.location.pathname) && (s.location.search as { full?: unknown }).full === true });
+  // Во весь экран (?full): редактор связей на странице расследования и сохранённые данные поиска по атрибутам /
+  // геоданным — боковое меню и полосы над страницей убраны.
+  const full = useRouterState({
+    select: (s) => /^\/(investigations\/[^/]+|search|search\/geo)$/.test(s.location.pathname) && (s.location.search as { full?: unknown }).full === true,
+  });
   const mainRef = useRef<HTMLElement>(null);
 
   // Без сессии тема не меняется: страница входа открывается в той, что была у последнего пользователя этого браузера.

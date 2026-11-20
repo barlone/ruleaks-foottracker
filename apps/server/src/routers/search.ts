@@ -2,8 +2,8 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, STEP2_FIELDS, STEP2_KINDS, SearchSectionSchema, TG_MODE_IDS,
-  checkFulltext, checkMask, detectKind, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, searchParams,
-  AttrPdfRequest, AttrXlsxRequest, TgPdfRequest, type DeepRow, type LeakCard, type SearchJob, type SearchSection,
+  checkFulltext, checkMask, detectKind, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, removeSavedValues, restoreSavedValues, searchParams,
+  AttrPdfRequest, AttrXlsxRequest, TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import { appConfig } from '../config.ts';
 import { activeProcedure, authedProcedure, router, type Ctx } from '../trpc.ts';
@@ -181,14 +181,29 @@ const publicJob = (
 ): SearchJob => (savedResult != null && job.state === 'done' ? { ...job, result: savedResult, saved: true } : job);
 
 // Сохранённые для редактирования данные — правленая копия ответа шлюза в search_jobs.saved; исходный снимок (result)
-// не меняется: на него ссылаются досье и файлы экспорта. Пока только глубокий поиск по атрибутам.
+// не меняется: на него ссылаются досье и файлы экспорта. Поиск по атрибутам (простой и глубокий) и по геоданным.
 
-/** Свой завершённый глубокий поиск по атрибутам — только его результат сохраняется для редактирования. */
-async function loadDeepJob(ctx: Ctx, id: string) {
+/** Свой завершённый поиск по атрибутам или геоданным — его результат сохраняется для редактирования. */
+async function loadSavable(ctx: Ctx, id: string) {
   const job = await ctx.deps.searches.get(id, ctx.user!.id);
   if (!job) throw new TRPCError({ code: 'NOT_FOUND' });
-  if (job.section !== 'attr' || !job.deep || job.state !== 'done') throw new TRPCError({ code: 'BAD_REQUEST', message: 'SAVED_NOT_DEEP' });
+  if ((job.section !== 'attr' && job.section !== 'geo') || job.state !== 'done') throw new TRPCError({ code: 'BAD_REQUEST', message: 'SAVED_NOT_DONE' });
   return job;
+}
+
+/**
+ * Правки сохранённых данных одного поиска идут по очереди: каждая читает копию, меняет и пишет целиком,
+ * и два быстрых удаления подряд иначе затёрли бы друг друга.
+ */
+const savedQueue = new Map<string, Promise<unknown>>();
+function savedTurn<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const next = (savedQueue.get(key) ?? Promise.resolve()).then(fn);
+  const tail = next.catch(() => {});
+  savedQueue.set(key, tail);
+  void tail.then(() => {
+    if (savedQueue.get(key) === tail) savedQueue.delete(key);
+  });
+  return next;
 }
 
 export const searchRouter = router({
@@ -288,23 +303,59 @@ export const searchRouter = router({
     .mutation(({ ctx, input }) => ctx.deps.searches.clear(ctx.user.id, input.section)),
 
   /** «Сохранить для редактирования»: копия результата прикрепляется к строке истории. Повторный вызов правки не затирает. */
-  save: activeProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
-    const job = await loadDeepJob(ctx, input.id);
-    if (job.savedResult == null) await ctx.deps.searches.setSaved(job.id, ctx.user.id, job.result ?? {});
-  }),
+  save: activeProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) =>
+    savedTurn(`${ctx.user.id}:${input.id}`, async () => {
+      const job = await loadSavable(ctx, input.id);
+      if (job.savedResult == null) await ctx.deps.searches.setSaved(job.id, ctx.user.id, job.result ?? {});
+    })),
 
-  /** Удалить значения из сохранённых данных глубокого поиска (по val_id строк). */
+  /**
+   * Удалить значения из сохранённых данных: valIds — строки глубокого поиска (помечаются removed: на их val_id
+   * ссылаются «найдено через …» других строк), values — значения записей простого поиска.
+   */
   savedRemove: activeProcedure
-    .input(z.object({ id: z.string(), valIds: z.array(z.number().int()).min(1).max(10_000) }))
-    .mutation(async ({ ctx, input }) => {
-      const job = await loadDeepJob(ctx, input.id);
-      if (job.savedResult == null) throw new TRPCError({ code: 'BAD_REQUEST', message: 'NOT_SAVED' });
-      const saved = job.savedResult as { job?: { rows?: DeepRow[] } };
-      const ids = new Set(input.valIds);
-      // Строка не выбрасывается, а помечается: на её val_id ссылаются «найдено через …» других строк.
-      const rows = (saved.job?.rows ?? []).map((r) => (ids.has(r.val_id) ? { ...r, removed: true } : r));
-      await ctx.deps.searches.setSaved(job.id, ctx.user.id, { ...saved, job: { ...saved.job, rows } });
-    }),
+    .input(z.object({
+      id: z.string(),
+      valIds: z.array(z.number().int()).max(10_000).optional(),
+      values: z.array(z.object({
+        leak: z.number().int().min(0),
+        tuple: z.number().int(),
+        f: z.string().max(32),
+        v: z.string().max(100_000),
+        step2: z.boolean().optional(),
+      })).max(10_000).optional(),
+    }))
+    .mutation(({ ctx, input }) =>
+      savedTurn(`${ctx.user.id}:${input.id}`, async () => {
+        const job = await loadSavable(ctx, input.id);
+        if (job.savedResult == null) throw new TRPCError({ code: 'BAD_REQUEST', message: 'NOT_SAVED' });
+        await ctx.deps.searches.setSaved(job.id, ctx.user.id, removeSavedValues(job.savedResult, input));
+      })),
+
+  /**
+   * Отмена удаления (кнопка «Отменить» помнит три последних хода в браузере): строки глубокого поиска снова живые,
+   * значения простого возвращаются в записи на прежние места.
+   */
+  savedRestore: activeProcedure
+    .input(z.object({
+      id: z.string(),
+      valIds: z.array(z.number().int()).max(10_000).optional(),
+      values: z.array(z.object({
+        leak: z.number().int().min(0),
+        tuple: z.number().int(),
+        f: z.string().max(32),
+        v: z.string().max(100_000),
+        step2: z.boolean().optional(),
+        at: z.number().int().min(0),
+        by: z.array(z.string().max(16)).max(16).optional(),
+      })).max(10_000).optional(),
+    }))
+    .mutation(({ ctx, input }) =>
+      savedTurn(`${ctx.user.id}:${input.id}`, async () => {
+        const job = await loadSavable(ctx, input.id);
+        if (job.savedResult == null) throw new TRPCError({ code: 'BAD_REQUEST', message: 'NOT_SAVED' });
+        await ctx.deps.searches.setSaved(job.id, ctx.user.id, restoreSavedValues(job.savedResult, input));
+      })),
 
   /** PDF-отчёт по своему завершённому поиску в Telegram (из сохранённого снимка — шлюз не вызывается). */
   exportTgPdf: authedProcedure.input(TgPdfRequest).mutation(async ({ ctx, input }) => {

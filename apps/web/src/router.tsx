@@ -36,7 +36,8 @@ export const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search',
   // from — id досье, из которого пришли по иконке «Искать»: в заголовке появляется возврат в него.
-  validateSearch: z.object({ kind: text, q: text, deep: z.boolean().optional().catch(undefined), from: text }),
+  // full — сохранённые данные поиска во весь экран: без бокового меню, формы и истории (AppShell, SearchLayout).
+  validateSearch: z.object({ kind: text, q: text, deep: z.boolean().optional().catch(undefined), from: text, full: z.boolean().optional().catch(undefined) }),
   component: AttrSearchPage,
 });
 
@@ -51,7 +52,7 @@ export const tgSearchRoute = createRoute({
 export const geoSearchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search/geo',
-  validateSearch: z.object({ q: text }),
+  validateSearch: z.object({ q: text, full: z.boolean().optional().catch(undefined) }),
   component: lazyRouteComponent(() => import('./features/search/GeoSearchPage.tsx'), 'GeoSearchPage'),
 });
 

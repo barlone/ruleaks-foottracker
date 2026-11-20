@@ -322,6 +322,11 @@ export interface DeepRow {
   link4: string;
   link4_id: number;
   /**
+   * Запись утечки (tuple), в которой найдено значение; 0 — у самого запрошенного значения. Шлюз отдаёт с API 9
+   * (1.39.0): в снимках старше поля нет.
+   */
+  tuple_id?: number;
+  /**
    * Значение удалено пользователем из сохранённых для редактирования данных (не от шлюза). Строка остаётся:
    * на её val_id ссылаются «найдено через …» других строк.
    */
@@ -364,6 +369,120 @@ export const LEAK_FIELDS = {
 } as const;
 
 export type LeakField = keyof typeof LEAK_FIELDS;
+
+// --- Сохранённые для редактирования данные поиска: правки копии ответа (общие для сервера и страницы) ---
+
+/**
+ * Значение простого поиска в сохранённых данных: утечка по номеру в leaks, запись по tuple, поле и значение;
+ * step2 — значение найдено вторым шагом (LeakTuple.step2).
+ */
+export interface SavedValueRef {
+  leak: number;
+  tuple: number;
+  f: string;
+  v: string;
+  step2?: boolean;
+}
+
+/** В записи есть что показать: значения, найденное вторым шагом или сканы. */
+export const tupleLive = (t: LeakTuple): boolean =>
+  !!t.step2?.length || !!t.scans?.length || (Object.keys(LEAK_FIELDS) as LeakField[]).some((f) => t[f]?.length);
+
+/** В утечке остались непустые записи (после правок сохранённых данных может не остаться ни одной). */
+export const leakLive = (card: LeakCard): boolean => !!card.tuples?.some(tupleLive);
+
+/**
+ * Убрать значения из утечек простого поиска. Опустевшие записи и утечки остаются на местах — на номера
+ * утечек ссылаются следующие правки; при показе и выгрузке они пропускаются (tupleLive, leakLive).
+ */
+export function removeLeakValues(leaks: LeakCard[], refs: readonly SavedValueRef[]): LeakCard[] {
+  return leaks.map((card, i) => {
+    const mine = refs.filter((x) => x.leak === i);
+    if (!mine.length) return card;
+    return {
+      ...card,
+      tuples: card.tuples?.map((t) => {
+        const del = mine.filter((x) => x.tuple === t.tuple);
+        if (!del.length) return t;
+        const out: LeakTuple = { ...t };
+        for (const x of del) {
+          if (x.step2) out.step2 = out.step2?.filter((s) => !(s.f === x.f && s.v === x.v));
+          else if (Object.hasOwn(LEAK_FIELDS, x.f)) out[x.f as LeakField] = out[x.f as LeakField]?.filter((v) => v !== x.v);
+        }
+        return out;
+      }),
+    };
+  });
+}
+
+/** Пометить строки глубокого поиска удалёнными (DeepRow.removed). */
+export function removeDeepRows(rows: DeepRow[], valIds: readonly number[]): DeepRow[] {
+  const ids = new Set(valIds);
+  return rows.map((r) => (ids.has(r.val_id) ? { ...r, removed: true } : r));
+}
+
+/** Удалённое значение простого поиска с тем, что нужно для отмены: место в списке и (второй шаг) по чему найдено. */
+export interface SavedValueRestore extends SavedValueRef {
+  /** Каким по счёту значение стояло в своём поле записи (или в step2). */
+  at: number;
+  by?: string[];
+}
+
+/** Отмена удаления: строки глубокого поиска снова живые, значения простого возвращаются на свои места. */
+export function restoreSavedValues<T>(result: T, back: { valIds?: readonly number[]; values?: readonly SavedValueRestore[] }): T {
+  const res = result as { job?: { leaks?: LeakCard[]; rows?: DeepRow[] } } | null | undefined;
+  if (!res?.job) return result;
+  const job = { ...res.job };
+  if (back.valIds?.length && job.rows) {
+    const ids = new Set(back.valIds);
+    job.rows = job.rows.map((r) => {
+      if (!ids.has(r.val_id) || !r.removed) return r;
+      const { removed: _removed, ...live } = r;
+      return live;
+    });
+  }
+  if (back.values?.length && job.leaks) {
+    const refs = back.values;
+    job.leaks = job.leaks.map((card, i) => {
+      const mine = refs.filter((x) => x.leak === i);
+      if (!mine.length) return card;
+      return {
+        ...card,
+        tuples: card.tuples?.map((t) => {
+          const add = mine.filter((x) => x.tuple === t.tuple);
+          if (!add.length) return t;
+          const out: LeakTuple = { ...t };
+          // По возрастанию места: значения одной записи, удалённые одним ходом, встают в исходном порядке.
+          for (const x of [...add].sort((a, b) => a.at - b.at)) {
+            if (!Object.hasOwn(LEAK_FIELDS, x.f)) continue;
+            const f = x.f as LeakField;
+            if (x.step2) {
+              const list = [...(out.step2 ?? [])];
+              if (!list.some((s) => s.f === f && s.v === x.v)) list.splice(Math.min(x.at, list.length), 0, { f, v: x.v, by: (x.by ?? []) as Step2Value['by'] });
+              out.step2 = list;
+            } else {
+              const list = [...(out[f] ?? [])];
+              if (!list.includes(x.v)) list.splice(Math.min(x.at, list.length), 0, x.v);
+              out[f] = list;
+            }
+          }
+          return out;
+        }),
+      };
+    });
+  }
+  return { ...res, job } as T;
+}
+
+/** Правка сохранённой копии ответа (result.job): удаление строк глубокого поиска и значений простого. */
+export function removeSavedValues<T>(result: T, del: { valIds?: readonly number[]; values?: readonly SavedValueRef[] }): T {
+  const res = result as { job?: { leaks?: LeakCard[]; rows?: DeepRow[] } } | null | undefined;
+  if (!res?.job) return result;
+  const job = { ...res.job };
+  if (del.valIds?.length && job.rows) job.rows = removeDeepRows(job.rows, del.valIds);
+  if (del.values?.length && job.leaks) job.leaks = removeLeakValues(job.leaks, del.values);
+  return { ...res, job } as T;
+}
 
 /**
  * Значение geolocs: «широта, долгота» и необязательный радиус точности в метрах после @

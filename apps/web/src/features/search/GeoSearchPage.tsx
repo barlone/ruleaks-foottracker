@@ -8,7 +8,7 @@ import { errorText } from '../../lib/errors.ts';
 import { t } from '../../lib/i18n.ts';
 import { JobView } from './AttrSearchPage.tsx';
 import { SearchLayout } from './common.tsx';
-import { useRunOnMount, useSearchJob } from './job.ts';
+import { isEditingJob, useRunOnMount, useSearchJob } from './job.ts';
 import { GeoPicker, type GeoConfig, type GeoPoint } from './GeoPicker.tsx';
 import { isShortMapLink, parseMapLink } from './mapLinks.ts';
 
@@ -87,6 +87,15 @@ function GeoSearch({ config }: { config: GeoConfig }) {
     },
   });
   const job = useSearchJob(jobId);
+
+  // Сохранённые данные во весь экран (?full) — как в поиске по атрибутам.
+  const editing = !!jobId && isEditingJob(job.data);
+  const full = !!params.full && editing;
+  const fullStale = !!params.full && (!jobId || (!!job.data && !editing) || !!job.error);
+  useEffect(() => {
+    if (fullStale) void navigate({ search: (prev) => ({ ...prev, full: undefined }), replace: true });
+  }, [fullStale, navigate]);
+  const setFull = (on: boolean) => void navigate({ search: (prev) => ({ ...prev, full: on || undefined }), replace: !on });
 
   const lat = num(latText);
   const lon = num(lonText);
@@ -174,8 +183,9 @@ function GeoSearch({ config }: { config: GeoConfig }) {
       subtitle={t('Выберите точку на карте или введите координаты и задайте радиус области поиска.')}
       activeId={jobId}
       onOpen={setJobId}
+      full={full}
     >
-      <Card className="animate-fade-up">
+      <Card className={full ? 'hidden' : 'animate-fade-up'}>
         <form
           className="space-y-3"
           onSubmit={(e) => {
@@ -255,11 +265,13 @@ function GeoSearch({ config }: { config: GeoConfig }) {
       </Card>
 
       {/* isolate — z-index элементов управления карты не выходят за её пределы и не перекрывают кнопку «наверх». */}
-      <div className="isolate animate-fade-up overflow-hidden rounded-2xl border border-line">
+      <div className={full ? 'hidden' : 'isolate animate-fade-up overflow-hidden rounded-2xl border border-line'}>
         <GeoPicker config={config} point={point} radiusM={radiusM} onPick={pick} focus={focus} className="ft-map h-[480px] w-full" />
       </div>
 
-      {jobId && <JobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onPivot={pivot} />}
+      {jobId && (
+        <JobView job={job.data} loading={job.isLoading} error={job.error ? errorText(job.error) : null} onPivot={pivot} fullscreen={full} onFullscreen={setFull} />
+      )}
 
       <MapLinkDialog
         open={linkOpen}

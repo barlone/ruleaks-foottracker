@@ -324,6 +324,7 @@ export function JobView({
     setUndo(undo.slice(0, -1));
     restore.mutate({ id: job.id, ...move });
   };
+  const selectedKeys = new Set(selected.keys());
   const graphAllowed = editing && job.deep && !!fullscreen;
   const asGraph = graphAllowed && graph;
   /** Удалённое из сохранённых данных значение больше не отмечено для досье. */
@@ -449,6 +450,8 @@ export function JobView({
         <Suspense fallback={<Empty><Spinner /></Empty>}>
           <DeepGraph
             rows={allRows}
+            selected={selectedKeys}
+            onToggle={toggle}
             className="h-[calc(100dvh-6.5rem)] min-h-[420px]"
             onRemove={(list) => {
               const next = new Map(selected);

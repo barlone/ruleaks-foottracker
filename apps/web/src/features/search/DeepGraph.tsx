@@ -5,7 +5,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import clsx from 'clsx';
-import { LayoutGrid, Move, Trash2, X } from 'lucide-react';
+import { Check, LayoutGrid, Move, Trash2, X } from 'lucide-react';
 import { LEAK_FIELDS, attrCopyValue, type DeepRow, type LeakField } from '@ft/shared';
 import { ConfirmDeleteBtn, CopyButton } from '../../components/ui.tsx';
 import { useStore } from '../../lib/store.ts';
@@ -27,13 +27,35 @@ interface GraphCtx {
   /** Кнопки удаления показаны (переключатель в углу). */
   deleting: boolean;
   onRemove?: (rows: DeepRow[]) => void;
+  /** Отмеченные для досье значения (ключи «поле:значение», как в списке) и переключение отметки. */
+  selected: ReadonlySet<string>;
+  onToggle?: (key: string, label: string, value: string) => void;
   collapsed: Set<string>;
   toggleCollapsed: (id: string) => void;
 }
-const Ctx = createContext<GraphCtx>({ all: [], links: new Set(), deleting: false, collapsed: new Set(), toggleCollapsed: () => {} });
+const Ctx = createContext<GraphCtx>({ all: [], links: new Set(), deleting: false, selected: new Set(), collapsed: new Set(), toggleCollapsed: () => {} });
 
 const label = (prm: string) => t(LEAK_FIELDS[prm as LeakField] ?? prm);
 const isUrl = (v: string) => /^https?:\/\/\S+$/i.test(v);
+
+/** Отметка значения для переноса в досье — тот же набор отмеченного, что в списке («Отмеченное в досье»). */
+function Mark({ row, className }: { row: DeepRow; className?: string }) {
+  const g = useContext(Ctx);
+  if (!g.onToggle || row.removed) return null;
+  const checked = g.selected.has(`${row.prm}:${row.val}`);
+  return (
+    <button
+      type="button"
+      // В досье уходит русская подпись атрибута (хранимые данные), как из списка.
+      onClick={() => g.onToggle!(row.prm, LEAK_FIELDS[row.prm as LeakField] ?? row.prm, row.val)}
+      className={clsx('nodrag grid size-3.5 shrink-0 cursor-pointer place-items-center rounded border', checked ? 'border-mint bg-mint text-mint-ink' : 'border-line', className)}
+      title={t('Отметить для досье')}
+      aria-pressed={checked}
+    >
+      {checked && <Check size={10} strokeWidth={3} />}
+    </button>
+  );
+}
 
 /** Точка связи: линии только показывают связи, соединять мышью нечего. */
 const dot = '!size-2 !min-h-0 !min-w-0 !border-0 !bg-mint';
@@ -56,7 +78,7 @@ function CardView({ data }: NodeProps<CardNode>) {
         className={clsx('ft-card-drag cursor-move rounded-xl border border-mint bg-panel px-4 py-3 text-center shadow-glow-sm', r.removed && 'opacity-60')}
         style={{ width: CARD_W }}
       >
-        <div className="font-mono text-[11px] uppercase tracking-wide text-mint">{label(r.prm)}:</div>
+        <div className="flex items-center justify-center gap-2 font-mono text-[11px] uppercase tracking-wide text-mint"><Mark row={r} /> {label(r.prm)}:</div>
         <div className={clsx('mt-1 break-words font-mono text-base font-bold', r.removed && 'line-through')}>{r.val}</div>
         <Handle type="source" position={Position.Right} id={`r${r.val_id}`} isConnectable={false} className={dot} />
       </div>
@@ -111,7 +133,8 @@ function CardView({ data }: NodeProps<CardNode>) {
               </div>
             )}
             <div className={clsx('relative flex items-start gap-2 rounded-md px-1.5 py-1', linked && 'bg-mint/10', r.removed && 'opacity-50')}>
-              <span className="w-[4.75rem] shrink-0 break-words pt-px font-mono text-[10px] uppercase tracking-wide text-mute">{label(r.prm)}:</span>
+              <Mark row={r} className="mt-0.5" />
+              <span className="w-[4.25rem] shrink-0 break-words pt-px font-mono text-[10px] uppercase tracking-wide text-mute">{label(r.prm)}:</span>
               <span className={clsx('nodrag nopan min-w-0 flex-1 cursor-text select-text break-words font-mono text-xs', linked && 'font-bold', r.removed && 'line-through')}>
                 {isUrl(r.val) ? <a href={r.val} target="_blank" rel="noopener noreferrer" className="text-mint hover:underline">{r.val}</a> : r.val}
               </span>
@@ -153,7 +176,13 @@ function toNodes(cards: readonly GraphCard[], prev: readonly CardNode[]): CardNo
   });
 }
 
-export function DeepGraph(props: { rows: readonly DeepRow[]; onRemove?: (rows: DeepRow[]) => void; className?: string }) {
+export function DeepGraph(props: {
+  rows: readonly DeepRow[];
+  onRemove?: (rows: DeepRow[]) => void;
+  selected?: ReadonlySet<string>;
+  onToggle?: (key: string, label: string, value: string) => void;
+  className?: string;
+}) {
   return (
     <ReactFlowProvider>
       <Graph {...props} />
@@ -161,7 +190,9 @@ export function DeepGraph(props: { rows: readonly DeepRow[]; onRemove?: (rows: D
   );
 }
 
-function Graph({ rows, onRemove, className }: Parameters<typeof DeepGraph>[0]) {
+const NONE: ReadonlySet<string> = new Set();
+
+function Graph({ rows, onRemove, selected = NONE, onToggle, className }: Parameters<typeof DeepGraph>[0]) {
   const model = useMemo(() => buildDeepGraph(rows), [rows]);
   const [nodes, setNodes, onNodesChange] = useNodesState<CardNode>(useState(() => toNodes(model.cards, []))[0]);
   useEffect(() => {
@@ -180,6 +211,8 @@ function Graph({ rows, onRemove, className }: Parameters<typeof DeepGraph>[0]) {
     links: model.links,
     deleting,
     onRemove,
+    selected,
+    onToggle,
     collapsed,
     toggleCollapsed: (id) => setCollapsed((prev) => {
       const next = new Set(prev);
@@ -187,7 +220,7 @@ function Graph({ rows, onRemove, className }: Parameters<typeof DeepGraph>[0]) {
       else next.add(id);
       return next;
     }),
-  }), [rows, model, deleting, onRemove, collapsed]);
+  }), [rows, model, deleting, onRemove, selected, onToggle, collapsed]);
   const rf = useReactFlow();
   const colorMode = useStore(theme);
 

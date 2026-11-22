@@ -1,10 +1,10 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ArrowLeft, Check, Expand, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, List, ListChecks, Network, Save, Search as SearchIcon, SearchCheck, ShieldCheck, Undo2, Zap } from 'lucide-react';
+import { ArrowLeft, Check, Expand, ChevronDown, ChevronUp, CornerDownRight, FileSpreadsheet, FileText, Filter, Layers, List, ListChecks, MapPin, Network, Save, Search as SearchIcon, SearchCheck, ShieldCheck, Undo2, Zap } from 'lucide-react';
 import {
   FIELD_TO_KIND, SCANS_FIELD, STEP2_FIELDS, STEP2_KINDS, STEP2_MAX_SEARCHES, STEP2_SOURCES, attrCopyValue, attrDisplayValue, deepField, parseGeoloc, LEAK_FIELDS, SEARCH_KINDS, detectKinds,
-  isUkrainianPhone, leakLive, removeSavedValues, restoreSavedValues, step2ByText, step2Summary, tupleLive, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type SavedValueRestore, type Step2Info,
+  isUkrainianPhone, leakLive, parseNameQuery, withNameAddr, removeSavedValues, restoreSavedValues, step2ByText, step2Summary, tupleLive, type DeepRow, type LeakCard, type LeakField, type LeakTuple, type SavedValueRestore, type Step2Info,
 } from '@ft/shared';
 import { Button, Card, ConfirmDeleteBtn, CopyButton, Empty, Input, Select, Spinner, Tag } from '../../components/ui.tsx';
 import { trpc, type RouterOutputs } from '../../lib/trpc.ts';
@@ -47,6 +47,9 @@ export function AttrSearchPage() {
   const selectValue = kind === 'auto' || autoPick ? (effectiveKind ? `auto:${effectiveKind}` : 'auto') : kind;
   const kindInfo = SEARCH_KINDS.find((k) => k.id === effectiveKind);
   const label = (id: string) => t(SEARCH_KINDS.find((k) => k.id === id)?.label ?? id);
+  // Поиск по ФИО: уточнение по адресу живёт в самом запросе хвостом «+адрес:слово» (так он попадает в адрес
+  // страницы и в историю), а отдельное поле под строкой поиска — его отображение.
+  const nameQuery = effectiveKind === 'name' && value.trim() ? parseNameQuery(value) : null;
 
   const start = trpc.search.start.useMutation({
     onSuccess: (j) => {
@@ -69,6 +72,7 @@ export function AttrSearchPage() {
 
   function run(k = effectiveKind, v = value, d = deep) {
     if (!k || !v.trim()) return;
+    if (k === 'name' && parseNameQuery(v).problem) return;
     void navigate({ search: { kind: k, q: v, deep: d } });
     start.mutate({
       section: 'attr', kind: k, value: v.trim(), deep: d && !step2,
@@ -135,10 +139,30 @@ export function AttrSearchPage() {
                   <option key={k.id} value={k.id}>{t(k.label)}</option>
                 ))}
               </Select>
-              <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !effectiveKind || !value.trim() || noStep2Fields || start.isPending}>
+              <Button type="submit" variant="primary" className="h-12 px-6" disabled={disabled || !effectiveKind || !value.trim() || noStep2Fields || !!nameQuery?.problem || start.isPending}>
                 {start.isPending ? <Spinner className="border-mint-ink/30 border-t-mint-ink" /> : t('Искать')}
               </Button>
             </div>
+            {effectiveKind === 'name' && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-3 max-md:flex-col max-md:items-stretch">
+                  <label className="flex shrink-0 items-center gap-2 text-sm text-dim" htmlFor="name-addr">
+                    <MapPin size={14} className="text-mint" /> {t('Уточнение по адресу')}
+                  </label>
+                  <Input
+                    id="name-addr"
+                    value={nameQuery?.refined ? value.trimStart().slice(nameQuery.base.length).replace(/^\s*\+[^:]*:?\s*/, '') : ''}
+                    onChange={(e) => setValue(withNameAddr(nameQuery?.base ?? value, e.target.value))}
+                    placeholder={t('одно слово: город или улица — Курган')}
+                    className="h-9 font-mono md:w-80"
+                    disabled={disabled}
+                  />
+                </div>
+                <div className="text-xs text-dim">
+                  {t('ФИО можно с инициалами — «Иванов И* И* 01.02.1990» (один инициал — только с полной датой); в дате «*» вместо неизвестной части. С уточнением по адресу и полной датой рождения ФИО можно не указывать.')}
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <label className={clsx('flex cursor-pointer items-center gap-2', !kindInfo?.deep && 'opacity-40')}>
                 <input
@@ -174,6 +198,7 @@ export function AttrSearchPage() {
               {(kind === 'auto' || autoPick) && value.trim() && !detected.length && (
                 <Tag tone="warn">{isUkrainianPhone(value) ? t('поиск только по номерам РФ') : t('тип не распознан — выберите вручную')}</Tag>
               )}
+              {nameQuery?.problem && <Tag tone="warn">{t(nameQuery.problem)}</Tag>}
               {start.error && <Tag tone="danger">{errorText(start.error)}</Tag>}
             </div>
             {step2 && (
@@ -305,7 +330,9 @@ export function JobView({
   const status = <JobStatus job={job} loading={loading} error={error} />;
   if (!job || job.state !== 'done') return status;
 
-  const res = job.result as { job?: { leaks?: LeakCard[]; rows?: DeepRow[] } } | null;
+  const res = job.result as { job?: { leaks?: LeakCard[]; rows?: DeepRow[]; truncated?: boolean; truncated_by?: string } } | null;
+  // Тяжёлый поиск по ФИО шлюз обрывает по числу записей или по времени и говорит об этом в ответе.
+  const truncated = res?.job?.truncated ? (res.job.truncated_by === 'time' ? 'time' : 'limit') : null;
   const leaks = res?.job?.leaks ?? [];
   // После правок сохранённых данных утечка может опустеть: она остаётся в leaks (номера не сдвигаются), но не считается.
   const liveLeaks = leaks.filter(leakLive).length;
@@ -377,6 +404,13 @@ export function JobView({
       {job.params.via && (
         <div className="font-mono text-xs text-dim">
           {tj('Telegram ID {id} · найден по {via}', { id: <span className="text-mint">{job.params.tgid}</span>, via: tx(job.params.via) })}
+        </div>
+      )}
+      {truncated && (
+        <div className="rounded border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
+          {truncated === 'time'
+            ? t('Показаны не все записи: поиск остановлен по времени. Уточните запрос — добавьте имя, отчество, дату рождения или адрес.')
+            : t('Показаны не все записи: найдено больше, чем отдаёт поиск. Уточните запрос — добавьте имя, отчество, дату рождения или адрес.')}
         </div>
       )}
       {step2 && (

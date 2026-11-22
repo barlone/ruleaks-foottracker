@@ -258,6 +258,16 @@ the `@ft/shared` catalogs, resolves a Telegram user from ID / @nick (`search_ids
 `choose`) / phone (raw phone search → first `tgids`), and stores each job as a snapshot (`SearchJob`, with per-section
 history and `clearHistory`). The gateway keeps results only minutes, hence snapshots.
 
+Name search (`name` kind, `parseNameQuery` in `@ft/shared` `search.ts` — the rules of the gateway's
+`partNameBDayParams`): up to three name parts, an initial is one letter (`И`, `И.`, `И*`), `*` in the date or instead
+of the 2nd/3rd part = not given. A single initial needs a full date of birth (gateway ≥ 1.40), without it only
+«surname + both initials». The address refinement is the query tail `+адрес:слово` (one word, as in the bot's
+`name_refinement.py`; the «Уточнение по адресу» field under the search line is a view of that tail) → param `addrpart`
+and the path `raw_search.bypartname_bday_addr` (`rawSearchPath`); with it and a full date the name may be left out.
+`nameQueryProblem` gives the Russian refusal for the page (tag + disabled button) and for `planAttr` (`BAD_REQUEST`) —
+the gateway's own refusal is English. A cut answer (`job.truncated`, `truncated_by`: `limit` | `time`) shows a warning
+above the result.
+
 Gateway contract that `HttpGateway` reproduces (see the gateway's CLAUDE.md and the bot's `client.py`/`overload.py`):
 `Authorization` is the user's raw UUID token (no "Bearer"); business errors come as HTTP 200 `{"error":{"code","text"}}`
 (5 overload → retry ≤10 s, 6 DB maintenance, 8 job result expired), 401 = token rejected, 503 = tokens DB down; slow

@@ -7,6 +7,11 @@ const en: Record<string, string> = {
   'Авто': 'Auto',
   'Авто: {kind}': 'Auto: {kind}',
   'Глубокий поиск со связями': 'Deep search with links',
+  'Уточнение по адресу': 'Address refinement',
+  'одно слово: город или улица — Курган': 'one word: a city or a street — Курган',
+  'ФИО можно с инициалами — «Иванов И* И* 01.02.1990» (один инициал — только с полной датой); в дате «*» вместо неизвестной части. С уточнением по адресу и полной датой рождения ФИО можно не указывать.': 'Initials are accepted — “Иванов И* И* 01.02.1990” (a single initial only with a full date); in the date “*” stands for an unknown part. With an address refinement and a full date of birth the name may be left out.',
+  'Показаны не все записи: поиск остановлен по времени. Уточните запрос — добавьте имя, отчество, дату рождения или адрес.': 'Not all records are shown: the search was stopped by its time limit. Narrow the query — add a first name, patronymic, date of birth or address.',
+  'Показаны не все записи: найдено больше, чем отдаёт поиск. Уточните запрос — добавьте имя, отчество, дату рождения или адрес.': 'Not all records are shown: more were found than the search returns. Narrow the query — add a first name, patronymic, date of birth or address.',
   'После обычного поиска — простые поиски по найденным атрибутам ({kinds}; до {max} поисков); из их записей добавляются отмеченные атрибуты с пометкой ²':
     'After the regular search, simple searches by the found attributes ({kinds}; up to {max} searches); the selected attributes from their records are added, marked ²',
   'Дополнительный поиск вторым шагом': 'Additional second-step search',

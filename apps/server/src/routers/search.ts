@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   FUZZY_MODE_IDS, GEO_RADIUS_MAX_M, GEO_RADIUS_PATH, SEARCH_KINDS, STEP2_FIELDS, STEP2_KINDS, SearchSectionSchema, TG_MODE_IDS,
-  checkFulltext, checkMask, detectKind, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, removeSavedValues, restoreSavedValues, searchParams,
+  checkFulltext, checkMask, detectKind, nameQueryProblem, rawSearchPath, geoQuery, findFuzzyMode, findKind, findTgMode, normalizePlateMask, parseTgUser, removeSavedValues, restoreSavedValues, searchParams,
   AttrPdfRequest, AttrXlsxRequest, TgPdfRequest, type LeakCard, type SearchJob, type SearchSection,
 } from '@ft/shared';
 import { appConfig } from '../config.ts';
@@ -90,6 +90,9 @@ function planAttr(input: Extract<StartInput, { section: 'attr' }>): Plan {
   const kind = findKind(input.kind);
   if (!kind) throw new TRPCError({ code: 'BAD_REQUEST', message: 'UNKNOWN_KIND' });
   const deep = input.deep && !!kind.deep;
+  // ФИО: правила шлюза (инициалы, уточнение по адресу) проверяются здесь — его отказ пришёл бы по-английски.
+  const bad = kind.id === 'name' ? nameQueryProblem(input.value) : null;
+  if (bad) throw new TRPCError({ code: 'BAD_REQUEST', message: bad });
   const extra: Record<string, string> = {};
   // Второй шаг — только после простого поиска; отобранные атрибуты хранятся в params снимка.
   if (input.step2 && !deep) {
@@ -101,7 +104,7 @@ function planAttr(input: Extract<StartInput, { section: 'attr' }>): Plan {
     extra.step2by = by.join(',');
   }
   // Значение нормализуется и раскладывается по параметрам, как в боте (ФИО → name1..3 + day/month/year).
-  return { path: deep ? kind.deep! : kind.raw, params: searchParams(kind, input.value), service: 'ruleaks', kind: kind.id, deep, extra };
+  return { path: deep ? kind.deep! : rawSearchPath(kind, input.value), params: searchParams(kind, input.value), service: 'ruleaks', kind: kind.id, deep, extra };
 }
 
 function planFuzzy(input: Extract<StartInput, { section: 'fuzzy' }>): Plan {

@@ -67,7 +67,15 @@ const en: Record<string, string> = {
   // packages/shared/src/search.ts — SEARCH_KINDS
   'ФИО (+ дата рождения)': 'Full name (+ date of birth)',
   // Примеры ввода: данные в базе по-русски, кириллица нужна и в запросе.
-  'Иванов Иван Иванович 01.02.1990': 'Иванов Иван Иванович 01.02.1990',
+  'Иванов Иван Иванович 01.02.1990 · Иванов И* И* 01.02.1990': 'Иванов Иван Иванович 01.02.1990 · Иванов И* И* 01.02.1990',
+  // Поиск по ФИО: почему запрос не годится (parseNameQuery; приходит и с сервера)
+  'Уточнение по адресу пишется в конце запроса как «+адрес:слово», например «Иванов Иван 12.01.1998 +адрес:Курган»': 'The address refinement goes at the end of the query as “+адрес:word”, e.g. “Иванов Иван 12.01.1998 +адрес:Курган”',
+  'Уточнение по адресу — одно слово из адреса (город, улица), не короче двух букв или цифр': 'The address refinement is one word of the address (city, street), at least two letters or digits',
+  'В ФИО — только буквы и дефис, не больше трёх частей; инициал — одна буква («И», «И.» или «И*»)': 'A name takes only letters and a hyphen, three parts at most; an initial is one letter (“И”, “И.” or “И*”)',
+  'Без ФИО ищем только по полной дате рождения с уточнением по адресу': 'Without a name the search needs a full date of birth and an address refinement',
+  'Инициалы — только рядом с частью ФИО из трёх и более букв': 'Initials need a name part of three or more letters next to them',
+  'Один инициал — только с полной датой рождения; без неё — фамилия и оба инициала': 'A single initial needs a full date of birth; without it give the surname and both initials',
+  'Первая часть ФИО обязательна — «*» можно ставить только вместо второй и третьей': 'The first name part is required — “*” may replace only the second and the third',
   'А123ВС777': 'А123ВС777',
   'Х-136096': 'Х-136096',
   'I-МЮ123456': 'I-МЮ123456',

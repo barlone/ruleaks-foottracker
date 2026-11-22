@@ -22,7 +22,7 @@ const rl = (p: string) => `/ruleaks/v1/${p}`;
 export const SEARCH_KINDS = [
   { id: 'phone', label: 'Телефон', param: 'phone', raw: rl('raw_search.byphone'), deep: rl('deep_search.byphone'), placeholder: '+7 916 123-45-67' },
   { id: 'email', label: 'Email', param: 'email', raw: rl('raw_search.byemail'), deep: rl('deep_search.byemail'), placeholder: 'user@mail.ru' },
-  { id: 'name', label: 'ФИО (+ дата рождения)', param: 'name1', raw: rl('raw_search.bypartname_bday'), deep: null, placeholder: 'Иванов Иван Иванович 01.02.1990' },
+  { id: 'name', label: 'ФИО (+ дата рождения)', param: 'name1', raw: rl('raw_search.bypartname_bday'), deep: null, placeholder: 'Иванов Иван Иванович 01.02.1990 · Иванов И* И* 01.02.1990' },
   { id: 'tgid', label: 'Telegram ID', param: 'tgid', raw: rl('raw_search.bytgid'), deep: rl('deep_search.bytgid'), placeholder: '123456789' },
   { id: 'inn', label: 'ИНН', param: 'inn', raw: rl('raw_search.byinn'), deep: rl('deep_search.byinn'), placeholder: '771234567890' },
   { id: 'snils', label: 'СНИЛС', param: 'snils', raw: rl('raw_search.bysnils'), deep: rl('deep_search.bysnils'), placeholder: '123-456-789 01' },
@@ -74,12 +74,6 @@ const RE = {
   // Ссылки на соцсети без схемы — удобство сайта (в боте только http(s)://).
   linkBare: /^(www\.)?(vk\.com|ok\.ru|t\.me|instagram\.com|facebook\.com)\/\S+/i,
   ip: /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/,
-  // ФИО (фамилия 2+ буквы, имя и отчество могут быть инициалами) с датой рождения или без.
-  name: new RegExp(
-    String.raw`^(?:([А-Яа-яЁё]{2,})(?:\s+([А-Яа-яЁё]+)){1,2}|([А-Яа-яЁё]{2,}))\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)$|` + // i18n-ignore: регулярка
-      String.raw`^([А-Яа-яЁё]{2,})\s+([А-Яа-яЁё]+)(?:\s+([А-Яа-яЁё]+))?$|` + // i18n-ignore: регулярка
-      String.raw`^([А-Яа-яЁё]{2,})\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)$`, // i18n-ignore: регулярка
-  ),
   addr: /^(?=(?:\S+\s+){2,5}\S+$)(?:[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)?\s+){2,3}(?:д(?:ом)?\.?\s*)?\d+[А-Яа-яЁё]?(?:\s+(?:кв(?:артира)?\.?\s*)?\d+)?$/i,
   orgnn: /^\d{10}$/,
 };
@@ -107,11 +101,110 @@ function cardOk(s: string): boolean {
   return sum % 10 === 0;
 }
 
-/** «Иванов И.А. 01.02.1990» → «Иванов И А 01.02.1990» (normalize_name бота): инициалы — отдельные буквы. */
+// --- Поиск по ФИО: инициалы, дата рождения, уточнение по адресу (шлюз 1.40–1.41) ---
+// «Иванов Иван Иванович 01.02.1990», «Иванов И* И* 01.02.1990», «Иванов И.И.», «Иванов *.02.1990»,
+// «Иванов Иван +адрес:Курган», «01.02.1990 +адрес:Курган». Уточнение — хвост «+ключ:значение», как в боте
+// (app/core/name_refinement.py); с ним запрос идёт в raw_search.bypartname_bday_addr.
+
+const NAME_DATE_RE = /(?:^|[\s.,])((?:\d{2}|\*)[.\-/](?:\d{2}|\*)[.\-/](?:\d{4}|\*))$/;
+/** «+» перед буквой — начало уточнения («+7900…» — телефон, не уточнение). */
+const NAME_REFINE_RE = /(?:^|\s)\+(?=\p{L})/u;
+const NAME_ADDR_KEYS = ['адрес', 'addr', 'address']; // i18n-ignore: ключи уточнения
+const NAME_PART_RE = /^[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)*$/; // i18n-ignore: регулярка
+const letters = (s: string) => s.replace(/[^\p{L}\p{N}]/gu, '').length;
+
+const NAME_PROBLEMS = {
+  refine: 'Уточнение по адресу пишется в конце запроса как «+адрес:слово», например «Иванов Иван 12.01.1998 +адрес:Курган»',
+  addr: 'Уточнение по адресу — одно слово из адреса (город, улица), не короче двух букв или цифр',
+  chars: 'В ФИО — только буквы и дефис, не больше трёх частей; инициал — одна буква («И», «И.» или «И*»)',
+  noName: 'Без ФИО ищем только по полной дате рождения с уточнением по адресу',
+  initials: 'Инициалы — только рядом с частью ФИО из трёх и более букв',
+  oneInitial: 'Один инициал — только с полной датой рождения; без неё — фамилия и оба инициала',
+  first: 'Первая часть ФИО обязательна — «*» можно ставить только вместо второй и третьей',
+} as const;
+
+export interface NameQuery {
+  /** Части ФИО, до трёх: слово, инициал (одна буква) или «*» — часть не задана. */
+  names: string[];
+  /** Дата рождения как введена: день, месяц, год; «*» — часть не задана. */
+  date: { day: string; month: string; year: string } | null;
+  /** Уточнение по адресу — одно слово в верхнем регистре; null — уточнения нет. */
+  addr: string | null;
+  /** Запрос без уточнения, как введён. */
+  base: string;
+  /** В запросе есть хвост «+…» (пусть и с ошибкой). */
+  refined: boolean;
+  /** Почему по такому запросу искать нельзя (текст для пользователя); null — можно. */
+  problem: string | null;
+}
+
+/** Разбор запроса поиска по ФИО. Правила — как у шлюза (partNameBDayParams, checkPartNameInitials). */
+export function parseNameQuery(raw: string): NameQuery {
+  const v = raw.trim();
+  const at = v.search(NAME_REFINE_RE);
+  const base = (at < 0 ? v : v.slice(0, at)).trim();
+  let addr: string | null = null;
+  let problem: string | null = null;
+  if (at >= 0) {
+    const tail = v.slice(at).trim().slice(1);
+    const colon = tail.indexOf(':');
+    const value = colon < 0 ? '' : tail.slice(colon + 1).trim();
+    if (colon < 0 || !NAME_ADDR_KEYS.includes(tail.slice(0, colon).trim().toLowerCase())) problem = NAME_PROBLEMS.refine;
+    else if (!/^[\p{L}\p{N}\-./,]+$/u.test(value) || letters(value) < 2) problem = NAME_PROBLEMS.addr;
+    else addr = value.toUpperCase().replace(/Ё/g, 'Е'); // i18n-ignore: буквы
+  }
+  const dm = NAME_DATE_RE.exec(base);
+  const dp = dm ? dm[1]!.split(/[.\-/]/) : null;
+  const date = dp ? { day: dp[0]!, month: dp[1]!, year: dp[2]! } : null;
+  const namePart = dm ? base.slice(0, dm.index) : base;
+  // «И*И*» — два инициала без пробела.
+  const tokens = namePart.replace(/\*(?=\p{L})/gu, '* ').split(/[\s.,]+/).filter(Boolean);
+  // «И*» — инициал: звёздочка после одной буквы, как у шлюза.
+  const names = tokens.map((w) => (/^[А-Яа-яЁё]\*$/.test(w) ? w[0]! : w)); // i18n-ignore: регулярка
+  const fullDate = !!date && date.day !== '*' && date.month !== '*' && date.year !== '*';
+  if (!problem) {
+    const given = names.filter((w) => w !== '*');
+    const initials = given.filter((w) => letters(w) === 1).length;
+    const long = given.filter((w) => letters(w) > 2).length;
+    if (names.length > 3 || given.some((w) => !NAME_PART_RE.test(w))) problem = NAME_PROBLEMS.chars;
+    else if (!given.length) problem = fullDate && addr ? null : NAME_PROBLEMS.noName;
+    else if (names[0] === '*') problem = NAME_PROBLEMS.first;
+    else if (initials && !long) problem = NAME_PROBLEMS.initials;
+    else if (initials && !fullDate && !(initials === 2 && long === 1)) problem = NAME_PROBLEMS.oneInitial;
+  }
+  return { names, date, addr, base, refined: at >= 0, problem };
+}
+
+/** Почему запрос по ФИО не годится (русский текст) или null. */
+export function nameQueryProblem(raw: string): string | null {
+  return parseNameQuery(raw).problem;
+}
+
+/** Запрос по ФИО с уточнением по адресу (пустое уточнение — без хвоста). */
+export function withNameAddr(base: string, addr: string): string {
+  const a = addr.trimStart();
+  return a ? `${base.trim()} +адрес:${a}`.trimStart() : base.trim(); // i18n-ignore: ключ уточнения
+}
+
+/** Похоже ли введённое на запрос по ФИО (для автоопределения): ошибка в правилах шлюза — всё равно «похоже». */
+function looksLikeName(raw: string): boolean {
+  const q = parseNameQuery(raw);
+  if (q.names.length > 3 || q.names.some((w) => w !== '*' && !NAME_PART_RE.test(w))) return false;
+  if (!q.names.length) return !!q.date || q.refined;
+  // Фамилия — первой и не инициалом: одиночная буква с цифрами — это номер, а не ФИО.
+  if (letters(q.names[0]!) < 2) return false;
+  return q.names.length > 1 || !!q.date || q.refined;
+}
+
+/**
+ * «Иванов И.А. 01.02.1990» → «Иванов И А 01.02.1990» (normalize_name бота): инициалы — отдельные буквы,
+ * уточнение по адресу — в верхнем регистре. Запрос, который не разобрать, остаётся как есть.
+ */
 function normalizeName(v: string): string {
-  const m = /^(.*?)[\s.,]*((?:\d{2}|\*)[.\-/](?:\d{2}|\*)[.\-/](?:\d{4}|\*))\s*$/.exec(v.trim());
-  const [namePart, date] = m ? [m[1]!, m[2]!] : [v, ''];
-  return `${namePart.replace(/[\s.,]+/g, ' ').trim()} ${date}`.trim();
+  const q = parseNameQuery(v);
+  const date = q.date ? `${q.date.day}.${q.date.month}.${q.date.year}` : '';
+  const out = [...q.names, date].filter(Boolean).join(' ');
+  return q.refined ? (q.addr ? withNameAddr(out, q.addr) : `${out} ${v.trim().slice(v.trim().search(NAME_REFINE_RE)).trim()}`.trim()) : out;
 }
 
 /** Все подходящие виды поиска в порядке проверки бота (InputDetector.detect). */
@@ -137,7 +230,7 @@ function detectAll(raw: string): SearchKindId[] {
   add('milpn', RE.milpn.test(v));
   add('link', RE.link.test(v) || RE.linkBare.test(v));
   add('ip', RE.ip.test(v));
-  add('name', RE.name.test(normalizeName(v)));
+  add('name', looksLikeName(t));
   add('orgnn', RE.orgnn.test(v));
   add('addr', RE.addr.test(v));
   return out;
@@ -267,22 +360,23 @@ const ADDR_PARTS = 6;
 
 /**
  * Параметры запроса к шлюзу для вида поиска (_build_payload бота).
- * ФИО: «Иванов Иван Иванович 03.09.1980» → name1..name3 + day, month, year; недостающее — «*».
+ * ФИО: «Иванов Иван Иванович 03.09.1980» → name1..name3 + day, month, year; недостающее — «*»;
+ * уточнение «+адрес:Курган» → addrpart (и другой путь — rawSearchPath).
  * Адрес: первые шесть слов → addr1..addr6, недостающие — пустые.
  * Остальные виды — одно значение в параметре kind.param.
  */
 export function searchParams(kind: SearchKind, raw: string): Record<string, string> {
   const value = normalizeQuery(kind.id, raw);
   if (kind.id === 'name') {
-    const date = /\s+(\d{2}|\*)[.\-/](\d{2}|\*)[.\-/](\d{4}|\*)\s*$/.exec(value);
-    const names = (date ? value.slice(0, date.index) : value).trim().split(/\s+/).filter(Boolean);
+    const q = parseNameQuery(value);
     return {
-      name1: names[0] ?? '*',
-      name2: names[1] ?? '*',
-      name3: names[2] ?? '*',
-      day: date?.[1] ?? '*',
-      month: date?.[2] ?? '*',
-      year: date?.[3] ?? '*',
+      name1: q.names[0] ?? '*',
+      name2: q.names[1] ?? '*',
+      name3: q.names[2] ?? '*',
+      day: q.date?.day ?? '*',
+      month: q.date?.month ?? '*',
+      year: q.date?.year ?? '*',
+      ...(q.addr ? { addrpart: q.addr } : {}),
     };
   }
   if (kind.id === 'addr') {
@@ -290,6 +384,13 @@ export function searchParams(kind: SearchKind, raw: string): Record<string, stri
     return Object.fromEntries(Array.from({ length: ADDR_PARTS }, (_, i) => [`addr${i + 1}`, parts[i] ?? '']));
   }
   return { [kind.param]: value };
+}
+
+const NAME_ADDR_PATH = rl('raw_search.bypartname_bday_addr');
+
+/** Путь простого поиска: у ФИО с уточнением по адресу — свой эндпоинт шлюза. */
+export function rawSearchPath(kind: SearchKind, raw: string): string {
+  return kind.id === 'name' && parseNameQuery(raw).addr ? NAME_ADDR_PATH : kind.raw;
 }
 
 /** Украинский мобильный (+380…): бэкенд ищет только по номерам РФ (is_ukrainian_phone бота). */

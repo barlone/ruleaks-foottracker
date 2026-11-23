@@ -71,7 +71,7 @@ export const Access = z.object({
 export const Theme = z.enum(['dark', 'light']);
 
 /** Язык интерфейса (apps/web/src/lib/i18n.ts). Отчёты PDF/Excel и сами данные не переводятся. */
-export const Lang = z.enum(['ru', 'en']);
+export const Lang = z.enum(['ru', 'en', 'uk']);
 
 /** Новая настройка = поле здесь + значение в DEFAULT_USER_SETTINGS. */
 export const UserSettings = z.object({

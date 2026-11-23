@@ -1,7 +1,7 @@
 import { fmtBytes as fmtBytesRu } from '@ft/shared';
 import { currentLang, locale, t } from './i18n.ts';
 
-/** Размер файла: «1,2 МБ» / «1.2 MB» (fmtBytes из @ft/shared — только русский, его же зовут отчёты сервера). */
+/** Размер файла: «1,2 МБ» / «1.2 MB» (fmtBytes из @ft/shared — русский, его же зовут отчёты сервера; у украинского те же МБ / КБ / Б). */
 export function fmtBytes(n: number): string {
   if (currentLang() !== 'en') return fmtBytesRu(n);
   if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1).replace('.0', '')} MB`;

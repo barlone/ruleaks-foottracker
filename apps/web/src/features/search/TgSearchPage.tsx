@@ -19,10 +19,16 @@ import { ckey, commentToPost } from './tgPosts.ts';
 
 type Job = RouterOutputs['search']['job'];
 
-/** Запрос словами из checkFulltext (НЕ / И / ИЛИ между словами запроса) — по-английски NOT / AND / OR. */
+/** Запрос словами из checkFulltext (НЕ / И / ИЛИ между словами) на языке интерфейса: [НЕ, И, ИЛИ]. */
+const EXPLAIN_WORDS: Partial<Record<ReturnType<typeof currentLang>, [string, string, string]>> = {
+  en: ['NOT ', ' AND ', ' OR '],
+  uk: ['НЕ ', ' І ', ' АБО '], // i18n-ignore
+};
+
 function explainText(s: string): string {
-  if (currentLang() !== 'en') return s;
-  return s.replace(/(^|[\s(])НЕ /g, '$1NOT ').replaceAll(' ИЛИ ', ' OR ').replaceAll(' И ', ' AND '); // i18n-ignore
+  const w = EXPLAIN_WORDS[currentLang()];
+  if (!w) return s;
+  return s.replace(/(^|[\s(])НЕ /g, `$1${w[0]}`).replaceAll(' ИЛИ ', w[2]).replaceAll(' И ', w[1]); // i18n-ignore
 }
 
 /** «Поиск в Telegram» — /tgsearch бота. */

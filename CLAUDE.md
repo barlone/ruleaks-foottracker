@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **RuLeaks.Следопыт** — a Russian-language HUMINT/OSINT web workbench: search through the RuLeaks API, dossiers on
 persons/groups, and investigations (relationship graph, facts, hypotheses). Login is only via the RuLeaks Telegram
 bot and access follows the bot's subscription. User-facing strings are written in Russian (the default
-interface language) and translated to English by a dictionary (see «Interface language» below); code comments are mostly Russian.
+interface language) and translated to Ukrainian and English by dictionaries (see «Interface language» below); code comments are mostly Russian.
 Design rationale lives in `ARCHITECTURE.md` (keep it in sync when an architectural decision changes).
 
 Related projects (separate repos, read them when integrating):
@@ -662,11 +662,13 @@ rechecked every 5 min while absent, so the query works on a bot DB without the m
   files go through `components/SquareCropDialog.tsx` (pan + zoom, Telegram-avatar style). Not drawn in the PDF graph.
 - Person glyphs (`features/dossiers/glyphs.ts`) are ordinary `PHOTO_ALBUM` media items with an SVG data URL, also set as the
   cover: nothing else has to know about them, but anything that counts or lists photos must skip them with `glyphOf`.
-- Interface language (`settings.lang`, `ru` default | `en`): gettext-style `lib/i18n.ts` — the key is the Russian text
-  itself, English is `src/i18n/en/*.ts` (a lazy chunk). Every user-visible string goes through `t('… {x} …', { x })`,
+- Interface language (`settings.lang`, `ru` default | `uk` | `en`): gettext-style `lib/i18n.ts` — the key is the Russian
+  text itself, each other language has a dictionary `src/i18n/<lang>/*.ts` (a lazy chunk each; `en` is the reference key
+  set, `uk` must have the same parts and keys, plural values with three forms like Russian). A new UI string needs an
+  entry in every dictionary. Every user-visible string goes through `t('… {x} …', { x })`,
   `tn(n, 'form1|form2|form5')`, `tj()` (with elements), `tc(context, ru)` (a word whose English depends on the place —
   key `context::ru`) or `tx()` (text that came from the server — it answers in
-  Russian; dictionary keys with `{name}` act as patterns, collected in `en/server.ts`). Never call `t()` at module
+  Russian; dictionary keys with `{name}` act as patterns, collected in `<lang>/server.ts`). Never call `t()` at module
   scope: tables stay Russian and are translated where shown (`t(item.label)`); a language change remounts the tree
   under `Root`. Dates/numbers use `locale()`, not `'ru-RU'`. Data (leak values, user text, stored names the code
   compares with) is not translated; PDF/XLSX reports are Russian only. `npm run i18n-check` must pass (mark non-UI

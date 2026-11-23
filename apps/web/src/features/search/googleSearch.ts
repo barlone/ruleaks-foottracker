@@ -50,4 +50,4 @@ export function sizeText(bytes: number): string {
  * Название вида поиска (GOOGLE_MODES label) внутри фразы: «Поиск по Google: по gaia id». По-русски строчными, как
  * раньше; по-английски как есть («Google search: By Gaia ID») — строчные портят имена (Google Drive, Wi-Fi).
  */
-export const modeInline = (label: string) => (currentLang() === 'ru' ? t(label).toLowerCase() : t(label));
+export const modeInline = (label: string) => (currentLang() === 'en' ? t(label) : t(label).toLowerCase());

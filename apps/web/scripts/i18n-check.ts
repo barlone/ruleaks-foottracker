@@ -1,12 +1,15 @@
 // Проверка перевода интерфейса (npm run i18n-check [-- <часть пути> ...]).
 //
 // Ищет русский текст в коде веба (apps/web/src) и @ft/shared и сообщает:
-//   missing   — строки нет в английском словаре (src/i18n/en);
+//   missing   — строки нет в английском словаре (src/i18n/en — эталон набора ключей для остальных языков);
 //   unwrap    — веб: строка внутри функции или в JSX-атрибуте не передана в t()/tn()/tj()/tx();
 //   jsx-text  — веб: русский текст прямо в JSX (нужно {t('…')});
 //   template  — веб: русский текст в шаблонной строке `…${x}…` (нужно t('… {x} …', { x }));
 //   params    — подстановки {name} в переводе не совпадают с ключом;
-//   conflict  — один ключ переведён по-разному в разных частях словаря.
+//   conflict  — один ключ переведён по-разному в разных частях словаря;
+//   absent    — в словаре другого языка (src/i18n/uk) нет ключа, который есть в той же части en;
+//   extra     — в словаре другого языка ключ, которого нет в той же части en (устарел или опечатка);
+//   forms     — у перевода с числом (tn) не столько форм через «|», сколько нужно языку.
 // Строки таблиц на уровне модуля (подписи, варианты) переводятся там, где показываются, — t(item.label);
 // для них проверяется только наличие в словаре. Шаблоны в @ft/shared должны быть в словаре шаблоном
 // ('Найдено {n}' для `Найдено ${n}`). Не текст интерфейса (данные, сравнения, регулярки) — комментарий
@@ -19,10 +22,13 @@ import { fileURLToPath } from 'node:url';
 import { parseSync } from 'rolldown/utils';
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
-const { EN, PARTS } = (await import('../src/i18n/en/index.ts')) as {
-  EN: Record<string, string>;
-  PARTS: Record<string, Record<string, string>>;
-};
+type Parts = Record<string, Record<string, string>>;
+const { EN, PARTS } = (await import('../src/i18n/en/index.ts')) as { EN: Record<string, string>; PARTS: Parts };
+/** Словари всех языков, кроме русского (en — эталон набора ключей), и число форм у перевода с числом. Новый язык — строка здесь. */
+const LANGS: { lang: string; parts: Parts; forms: number }[] = [
+  { lang: 'en', parts: PARTS, forms: 2 },
+  { lang: 'uk', parts: ((await import('../src/i18n/uk/index.ts')) as { PARTS: Parts }).PARTS, forms: 3 },
+];
 
 const CYR = /[А-Яа-яЁё]/;
 const T_ARG: Record<string, number> = { t: 0, tj: 0, tx: 0, tn: 1, tc: 1 };
@@ -45,21 +51,39 @@ function walk(dir: string, out: string[] = []) {
 const norm = (s: string) => s.replace(/\{\w+\}/g, '{}');
 const patternKeys = new Set(Object.keys(EN).filter((k) => k.includes('{')).map(norm));
 
-// Словарь: подстановки и расхождения между частями.
-const seen = new Map<string, { part: string; value: string }>();
-for (const [part, dict] of Object.entries(PARTS)) {
-  for (const [key, value] of Object.entries(dict)) {
-    const forms = key.includes('|') ? value.split('|') : [value];
-    for (const f of forms) {
-      const missingName = [...f.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).find((n) => n !== 'n' && !key.includes(`{${n}}`));
-      if (missingName) problems.push({ file: `i18n/en/${part}.ts`, line: 0, kind: 'params', text: `${key} → ${value}` });
+// Словари: подстановки, формы числа, расхождения между частями, тот же набор ключей по частям, что у en.
+// Формы числа — только у ключей, которые код передаёт в tn() (собираются при разборе кода ниже): «|» бывает и в
+// обычном тексте (««|» — вместо него пишите or»).
+const pluralKeys = new Set<string>();
+
+function checkDictionaries() {
+for (const { lang, parts, forms: formCount } of LANGS) {
+  const seen = new Map<string, { part: string; value: string }>();
+  for (const part of new Set([...Object.keys(PARTS), ...Object.keys(parts)])) {
+    const file = `i18n/${lang}/${part}.ts`;
+    const dict = parts[part] ?? {};
+    if (lang !== 'en') {
+      const ref = PARTS[part] ?? {};
+      for (const key of Object.keys(ref)) if (!(key in dict)) problems.push({ file, line: 0, kind: 'absent', text: key });
+      for (const key of Object.keys(dict)) if (!(key in ref)) problems.push({ file, line: 0, kind: 'extra', text: key });
     }
-    const before = seen.get(key);
-    if (before && before.value !== value) {
-      problems.push({ file: `i18n/en/${part}.ts`, line: 0, kind: 'conflict', text: `${key}: «${before.value}» (${before.part}) / «${value}»` });
+    for (const [key, value] of Object.entries(dict)) {
+      const plural = pluralKeys.has(key);
+      const forms = plural ? value.split('|') : [value];
+      // Одна форма на все числа («{n} элем.») допустима, если и в ключе она одна.
+      if (plural && forms.length !== formCount && !(forms.length === 1 && !key.includes('|'))) problems.push({ file, line: 0, kind: 'forms', text: `${key} → ${value}` });
+      for (const f of forms) {
+        const missingName = [...f.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).find((n) => n !== 'n' && !key.includes(`{${n}}`));
+        if (missingName) problems.push({ file, line: 0, kind: 'params', text: `${key} → ${value}` });
+      }
+      const before = seen.get(key);
+      if (before && before.value !== value) {
+        problems.push({ file, line: 0, kind: 'conflict', text: `${key}: «${before.value}» (${before.part}) / «${value}»` });
+      }
+      seen.set(key, { part, value });
     }
-    seen.set(key, { part, value });
   }
+}
 }
 
 type Node = { type: string; start: number; end: number; [k: string]: unknown };
@@ -123,6 +147,7 @@ function check(file: string, kind: 'web' | 'shared') {
     } else if (node.type === 'Literal' && typeof node.value === 'string' && !node.regex && CYR.test(node.value) && !inType(chain)) {
       const ctx = tcCall?.[1] === node ? (tcCall[0] as Node).value : undefined;
       const value = typeof ctx === 'string' ? `${ctx}::${node.value}` : node.value;
+      if (parent?.type === 'CallExpression' && (parent.callee as Node & { name?: string }).name === 'tn' && (parent.arguments as Node[])[1] === node) pluralKeys.add(value);
       if (!(value in EN)) report(node, 'missing', value);
       if (kind === 'web' && !wrapped(chain) && (parent?.type === 'JSXAttribute' || inFunction(chain))) report(node, 'unwrap', value);
     } else if (node.type === 'JSXText' && CYR.test(node.value as string)) {
@@ -153,6 +178,7 @@ const files: [string, 'web' | 'shared'][] = [
     .map((f) => [f, 'shared'] as [string, 'shared']),
 ];
 for (const [f, k] of files) check(f, k);
+checkDictionaries();
 
 const shown = filters.length ? problems.filter((p) => filters.some((f) => p.file.includes(f))) : problems;
 for (const p of shown) console.log(`${p.file}:${p.line}  ${p.kind.padEnd(8)} ${p.text}`);

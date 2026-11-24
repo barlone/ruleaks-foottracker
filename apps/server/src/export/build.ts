@@ -17,7 +17,7 @@ import { archivePassword } from './password.ts';
 
 configure({ useWebWorkers: false });
 
-const APP = 'RuLeaks.Следопыт';
+const APP = 'd.s. Stalker';
 
 const EXT: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg',

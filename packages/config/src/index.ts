@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 export { getIniValue, setIniValue } from './ini-edit.ts';
 
-// Конфигурация RuLeaks.Следопыт: config.ini в корне репозитория (шаблон — config.example.ini).
+// Конфигурация d.s. Stalker: config.ini в корне репозитория (шаблон — config.example.ini).
 // Любой ключ переопределяется переменной окружения FT_<СЕКЦИЯ>_<КЛЮЧ>,
 // например [project-db] password → FT_PROJECT_DB_PASSWORD. Путь к файлу — FT_CONFIG.
 

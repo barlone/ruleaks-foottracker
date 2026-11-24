@@ -34,7 +34,7 @@ function LoginFrame({ footer, children }: { footer: string; children: ReactNode 
         <div className="mb-9 flex flex-col items-center text-center">
           <img src="/logo.png" alt="" className="mb-4 size-40 drop-shadow-[0_0_40px_rgba(46,224,172,0.25)]" />
           <h1 className="text-4xl font-extrabold tracking-tight">
-            RuLeaks<span className="text-mint">{t('.Следопыт')}</span>
+            d.s.<span className="text-mint"> Stalker</span>
           </h1>
           <p className="mt-3 font-mono text-sm uppercase tracking-[0.22em] text-mint/95">
             {t('humint · досье · расследования')}<span className="animate-blink">_</span>

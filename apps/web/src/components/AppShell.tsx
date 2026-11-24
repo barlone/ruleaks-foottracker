@@ -49,7 +49,7 @@ export function Root() {
   // До отрисовки дочерних: они уже читают новый язык.
   if (ready) setLang(lang);
   useEffect(() => {
-    document.title = t('RuLeaks.Следопыт');
+    document.title = 'd.s. Stalker';
   }, [lang, ready]);
 
   if (!ready) {
@@ -122,13 +122,13 @@ function Shell() {
 function Brand({ compact }: { compact?: boolean }) {
   return (
     <Link to="/search" className="flex items-center gap-1.5">
-      <img src="/logo.png" alt="" className="size-9 drop-shadow-[0_0_14px_rgba(46,224,172,0.35)]" />
+      <img src="/logo-ds.png" alt="" className="size-10 drop-shadow-[0_0_14px_rgba(46,224,172,0.35)]" />
       {!compact && (
         <div className="leading-tight">
-          <div className="font-extrabold tracking-tight">
-            RuLeaks<span className="text-mint">.{t('Следопыт')}</span>
+          <div className="text-lg font-extrabold leading-tight tracking-tight">
+            d.s.<span className="text-mint"> Stalker</span>
           </div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-mint/80">humint workbench</div>
+          <div className="font-mono text-[8.5px] uppercase tracking-[0.22em] text-mint/80">humint workbench</div>
         </div>
       )}
     </Link>

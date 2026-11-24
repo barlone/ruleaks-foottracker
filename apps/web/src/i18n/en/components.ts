@@ -22,8 +22,8 @@ const en: Record<string, string> = {
   'Пароли не совпадают': 'Passwords do not match',
   'Пароль необязателен. С паролем PDF шифруется (AES-256) и открывается только с ним; без пароля его прочтёт любой, у кого есть файл.':
     'The password is optional. With a password the PDF is encrypted (AES-256) and opens only with it; without one, anyone who has the file can read it.',
-  'Пароль необязателен. Файл шифруется всегда, но без пароля его откроет любая установка Следопыта; с паролем — только тот, кто его знает.':
-    'The password is optional. The file is always encrypted, but without a password any Foottracker installation can open it; with one, only those who know it.',
+  'Пароль необязателен. Файл шифруется всегда, но без пароля его откроет любая установка d.s. Stalker; с паролем — только тот, кто его знает.':
+    'The password is optional. The file is always encrypted, but without a password any d.s. Stalker installation can open it; with one, only those who know it.',
   'Доступно редактирование': 'Editing allowed',
   'Фотографии и изображения': 'Photos and images',
   'Источники и их оценка': 'Sources and their rating',
@@ -65,7 +65,6 @@ const en: Record<string, string> = {
 
   // LoginLinkPage.tsx
   'В ссылке не хватает параметров — запросите в боте новую.': 'The link is missing parameters — request a new one from the bot.',
-  '.Следопыт': '.Foottracker',
   'На страницу входа': 'To the sign-in page',
   'Вход по ссылке из бота…': 'Logging in with the link from the bot…',
 

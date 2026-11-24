@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**RuLeaks.Следопыт** — a Russian-language HUMINT/OSINT web workbench: search through the RuLeaks API, dossiers on
+**d.s. Stalker** (formerly RuLeaks.Следопыт; repo, packages and comments still use the old name) — a Russian-language HUMINT/OSINT web workbench: search through the RuLeaks API, dossiers on
 persons/groups, and investigations (relationship graph, facts, hypotheses). Login is only via the RuLeaks Telegram
 bot and access follows the bot's subscription. User-facing strings are written in Russian (the default
 interface language) and translated to Ukrainian and English by dictionaries (see «Interface language» below); code comments are mostly Russian.

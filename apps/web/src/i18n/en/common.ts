@@ -1,8 +1,6 @@
 // Английский перевод: общее: оболочка, меню, ошибки сервера (lib/errors.ts), форматирование. Ключ — русский текст из кода (lib/i18n.ts).
 const en: Record<string, string> = {
   // AppShell.tsx
-  'RuLeaks.Следопыт': 'RuLeaks.Foottracker',
-  'Следопыт': 'Foottracker',
   'Поиск по атрибутам': 'Attribute search',
   'телефон · фио · документы': 'phone · name · documents',
   'Поиск в Telegram': 'Telegram search',
@@ -73,8 +71,8 @@ const en: Record<string, string> = {
   'Сайт перезапускался после выдачи этой ссылки — запросите в боте новую': 'The site was restarted after this link was issued — request a new one in the bot',
   'Вход по ссылке из бота выключен в настройках сервера': 'Login by a link from the bot is disabled in the server settings',
   'Слишком много неудачных попыток — подождите минуту': 'Too many failed attempts — wait a minute',
-  'Файл повреждён или это не файл экспорта Следопыта': 'The file is damaged or is not a Foottracker export file',
-  'Файл сделан более новой версией Следопыта — обновите сайт': 'The file was made by a newer version of Foottracker — update the site',
+  'Файл повреждён или это не файл экспорта d.s. Stalker': 'The file is damaged or is not a d.s. Stalker export file',
+  'Файл сделан более новой версией d.s. Stalker — обновите сайт': 'The file was made by a newer version of d.s. Stalker — update the site',
   'Файл защищён паролем — введите пароль, заданный при экспорте': 'The file is password-protected — enter the password set at export',
   'Файл слишком большой': 'The file is too large',
   'Медиафайл больше 1 МБ. Большие файлы держите на своём Гугл-диске и добавляйте в досье ссылку на них':

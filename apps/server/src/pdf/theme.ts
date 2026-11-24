@@ -4,7 +4,7 @@ import type { CustomTableLayout } from 'pdfmake/interfaces';
 // Содержимое отчёта уходит в воркер через structuredClone, поэтому в нём не может быть функций:
 // раскладки таблиц заданы по имени и регистрируются в воркере (pdfmake.addTableLayouts).
 
-export const APP = 'RuLeaks.Следопыт';
+export const APP = 'd.s. Stalker';
 export const MINT = '#0f7a5c';
 
 export const TABLE_LAYOUTS: Record<string, CustomTableLayout> = {

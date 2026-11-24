@@ -61,7 +61,7 @@ function demoPdf(url: string): Promise<Buffer> {
   return renderPdf({
     title: 'Демо-архив страницы',
     footerTitle: 'Демо-архив страницы',
-    author: 'RuLeaks.Следопыт',
+    author: 'd.s. Stalker',
     note: '',
     password: '',
     content: [
@@ -85,7 +85,7 @@ async function demoWacz(url: string): Promise<Buffer> {
   const resources = files.map(([path, text]) => ({
     name: path.split('/').pop(), path, hash: `sha256:${createHash('sha256').update(text).digest('hex')}`, bytes: Buffer.byteLength(text),
   }));
-  const datapackage = JSON.stringify({ profile: 'data-package', wacz_version: '1.1.1', title: 'Демо-архив', created: now, software: 'RuLeaks.Следопыт (имитация)', resources }, null, 2);
+  const datapackage = JSON.stringify({ profile: 'data-package', wacz_version: '1.1.1', title: 'Демо-архив', created: now, software: 'd.s. Stalker (имитация)', resources }, null, 2);
   const zip = new ZipWriter(new Uint8ArrayWriter());
   for (const [path, text] of files) await zip.add(path, new TextReader(text), { level: 0 });
   await zip.add('datapackage.json', new TextReader(datapackage), { level: 0 });

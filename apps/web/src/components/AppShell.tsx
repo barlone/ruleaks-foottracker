@@ -119,16 +119,17 @@ function Shell() {
   );
 }
 
+// Размеры надписей подобраны: название той же ширины, что подпись, а обе строки вместе — высотой с лого (40 px).
 function Brand({ compact }: { compact?: boolean }) {
   return (
     <Link to="/search" className="flex items-center gap-1.5">
       <img src="/logo-ds.png" alt="" className="size-10 drop-shadow-[0_0_14px_rgba(46,224,172,0.35)]" />
       {!compact && (
-        <div className="leading-tight">
-          <div className="text-lg font-extrabold leading-tight tracking-tight">
+        <div className="text-center">
+          <div className="text-[20.8px] font-extrabold leading-[26px] tracking-tight">
             d.s.<span className="text-mint"> Stalker</span>
           </div>
-          <div className="font-mono text-[8.5px] uppercase tracking-[0.22em] text-mint/80">humint workbench</div>
+          <div className="font-mono text-[8.5px] leading-[14px] uppercase tracking-[0.22em] -mr-[0.22em] text-mint/80">humint workbench</div>
         </div>
       )}
     </Link>
@@ -234,15 +235,15 @@ function Sidebar() {
 
   return (
     <aside className={clsx('relative z-10 flex shrink-0 flex-col border-r border-line bg-panel/80 backdrop-blur', compact ? 'w-16' : 'w-64')}>
-      {/* Шапка: логотип с отступом 6 px по бокам (как между глифом и текстом), остаток ширины — кнопка окна пользователя.
+      {/* Шапка: кнопка окна пользователя — квадрат справа (во всю высоту шапки), логотип с названием — по центру остатка.
           В свёрнутой панели от шапки остаётся только эта кнопка (шестерня). */}
       <div className="flex h-16 shrink-0 items-stretch border-b border-line">
         {!compact && (
-          <div className="flex shrink-0 items-center px-1.5">
+          <div className="flex min-w-0 flex-1 items-center justify-center">
             <Brand />
           </div>
         )}
-        <UserButton onClick={() => setUserOpen(true)} className={clsx('min-w-0 flex-1', !compact && 'border-l border-line')} />
+        <UserButton onClick={() => setUserOpen(true)} className={compact ? 'min-w-0 flex-1' : 'aspect-square border-l border-line'} />
       </div>
       <nav className={clsx('min-h-0 flex-1 space-y-1 overflow-y-auto', compact ? 'p-2' : 'p-3')}>
         {nav.map((item) => {

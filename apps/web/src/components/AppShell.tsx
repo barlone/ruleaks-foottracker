@@ -123,7 +123,7 @@ function Shell() {
 function Brand({ compact }: { compact?: boolean }) {
   return (
     <Link to="/search" className="flex items-center gap-1.5">
-      <img src="/logo-ds.png" alt="" className="size-10 drop-shadow-[0_0_14px_rgba(46,224,172,0.35)]" />
+      <img src="/logo-ds-64.png" alt="" className="size-10 drop-shadow-[0_0_14px_rgba(46,224,172,0.35)]" />
       {!compact && (
         <div className="text-center">
           <div className="text-[20.8px] font-extrabold leading-[26px] tracking-tight">

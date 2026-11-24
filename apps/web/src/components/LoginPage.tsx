@@ -32,7 +32,7 @@ function LoginFrame({ footer, children }: { footer: string; children: ReactNode 
     <div className="bg-grid bg-glow relative flex min-h-full items-center justify-center px-6 py-12">
       <div className="relative z-10 w-full max-w-[760px] animate-fade-up">
         <div className="mb-9 flex flex-col items-center text-center">
-          <img src="/logo.png" alt="" className="mb-4 size-40 drop-shadow-[0_0_40px_rgba(46,224,172,0.25)]" />
+          <img src="/logo-ds.png" alt="" className="mb-4 size-32 drop-shadow-[0_0_40px_rgba(46,224,172,0.25)]" />
           <h1 className="text-4xl font-extrabold tracking-tight">
             d.s.<span className="text-mint"> Stalker</span>
           </h1>

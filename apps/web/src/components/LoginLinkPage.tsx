@@ -40,7 +40,7 @@ export function LoginLinkPage() {
   return (
     <div className="bg-grid bg-glow relative flex min-h-full items-center justify-center px-6 py-12">
       <div className="relative z-10 w-full max-w-md animate-fade-up rounded-2xl border border-line bg-gradient-to-b from-mint/[0.05] to-mint/[0.01] p-8 text-center">
-        <img src="/logo.png" alt="" className="mx-auto mb-4 size-24 drop-shadow-[0_0_30px_rgba(46,224,172,0.25)]" />
+        <img src="/logo-ds.png" alt="" className="mx-auto mb-4 size-24 drop-shadow-[0_0_30px_rgba(46,224,172,0.25)]" />
         <h1 className="text-2xl font-extrabold tracking-tight">
           d.s.<span className="text-mint"> Stalker</span>
         </h1>

@@ -73,7 +73,6 @@ const en: Record<string, string> = {
   'Персональный режим: один пользователь': 'Personal mode: single user',
   'Вход по паролю': 'Password sign-in',
   'Войти': 'Log in',
-  'Доступ по действующей подписке бота RuLeaks': 'Access with an active RuLeaks bot subscription',
   'Вход через Telegram-бот': 'Log in with the Telegram bot',
   'Нажмите кнопку или отсканируйте QR-код': 'Press the button or scan the QR code',
   'Перейти в бот для авторизации': 'Open the bot to log in',

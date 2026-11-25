@@ -27,14 +27,15 @@ export function LoginPage() {
   return mode.data === 'password-sha256' ? <PasswordLogin /> : <BotLogin />;
 }
 
-function LoginFrame({ footer, children }: { footer: string; children: ReactNode }) {
+function LoginFrame({ footer, children }: { footer?: string; children: ReactNode }) {
   return (
     <div className="bg-grid bg-glow relative flex min-h-full items-center justify-center px-6 py-12">
       <div className="relative z-10 w-full max-w-[760px] animate-fade-up">
         <div className="mb-9 flex flex-col items-center text-center">
           <img src="/logo-ds.png" alt="" className="mb-4 size-32 drop-shadow-[0_0_40px_rgba(46,224,172,0.25)]" />
           <h1 className="text-4xl font-extrabold tracking-tight">
-            d.s.<span className="text-mint"> Stalker</span>
+            <span className="mr-2 align-baseline font-mono text-sm font-normal uppercase tracking-[0.22em] text-text">damn swamps</span>
+            <span className="text-mint">Stalker</span>
           </h1>
           <p className="mt-3 font-mono text-sm uppercase tracking-[0.22em] text-mint/95">
             {t('humint · досье · расследования')}<span className="animate-blink">_</span>
@@ -43,8 +44,10 @@ function LoginFrame({ footer, children }: { footer: string; children: ReactNode 
 
         <div className="rounded-2xl border border-line bg-gradient-to-b from-mint/[0.05] to-mint/[0.01] p-8">{children}</div>
 
-        <p className="mt-8 border-t border-line pt-5 text-center font-mono text-xs tracking-wide text-mute">{footer}</p>
-        <p className="mt-2 text-center font-mono text-[11px] tracking-wide text-mute/60">v{APP_VERSION}</p>
+        <div className="mt-8 border-t border-line pt-5 text-center font-mono tracking-wide">
+          {footer && <p className="mb-2 text-xs text-mute">{footer}</p>}
+          <p className="text-[11px] text-mute/60">v{APP_VERSION}</p>
+        </div>
       </div>
     </div>
   );
@@ -127,7 +130,7 @@ function BotLogin() {
   const link = botLink.data;
 
   return (
-    <LoginFrame footer={t('Доступ по действующей подписке бота RuLeaks')}>
+    <LoginFrame>
       <div className="grid items-center gap-8 md:grid-cols-[1fr_auto]">
         <div>
           <h2 className="label-mono mb-3 flex items-center gap-2.5">
